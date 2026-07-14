@@ -7,6 +7,8 @@ const MEETING_STATUS_LABEL = {
   done: ['Concluída', 'badge-completed'],
 };
 
+let showRequestForm = false;
+
 document.body.innerHTML = renderShell({ role: 'client', active: 'dashboard.html' });
 
 const client = MockDB.getClient(DEFAULT_CLIENT_ID);
@@ -105,8 +107,6 @@ document.querySelectorAll('[data-phase-index]').forEach((btn) => {
     }
   });
 });
-
-let showRequestForm = false;
 
 function renderMeetingRequestCard() {
   const mount = document.getElementById('meeting-request-card');
