@@ -44,8 +44,8 @@ function render() {
       ${progressBar(pct)}
     `, 'mb-6')}
     <div class="space-y-4">
-      ${tasks.map((t) => `
-        <div class="card">
+      ${tasks.map((t, i) => `
+        <div class="card reveal" style="animation-delay:${(i * 0.08).toFixed(2)}s;">
           ${t.type === 'boolean' ? `
             <label class="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" data-toggle="${t.id}" ${t.status === 'completed' ? 'checked' : ''} class="w-5 h-5 rounded accent-[#e8c99b]" />

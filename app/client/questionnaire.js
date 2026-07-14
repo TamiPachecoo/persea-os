@@ -15,7 +15,7 @@ function render() {
     ` : ''}
     <div class="space-y-6">
       ${q.questions.map((question, i) => `
-        <div class="card">
+        <div class="card reveal" style="animation-delay:${(i * 0.08).toFixed(2)}s;">
           <label class="block text-sm text-white/50 mb-3">Pergunta ${i + 1} de ${q.questions.length}</label>
           <p class="text-lg font-medium mb-4">${question.text}</p>
           ${question.type === 'scale'

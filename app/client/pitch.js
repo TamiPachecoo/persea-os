@@ -16,8 +16,8 @@ if (!pitches) {
 } else {
   content.innerHTML = `
     <div class="grid md:grid-cols-2 gap-6">
-      ${Object.entries(LABELS).map(([key, label]) => `
-        <div class="card">
+      ${Object.entries(LABELS).map(([key, label], i) => `
+        <div class="card reveal" style="animation-delay:${(i * 0.07).toFixed(2)}s;">
           <div class="flex items-center justify-between mb-3">
             <p class="text-xs uppercase tracking-wider text-white/40">${label}</p>
             <button data-copy="${key}" class="text-xs text-white/40 hover:text-white">Copiar</button>

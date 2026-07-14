@@ -13,6 +13,7 @@ export function formatDateTime(iso) {
 export function toast(message, { tone = 'success' } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
+  if (tone === 'error') el.style.borderColor = 'var(--terracotta)';
   el.style.opacity = '0';
   el.textContent = message;
   document.body.appendChild(el);
@@ -52,6 +53,19 @@ const ADMIN_NAV = [
   ['client-detail.html', 'Clientes'],
 ];
 
+export function renderParticles(count = 16) {
+  let html = '<div class="particles">';
+  for (let i = 0; i < count; i++) {
+    const size = (Math.random() * 3 + 1.5).toFixed(1);
+    const left = (Math.random() * 100).toFixed(1);
+    const duration = (Math.random() * 14 + 18).toFixed(1);
+    const delay = (Math.random() * -30).toFixed(1);
+    const drift = (Math.random() * 40 - 20).toFixed(0);
+    html += `<div class="particle" style="width:${size}px;height:${size}px;left:${left}%;--drift:${drift}px;animation-duration:${duration}s;animation-delay:${delay}s;"></div>`;
+  }
+  return html + '</div>';
+}
+
 export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
   const nav = role === 'admin' ? ADMIN_NAV : CLIENT_NAV;
   const navHtml = nav.map(([href, label]) => `
@@ -61,6 +75,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
   return `
     <div class="ambient"></div>
     <div class="grain"></div>
+    ${renderParticles(role === 'admin' ? 10 : 18)}
     <div class="app-shell">
       <header class="app-header">
         <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -101,10 +116,10 @@ export function progressBar(pct) {
 
 const TIER_LABEL = { premium: 'Jornada Premium', essential: 'Jornada Essential' };
 
-export function renderPhaseTracker({ tier, phases, currentIndex }) {
+export function renderPhaseTracker({ tier, phases, currentIndex }, { id = 'phase-tracker' } = {}) {
   const fillPct = phases.length > 1 ? (currentIndex / (phases.length - 1)) * 88 : 0;
   return `
-    <div class="phase-tracker-card mb-10">
+    <div class="phase-tracker-card mb-10" id="${id}">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <span class="phase-tier-label">${TIER_LABEL[tier] || tier}</span>
         <span class="text-xs" style="color:var(--muted);">Fase ${currentIndex + 1} de ${phases.length} · ${phases[currentIndex]}</span>
@@ -115,10 +130,10 @@ export function renderPhaseTracker({ tier, phases, currentIndex }) {
         ${phases.map((label, i) => {
           const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
           return `
-            <div class="phase-node phase-${state}">
+            <button type="button" data-phase-index="${i}" data-phase-state="${state}" class="phase-node phase-${state}">
               <div class="phase-dot">${state === 'done' ? '&#10003;' : i + 1}</div>
               <div class="phase-label">${label}</div>
-            </div>
+            </button>
           `;
         }).join('')}
       </div>

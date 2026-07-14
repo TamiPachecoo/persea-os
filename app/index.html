@@ -12,6 +12,7 @@
 <body class="min-h-screen flex items-center justify-center">
   <div class="ambient"></div>
   <div class="grain"></div>
+  <div id="particles-mount"></div>
   <div class="max-w-md w-full px-6 text-center relative" style="z-index:1;">
     <p class="eyebrow mb-4">Sistema Operacional — Protótipo</p>
     <h1 class="font-serif mb-3" style="font-size:3rem; text-shadow:0 0 40px rgba(142,64,73,.35);">PERSEA</h1>
@@ -25,6 +26,8 @@
   </div>
   <script type="module">
     import { MockDB } from './shared/mock-db.js';
+    import { renderParticles } from './shared/ui.js';
+    document.getElementById('particles-mount').innerHTML = renderParticles(18);
     document.getElementById('reset-btn').addEventListener('click', () => {
       MockDB.reset();
       alert('Dados de exemplo redefinidos.');

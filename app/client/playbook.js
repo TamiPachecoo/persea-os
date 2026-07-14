@@ -136,8 +136,8 @@ function renderPage() {
       </div>
     </div>
     <div class="space-y-6">
-      ${sectionDefs.map(([key, title]) => `
-        <div id="${key}" class="card scroll-mt-24">
+      ${sectionDefs.map(([key, title], i) => `
+        <div id="${key}" class="card scroll-mt-24 reveal" style="animation-delay:${(i * 0.06).toFixed(2)}s;">
           <p class="text-xs uppercase tracking-wider text-white/40 mb-2">${title}</p>
           <p class="text-lg leading-relaxed font-serif">${published.sections[key]}</p>
         </div>
