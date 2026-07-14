@@ -7,8 +7,16 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v4';
+const STORAGE_KEY = 'persea_mock_db_v5';
 export const DEFAULT_CLIENT_ID = 'client-1';
+
+// Mentoring program phases per tier — tenant-level config (persea/methodology/
+// in the real build), not per-client. A client's progress is just an index
+// into their tier's phase list.
+export const TIER_PHASES = {
+  premium: ['Identidade', 'Imagem', 'Comportamento', 'Visibilidade'],
+  essential: ['Identidade', 'Imagem', 'Visibilidade'],
+};
 
 const SEED = {
   tenant: {
@@ -18,7 +26,7 @@ const SEED = {
   clients: {
     // --- Client 1: Marina — farthest along, playbook published, pitches ready ---
     'client-1': {
-      profile: { id: 'client-1', fullName: 'Marina Alves', email: 'marina@example.com', status: 'active' },
+      profile: { id: 'client-1', fullName: 'Marina Alves', email: 'marina@example.com', status: 'active', tier: 'premium', phaseIndex: 1 },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -122,7 +130,7 @@ const SEED = {
 
     // --- Client 2: Júlia — just starting out, nothing analyzed yet ---
     'client-2': {
-      profile: { id: 'client-2', fullName: 'Júlia Ferreira', email: 'julia@example.com', status: 'active' },
+      profile: { id: 'client-2', fullName: 'Júlia Ferreira', email: 'julia@example.com', status: 'active', tier: 'essential', phaseIndex: 0 },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -180,7 +188,7 @@ const SEED = {
 
     // --- Client 3: Renata — mid-journey, playbook drafted but not published ---
     'client-3': {
-      profile: { id: 'client-3', fullName: 'Renata Costa', email: 'renata@example.com', status: 'active' },
+      profile: { id: 'client-3', fullName: 'Renata Costa', email: 'renata@example.com', status: 'active', tier: 'premium', phaseIndex: 0 },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -324,6 +332,10 @@ export const MockDB = {
   },
   getTenant() {
     return load().tenant;
+  },
+  getPhaseProgress(id = DEFAULT_CLIENT_ID) {
+    const p = client(load(), id).profile;
+    return { tier: p.tier, phases: TIER_PHASES[p.tier], currentIndex: p.phaseIndex };
   },
 
   // --- Journey ---

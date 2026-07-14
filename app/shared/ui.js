@@ -98,3 +98,30 @@ export function progressBar(pct) {
     </div>
   `;
 }
+
+const TIER_LABEL = { premium: 'Jornada Premium', essential: 'Jornada Essential' };
+
+export function renderPhaseTracker({ tier, phases, currentIndex }) {
+  const fillPct = phases.length > 1 ? (currentIndex / (phases.length - 1)) * 88 : 0;
+  return `
+    <div class="phase-tracker-card mb-10">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <span class="phase-tier-label">${TIER_LABEL[tier] || tier}</span>
+        <span class="text-xs" style="color:var(--muted);">Fase ${currentIndex + 1} de ${phases.length} · ${phases[currentIndex]}</span>
+      </div>
+      <div class="phase-tracker">
+        <div class="phase-line"></div>
+        <div class="phase-line-fill" style="width:${fillPct}%;"></div>
+        ${phases.map((label, i) => {
+          const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
+          return `
+            <div class="phase-node phase-${state}">
+              <div class="phase-dot">${state === 'done' ? '&#10003;' : i + 1}</div>
+              <div class="phase-label">${label}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}

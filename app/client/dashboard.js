@@ -1,10 +1,11 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime } from '../shared/ui.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, renderPhaseTracker } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'dashboard.html' });
 
 const client = MockDB.getClient(DEFAULT_CLIENT_ID);
 const journey = MockDB.getJourney(DEFAULT_CLIENT_ID);
+const phaseProgress = MockDB.getPhaseProgress(DEFAULT_CLIENT_ID);
 const homeworkPct = MockDB.homeworkCompletionPct(DEFAULT_CLIENT_ID);
 const completedSteps = journey.steps.filter((s) => s.status === 'completed').length;
 const journeyPct = Math.round((completedSteps / journey.steps.length) * 100);
@@ -17,16 +18,18 @@ content.innerHTML = `
     <h1 class="text-3xl font-serif">${client.fullName}</h1>
   </div>
 
+  ${renderPhaseTracker(phaseProgress)}
+
   <div class="grid md:grid-cols-3 gap-6 mb-8">
     ${card(`
-      <p class="text-sm text-white/50 mb-3">Progresso da Jornada — ${journey.programName}</p>
+      <p class="text-sm text-white/50 mb-3">Progresso da Etapa — ${phaseProgress.phases[phaseProgress.currentIndex]}</p>
       <p class="text-3xl font-serif mb-4">${journeyPct}%</p>
       ${progressBar(journeyPct)}
     `)}
     ${card(`
-      <p class="text-sm text-white/50 mb-3">Fase Atual</p>
-      <p class="text-xl font-serif mb-2">Identidade</p>
-      <p class="text-sm text-white/40">Etapa ${completedSteps + 1} de ${journey.steps.length}</p>
+      <p class="text-sm text-white/50 mb-3">Etapa Atual</p>
+      <p class="text-xl font-serif mb-2">${phaseProgress.phases[phaseProgress.currentIndex]}</p>
+      <p class="text-sm text-white/40">Passo ${completedSteps + 1} de ${journey.steps.length}</p>
     `)}
     ${card(`
       <p class="text-sm text-white/50 mb-3">Próxima Reunião</p>

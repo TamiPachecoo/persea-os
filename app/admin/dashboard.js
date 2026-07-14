@@ -1,5 +1,7 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, TIER_PHASES } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, formatDateTime } from '../shared/ui.js';
+
+const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 
 document.body.innerHTML = renderShell({ role: 'admin', active: 'dashboard.html', title: 'Painel Admin' });
 
@@ -41,7 +43,7 @@ document.getElementById('app-content').innerHTML = `
         <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
           <div>
             <p class="font-medium">${c.fullName}</p>
-            <p class="text-xs text-white/30">${c.email}</p>
+            <p class="text-xs text-white/30">${c.email} · ${TIER_LABEL[c.tier] || c.tier} · Fase: ${TIER_PHASES[c.tier][c.phaseIndex]}</p>
           </div>
           <div class="flex items-center gap-4">
             <span class="text-xs text-white/40">Jornada ${c.journeyPct}% · Tarefas ${c.homeworkPct}%</span>

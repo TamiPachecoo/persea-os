@@ -1,10 +1,12 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDateTime, formatDate } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'admin', active: 'client-detail.html' });
 
 const clientId = new URLSearchParams(location.search).get('id') || DEFAULT_CLIENT_ID;
 const client = MockDB.getClient(clientId);
+const phaseProgress = MockDB.getPhaseProgress(clientId);
+const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 const TABS = [
   ['questionnaire', 'Questionário'],
   ['meeting', 'Reunião e Transcrição'],
@@ -25,10 +27,13 @@ function shell(inner) {
     <div class="mb-8 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-serif">${client.fullName}</h1>
-        <p class="text-white/40 text-sm">${client.email}</p>
+        <p class="text-white/40 text-sm">${client.email} · ${TIER_LABEL[client.tier] || client.tier}</p>
       </div>
       ${statusBadge(client.status)}
     </div>
+
+    ${renderPhaseTracker(phaseProgress)}
+
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
       ${TABS.map(([key, label]) => `
         <button data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>
