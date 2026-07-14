@@ -57,14 +57,14 @@ body{
 .particle{
   position:absolute; bottom:-10px; border-radius:50%;
   background:radial-gradient(circle, rgba(220,199,168,.9), rgba(220,199,168,0) 70%);
-  animation-name:particleFloat; animation-timing-function:ease-in-out; animation-iteration-count:infinite;
+  animation-name:particleFloat; animation-timing-function:linear; animation-iteration-count:infinite;
 }
 @keyframes particleFloat{
   0%{ transform:translate(0,0) scale(1); opacity:0; }
-  8%{ opacity:.55; }
-  50%{ transform:translate(var(--drift,14px), -52vh) scale(1.15); opacity:.35; }
-  92%{ opacity:.15; }
-  100%{ transform:translate(calc(var(--drift,14px) * 2), -108vh) scale(.9); opacity:0; }
+  12%{ opacity:.45; }
+  50%{ transform:translate(var(--drift,14px), -52vh) scale(1.08); opacity:.3; }
+  88%{ opacity:.12; }
+  100%{ transform:translate(calc(var(--drift,14px) * 2), -108vh) scale(.95); opacity:0; }
 }
 
 /* reveal-on-load stagger, matching the brand deck's slide entrances */

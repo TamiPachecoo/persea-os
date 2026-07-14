@@ -27,7 +27,7 @@
   <script type="module">
     import { MockDB } from './shared/mock-db.js';
     import { renderParticles } from './shared/ui.js';
-    document.getElementById('particles-mount').innerHTML = renderParticles(18);
+    document.getElementById('particles-mount').innerHTML = renderParticles(14);
     document.getElementById('reset-btn').addEventListener('click', () => {
       MockDB.reset();
       alert('Dados de exemplo redefinidos.');

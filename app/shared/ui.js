@@ -58,8 +58,8 @@ export function renderParticles(count = 16) {
   for (let i = 0; i < count; i++) {
     const size = (Math.random() * 3 + 1.5).toFixed(1);
     const left = (Math.random() * 100).toFixed(1);
-    const duration = (Math.random() * 14 + 18).toFixed(1);
-    const delay = (Math.random() * -30).toFixed(1);
+    const duration = (Math.random() * 30 + 55).toFixed(1);
+    const delay = (Math.random() * -80).toFixed(1);
     const drift = (Math.random() * 40 - 20).toFixed(0);
     html += `<div class="particle" style="width:${size}px;height:${size}px;left:${left}%;--drift:${drift}px;animation-duration:${duration}s;animation-delay:${delay}s;"></div>`;
   }
@@ -75,7 +75,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
   return `
     <div class="ambient"></div>
     <div class="grain"></div>
-    ${renderParticles(role === 'admin' ? 10 : 18)}
+    ${renderParticles(role === 'admin' ? 8 : 14)}
     <div class="app-shell">
       <header class="app-header">
         <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
