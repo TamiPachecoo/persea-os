@@ -1,5 +1,11 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime, renderPhaseTracker, toast } from '../shared/ui.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, formatDate, renderPhaseTracker, toast } from '../shared/ui.js';
+
+const MEETING_STATUS_LABEL = {
+  pending: ['Aguardando triagem', 'badge-locked'],
+  assigned: ['Reunião agendada', 'badge-progress'],
+  done: ['Concluída', 'badge-completed'],
+};
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'dashboard.html' });
 
@@ -78,7 +84,11 @@ content.innerHTML = `
       </div>
     `)}</div>
   </div>
+
+  <div class="reveal mt-6" style="animation-delay:.58s;" id="meeting-request-card"></div>
 `;
+
+renderMeetingRequestCard();
 
 document.querySelectorAll('[data-phase-index]').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -95,3 +105,60 @@ document.querySelectorAll('[data-phase-index]').forEach((btn) => {
     }
   });
 });
+
+let showRequestForm = false;
+
+function renderMeetingRequestCard() {
+  const mount = document.getElementById('meeting-request-card');
+  const requests = MockDB.getMeetingRequests(DEFAULT_CLIENT_ID);
+
+  mount.innerHTML = card(`
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm text-white/50">Precisa tirar uma dúvida?</p>
+      ${!showRequestForm ? `<button id="toggle-request" class="btn-ghost">Solicitar Reunião</button>` : ''}
+    </div>
+    ${showRequestForm ? `
+      <div class="mt-4">
+        <textarea id="request-reason" rows="3" class="field" placeholder="Conte rapidamente o que você gostaria de discutir..."></textarea>
+        <div class="flex items-center gap-3 mt-3">
+          <button id="send-request" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar Solicitação</button>
+          <button id="cancel-request" class="btn-text">Cancelar</button>
+        </div>
+      </div>
+    ` : ''}
+    ${requests.length ? `
+      <div class="mt-5 space-y-2">
+        ${requests.map((r) => {
+          const [label, badgeClass] = MEETING_STATUS_LABEL[r.status];
+          const who = r.assignedTo === 'nay' ? ' · com a Nay' : r.assignedTo === 'assistant' ? ' · com a assistente' : '';
+          return `
+            <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+              <div>
+                <p class="text-sm">${r.reason}</p>
+                <p class="text-xs" style="color:var(--muted);">${formatDate(r.createdAt)}${who}</p>
+              </div>
+              <span class="badge ${badgeClass}">${label}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : ''}
+  `);
+
+  document.getElementById('toggle-request')?.addEventListener('click', () => {
+    showRequestForm = true;
+    renderMeetingRequestCard();
+  });
+  document.getElementById('cancel-request')?.addEventListener('click', () => {
+    showRequestForm = false;
+    renderMeetingRequestCard();
+  });
+  document.getElementById('send-request')?.addEventListener('click', () => {
+    const text = document.getElementById('request-reason').value.trim();
+    if (!text) { toast('Escreva um breve motivo antes de enviar.', { tone: 'error' }); return; }
+    MockDB.requestMeeting(DEFAULT_CLIENT_ID, text);
+    showRequestForm = false;
+    toast('Solicitação enviada! Nay ou a assistente vão entrar em contato.');
+    renderMeetingRequestCard();
+  });
+}

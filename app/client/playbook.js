@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, formatDate, progressBar, toast } from '../shared/ui.js';
+import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
 
@@ -117,6 +117,10 @@ function finishPlayer() {
   MockDB.completePlaybookExperience(DEFAULT_CLIENT_ID, format);
   toast('Playbook concluído! Que tal um quiz rápido?');
   renderPage();
+  showMoodPrompt({
+    label: 'Como você se sentiu vivenciando seu playbook?',
+    onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'playbook_experience', mood),
+  });
 }
 
 function renderPage() {

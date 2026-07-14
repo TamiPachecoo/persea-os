@@ -13,7 +13,7 @@ export function formatDateTime(iso) {
 export function toast(message, { tone = 'success' } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
-  if (tone === 'error') el.style.borderColor = 'var(--terracotta)';
+  if (tone === 'error') el.style.borderColor = 'var(--error)';
   el.style.opacity = '0';
   el.textContent = message;
   document.body.appendChild(el);
@@ -45,6 +45,7 @@ const CLIENT_NAV = [
   ['playbook.html', 'Playbook'],
   ['pitch.html', 'Pitch'],
   ['homework.html', 'Tarefas'],
+  ['notes.html', 'Notas'],
   ['activity.html', 'Atividade'],
 ];
 
@@ -139,4 +140,38 @@ export function renderPhaseTracker({ tier, phases, currentIndex }, { id = 'phase
       </div>
     </div>
   `;
+}
+
+const MOOD_EMOJIS = [
+  { value: 1, emoji: '😞' },
+  { value: 2, emoji: '😕' },
+  { value: 3, emoji: '😐' },
+  { value: 4, emoji: '🙂' },
+  { value: 5, emoji: '😄' },
+];
+
+// Small floating check-in — deliberately not a modal, so it never blocks the
+// client from moving on. onSelect(moodValue) is called, then it dismisses
+// itself. Kept UI-only: callers decide what to do with the chosen value
+// (ui.js has no data-layer dependency).
+export function showMoodPrompt({ label, onSelect }) {
+  document.querySelectorAll('.mood-prompt').forEach((el) => el.remove());
+  const el = document.createElement('div');
+  el.className = 'mood-prompt';
+  el.innerHTML = `
+    <button class="mood-dismiss" aria-label="Dispensar">&times;</button>
+    <p>${label}</p>
+    <div class="mood-emoji-row">
+      ${MOOD_EMOJIS.map((m) => `<button data-mood="${m.value}">${m.emoji}</button>`).join('')}
+    </div>
+  `;
+  document.body.appendChild(el);
+  el.querySelector('.mood-dismiss').addEventListener('click', () => el.remove());
+  el.querySelectorAll('[data-mood]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      onSelect(Number(btn.dataset.mood));
+      el.remove();
+      toast('Obrigada por compartilhar como você está se sentindo.');
+    });
+  });
 }

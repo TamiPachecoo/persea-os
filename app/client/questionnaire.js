@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, toast } from '../shared/ui.js';
+import { renderShell, card, toast, showMoodPrompt } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'questionnaire.html', title: 'Questionário de Identidade' });
 
@@ -42,6 +42,12 @@ function render() {
     q.status = 'submitted';
     toast(wasSubmitted ? 'Respostas atualizadas.' : 'Questionário enviado!');
     render();
+    if (!wasSubmitted) {
+      showMoodPrompt({
+        label: 'Como você se sentiu respondendo o questionário?',
+        onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'questionnaire_submitted', mood),
+      });
+    }
   });
 }
 

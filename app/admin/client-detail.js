@@ -1,5 +1,7 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID, MOOD_SCALE } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker } from '../shared/ui.js';
+
+const MOOD_EMOJI = Object.fromEntries(MOOD_SCALE.map((m) => [m.value, m.emoji]));
 
 document.body.innerHTML = renderShell({ role: 'admin', active: 'client-detail.html' });
 
@@ -250,16 +252,38 @@ function renderMeetingPrepTab() {
 
 function renderActivityTab() {
   const events = MockDB.getActivity(clientId);
-  return card(`
-    <div class="space-y-4">
-      ${events.map((e) => `
-        <div class="flex items-start gap-4 py-3 border-b border-white/5 last:border-0">
-          <div class="w-2 h-2 mt-2 rounded-full shrink-0" style="background:var(--terracotta);"></div>
-          <div><p>${e.text}</p><p class="text-xs text-white/30 mt-1">${formatDateTime(e.at)}</p></div>
+  const moodLog = MockDB.getMoodLog(clientId).slice(-6).reverse();
+  const requests = MockDB.getMeetingRequests(clientId);
+
+  return `
+    ${card(`
+      <div class="space-y-4">
+        ${events.map((e) => `
+          <div class="flex items-start gap-4 py-3 border-b border-white/5 last:border-0">
+            <div class="w-2 h-2 mt-2 rounded-full shrink-0" style="background:var(--terracotta);"></div>
+            <div><p>${e.text}</p><p class="text-xs text-white/30 mt-1">${formatDateTime(e.at)}</p></div>
+          </div>
+        `).join('')}
+      </div>
+    `, 'mb-6')}
+    ${card(`
+      <p class="text-sm text-white/50 mb-4">Humor Recente</p>
+      ${moodLog.length ? `
+        <div class="flex items-center gap-3">
+          ${moodLog.map((m) => `<span title="${m.context} · ${formatDateTime(m.at)}" style="font-size:1.4rem;">${MOOD_EMOJI[m.mood]}</span>`).join('')}
         </div>
-      `).join('')}
-    </div>
-  `);
+      ` : '<p class="text-sm" style="color:var(--muted);">Sem registros ainda.</p>'}
+    `, 'mb-6')}
+    ${card(`
+      <p class="text-sm text-white/50 mb-4">Solicitações de Reunião</p>
+      ${requests.length ? requests.map((r) => `
+        <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+          <span class="text-sm">${r.reason}</span>
+          ${statusBadge(r.status === 'done' ? 'completed' : r.status === 'assigned' ? 'in_progress' : 'pending')}
+        </div>
+      `).join('') : '<p class="text-sm" style="color:var(--muted);">Nenhuma solicitação.</p>'}
+    `)}
+  `;
 }
 
 const RENDERERS = {

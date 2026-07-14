@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar } from '../shared/ui.js';
+import { renderShell, card, progressBar, showMoodPrompt } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Quiz Rápido' });
 const content = document.getElementById('app-content');
@@ -52,7 +52,7 @@ function selectOption(q, i) {
   if (correct) score += 1;
   document.querySelectorAll('[data-opt]').forEach((btn, idx) => {
     if (q.options[idx] === q.correct) btn.style.borderColor = 'var(--gold)';
-    if (idx === i && !correct) btn.style.borderColor = 'var(--terracotta)';
+    if (idx === i && !correct) btn.style.borderColor = 'var(--error)';
   });
   setTimeout(() => {
     if (step + 1 < questions.length) { step += 1; renderQuestion(); }
@@ -73,6 +73,10 @@ function renderResult() {
       <a href="pitch.html" class="btn-ghost">Ver Meu Pitch</a>
     </div>
   `);
+  showMoodPrompt({
+    label: 'Como você se sentiu fazendo o quiz?',
+    onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'quiz_completed', mood),
+  });
 }
 
 if (!questions.length) {

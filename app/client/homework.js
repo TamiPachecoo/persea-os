@@ -1,5 +1,15 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime, toast } from '../shared/ui.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, toast, showMoodPrompt } from '../shared/ui.js';
+
+function promptMoodIfNewlyCompleted(taskId, wasCompletedBefore) {
+  const task = MockDB.getHomework(DEFAULT_CLIENT_ID).find((t) => t.id === taskId);
+  if (task && task.status === 'completed' && !wasCompletedBefore) {
+    showMoodPrompt({
+      label: 'Como você se sente com essa tarefa concluída?',
+      onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'homework_task', mood),
+    });
+  }
+}
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'homework.html', title: 'Tarefas' });
 const content = document.getElementById('app-content');
@@ -61,18 +71,30 @@ function render() {
   `;
 
   content.querySelectorAll('[data-toggle]').forEach((el) => {
-    el.addEventListener('change', () => { MockDB.toggleHomework(DEFAULT_CLIENT_ID, el.dataset.toggle); render(); });
+    el.addEventListener('change', () => {
+      const wasCompleted = tasks.find((t) => t.id === el.dataset.toggle)?.status === 'completed';
+      MockDB.toggleHomework(DEFAULT_CLIENT_ID, el.dataset.toggle);
+      render();
+      promptMoodIfNewlyCompleted(el.dataset.toggle, wasCompleted);
+    });
   });
   content.querySelectorAll('[data-submit]').forEach((el) => {
-    el.addEventListener('blur', () => { MockDB.submitHomeworkText(DEFAULT_CLIENT_ID, el.dataset.submit, el.value); render(); });
+    el.addEventListener('blur', () => {
+      const wasCompleted = tasks.find((t) => t.id === el.dataset.submit)?.status === 'completed';
+      MockDB.submitHomeworkText(DEFAULT_CLIENT_ID, el.dataset.submit, el.value);
+      render();
+      promptMoodIfNewlyCompleted(el.dataset.submit, wasCompleted);
+    });
   });
   content.querySelectorAll('[data-media]').forEach((el) => {
     el.addEventListener('change', () => {
       const file = el.files[0];
       if (!file) return;
+      const wasCompleted = tasks.find((t) => t.id === el.dataset.media)?.status === 'completed';
       MockDB.addHomeworkMedia(DEFAULT_CLIENT_ID, el.dataset.media, file);
       toast('Gravação enviada!');
       render();
+      promptMoodIfNewlyCompleted(el.dataset.media, wasCompleted);
     });
   });
   content.querySelectorAll('[data-remove-media]').forEach((el) => {

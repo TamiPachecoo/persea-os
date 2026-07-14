@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v5';
+const STORAGE_KEY = 'persea_mock_db_v6';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Mentoring program phases per tier — tenant-level config (persea/methodology/
@@ -21,7 +21,7 @@ export const TIER_PHASES = {
 const SEED = {
   tenant: {
     name: 'PERSEA',
-    brandColor: '#8e4049',
+    brandColor: '#b8863a',
   },
   clients: {
     // --- Client 1: Marina — farthest along, playbook published, pitches ready ---
@@ -126,6 +126,15 @@ const SEED = {
       ],
       playbookExperience: { format: 'podcast', completedAt: '2026-07-06T19:30:00' },
       quiz: { score: 4, total: 4, completedAt: '2026-07-06T19:45:00' },
+      meetingRequests: [
+        { id: 'mr1', reason: 'Tenho dúvida sobre como aplicar a Voz da Marca nas redes sociais.', status: 'assigned', assignedTo: 'nay', createdAt: '2026-07-09T10:00:00' },
+      ],
+      notes: 'Lembrar de perguntar sobre precificação na próxima reunião.',
+      moodLog: [
+        { context: 'questionnaire_submitted', mood: 4, at: '2026-07-01T09:41:00' },
+        { context: 'playbook_experience', mood: 5, at: '2026-07-06T19:31:00' },
+        { context: 'quiz_completed', mood: 5, at: '2026-07-06T19:46:00' },
+      ],
     },
 
     // --- Client 2: Júlia — just starting out, nothing analyzed yet ---
@@ -184,6 +193,13 @@ const SEED = {
       ],
       playbookExperience: { format: null, completedAt: null },
       quiz: { score: null, total: null, completedAt: null },
+      meetingRequests: [
+        { id: 'mr2', reason: 'Fiquei perdida em uma pergunta do questionário, queria confirmar se respondi certo.', status: 'pending', assignedTo: null, createdAt: '2026-07-11T14:00:00' },
+      ],
+      notes: '',
+      moodLog: [
+        { context: 'questionnaire_submitted', mood: 3, at: '2026-07-10T09:01:00' },
+      ],
     },
 
     // --- Client 3: Renata — mid-journey, playbook drafted but not published ---
@@ -276,6 +292,12 @@ const SEED = {
       ],
       playbookExperience: { format: null, completedAt: null },
       quiz: { score: null, total: null, completedAt: null },
+      meetingRequests: [],
+      notes: 'Verificar com a Nay se posso usar o playbook em uma proposta comercial antes da publicação.',
+      moodLog: [
+        { context: 'questionnaire_submitted', mood: 4, at: '2026-06-28T10:41:00' },
+        { context: 'homework_task', mood: 3, at: '2026-07-03T09:00:00' },
+      ],
     },
   },
 };
@@ -597,7 +619,84 @@ export const MockDB = {
   getActivity(id = DEFAULT_CLIENT_ID) {
     return client(load(), id).activity;
   },
+
+  // --- Meeting requests ---
+  getMeetingRequests(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).meetingRequests;
+  },
+  requestMeeting(id, reason) {
+    const db = load();
+    const req = { id: `mr${Date.now()}`, reason, status: 'pending', assignedTo: null, createdAt: new Date().toISOString() };
+    client(db, id).meetingRequests.unshift(req);
+    save(db);
+    this.logActivity(id, 'meeting_requested', 'Solicitou uma reunião para tirar dúvidas');
+    return req;
+  },
+  listAllMeetingRequests() {
+    const db = load();
+    const all = [];
+    Object.entries(db.clients).forEach(([id, c]) => {
+      c.meetingRequests.forEach((r) => all.push({ ...r, clientId: id, clientName: c.profile.fullName }));
+    });
+    return all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+  assignMeetingRequest(clientId, requestId, assignee) {
+    const db = load();
+    const r = client(db, clientId).meetingRequests.find((r) => r.id === requestId);
+    if (r) { r.status = 'assigned'; r.assignedTo = assignee; }
+    save(db);
+  },
+  resolveMeetingRequest(clientId, requestId) {
+    const db = load();
+    const r = client(db, clientId).meetingRequests.find((r) => r.id === requestId);
+    if (r) r.status = 'done';
+    save(db);
+  },
+
+  // --- Private client notepad ---
+  getNotes(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).notes;
+  },
+  saveNotes(id, text) {
+    const db = load();
+    client(db, id).notes = text;
+    save(db);
+  },
+
+  // --- Mood check-ins (for later satisfaction/experience metrics) ---
+  logMood(id, context, mood) {
+    const db = load();
+    client(db, id).moodLog.push({ context, mood, at: new Date().toISOString() });
+    save(db);
+  },
+  getMoodLog(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).moodLog;
+  },
+  getMoodStats(id = DEFAULT_CLIENT_ID) {
+    return moodStatsFor(client(load(), id).moodLog);
+  },
+  getGlobalMoodStats() {
+    const db = load();
+    const all = Object.values(db.clients).flatMap((c) => c.moodLog);
+    return moodStatsFor(all);
+  },
 };
+
+export const MOOD_SCALE = [
+  { value: 1, emoji: '😞', label: 'Muito mal' },
+  { value: 2, emoji: '😕', label: 'Mal' },
+  { value: 3, emoji: '😐', label: 'Neutro' },
+  { value: 4, emoji: '🙂', label: 'Bem' },
+  { value: 5, emoji: '😄', label: 'Ótimo' },
+];
+
+function moodStatsFor(entries) {
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  entries.forEach((e) => { distribution[e.mood] = (distribution[e.mood] || 0) + 1; });
+  const count = entries.length;
+  const avg = count ? entries.reduce((sum, e) => sum + e.mood, 0) / count : null;
+  return { count, avg, distribution };
+}
 
 function shuffle(arr) {
   const a = [...arr];
