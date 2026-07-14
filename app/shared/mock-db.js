@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v3';
+const STORAGE_KEY = 'persea_mock_db_v4';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 const SEED = {
@@ -26,7 +26,7 @@ const SEED = {
           { key: 'meeting_1', title: 'Reunião 1', status: 'completed' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'completed' },
           { key: 'assessment', title: 'Teste de Arquétipo', status: 'available' },
-          { key: 'pitch', title: 'Gerador de Discurso', status: 'completed' },
+          { key: 'pitch', title: 'Gerador de Pitch', status: 'completed' },
           { key: 'homework', title: 'Tarefas', status: 'in_progress' },
         ],
         upcomingMeeting: { title: 'Reunião 2 — Aprofundamento de Posicionamento', date: '2026-07-22T15:00:00' },
@@ -59,7 +59,7 @@ const SEED = {
         goals: ['Conseguir 3 palestras este ano', 'Aumentar os valores em 30% sem perder conversão'],
         challenges: ['Sensação de impostora ao "escolher um nicho"', 'Medo de afastar clientes antigos ao se especializar'],
         actionItems: ['Redigir uma declaração de posicionamento clara', 'Auditar os últimos 10 conteúdos quanto à consistência'],
-        homework: ['Ler o Playbook v1', 'Praticar o discurso de 30 segundos em voz alta 5x', 'Responder às perguntas de reflexão'],
+        homework: ['Ler o Playbook v1', 'Gravar o pitch de 30 segundos em áudio ou vídeo', 'Responder às perguntas de reflexão'],
         keyInsights: ['O rótulo de "generalista" é um comportamento de segurança, não uma escolha estratégica.'],
       },
       playbook: {
@@ -104,16 +104,20 @@ const SEED = {
       },
       homework: [
         { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'completed' },
-        { id: 'h2', title: 'Praticar o Discurso (5x em voz alta)', type: 'boolean', status: 'completed' },
+        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'completed', submissions: [
+          { id: 'm1', kind: 'audio', name: 'pitch-treino-1.mp3', url: null, uploadedAt: '2026-07-07T10:00:00' },
+        ] },
         { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
       ],
       activity: [
-        { type: 'pitches_generated', text: 'Variações de discurso geradas', at: '2026-07-08T14:20:00' },
+        { type: 'pitches_generated', text: 'Variações de pitch geradas', at: '2026-07-08T14:20:00' },
         { type: 'playbook_published', text: 'Playbook v1 publicado', at: '2026-07-06T11:00:00' },
         { type: 'playbook_draft_created', text: 'Rascunho do Playbook v1 gerado', at: '2026-07-05T09:00:00' },
         { type: 'meeting_analyzed', text: 'Transcrição da Reunião 1 analisada', at: '2026-07-04T16:10:00' },
         { type: 'questionnaire_submitted', text: 'Questionário de Identidade concluído', at: '2026-07-01T09:40:00' },
       ],
+      playbookExperience: { format: 'podcast', completedAt: '2026-07-06T19:30:00' },
+      quiz: { score: 4, total: 4, completedAt: '2026-07-06T19:45:00' },
     },
 
     // --- Client 2: Júlia — just starting out, nothing analyzed yet ---
@@ -126,7 +130,7 @@ const SEED = {
           { key: 'meeting_1', title: 'Reunião 1', status: 'available' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
           { key: 'assessment', title: 'Teste de Arquétipo', status: 'locked' },
-          { key: 'pitch', title: 'Gerador de Discurso', status: 'locked' },
+          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
           { key: 'homework', title: 'Tarefas', status: 'locked' },
         ],
         upcomingMeeting: { title: 'Reunião 1 — Levantamento Inicial', date: '2026-07-18T10:00:00' },
@@ -164,12 +168,14 @@ const SEED = {
       pitches: null,
       homework: [
         { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
-        { id: 'h2', title: 'Praticar o Discurso (5x em voz alta)', type: 'boolean', status: 'pending' },
+        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
         { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
       ],
       activity: [
         { type: 'questionnaire_submitted', text: 'Questionário de Identidade concluído', at: '2026-07-10T09:00:00' },
       ],
+      playbookExperience: { format: null, completedAt: null },
+      quiz: { score: null, total: null, completedAt: null },
     },
 
     // --- Client 3: Renata — mid-journey, playbook drafted but not published ---
@@ -182,7 +188,7 @@ const SEED = {
           { key: 'meeting_1', title: 'Reunião 1', status: 'completed' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'in_progress' },
           { key: 'assessment', title: 'Teste de Arquétipo', status: 'completed' },
-          { key: 'pitch', title: 'Gerador de Discurso', status: 'locked' },
+          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
           { key: 'homework', title: 'Tarefas', status: 'in_progress' },
         ],
         upcomingMeeting: { title: 'Reunião 2 — Revisão de Playbook', date: '2026-07-20T13:30:00' },
@@ -215,7 +221,7 @@ const SEED = {
         goals: ['Criar uma oferta de diagnóstico paga', 'Recusar 30% dos projetos fora do foco'],
         challenges: ['Medo de perder receita ao dizer não', 'Dificuldade de nomear a própria metodologia'],
         actionItems: ['Nomear a metodologia de diagnóstico', 'Criar página de portfólio por transformação, não por serviço'],
-        homework: ['Ler o Playbook v1', 'Praticar o discurso de 30 segundos em voz alta 5x', 'Responder às perguntas de reflexão'],
+        homework: ['Ler o Playbook v1', 'Gravar o pitch de 30 segundos em áudio ou vídeo', 'Responder às perguntas de reflexão'],
         keyInsights: ['Aceitar tudo é o principal fator que mantém Renata no nível "executora".'],
       },
       playbook: {
@@ -251,7 +257,7 @@ const SEED = {
       pitches: null,
       homework: [
         { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'completed' },
-        { id: 'h2', title: 'Praticar o Discurso (5x em voz alta)', type: 'boolean', status: 'pending' },
+        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
         { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'completed', submission: 'Os projetos que eu preciso recusar são os de organização de estoque pontual — não é o meu diagnóstico de fundo.' },
       ],
       activity: [
@@ -260,6 +266,8 @@ const SEED = {
         { type: 'meeting_analyzed', text: 'Transcrição da Reunião 1 analisada', at: '2026-06-29T16:00:00' },
         { type: 'questionnaire_submitted', text: 'Questionário de Identidade concluído', at: '2026-06-28T10:40:00' },
       ],
+      playbookExperience: { format: null, completedAt: null },
+      quiz: { score: null, total: null, completedAt: null },
     },
   },
 };
@@ -385,7 +393,7 @@ export const MockDB = {
         goals: ['Objetivo identificado na conversa 1', 'Objetivo identificado na conversa 2'],
         challenges: ['Desafio mencionado pela cliente'],
         actionItems: ['Ação combinada em reunião'],
-        homework: ['Ler o Playbook', 'Praticar o discurso'],
+        homework: ['Ler o Playbook', 'Gravar o pitch'],
         keyInsights: ['Insight-chave extraído da conversa.'],
       };
     }
@@ -405,7 +413,7 @@ export const MockDB = {
       ['target_audience', 'Público-Alvo'], ['value_proposition', 'Proposta de Valor'],
       ['positioning', 'Posicionamento'], ['brand_voice', 'Voz da Marca'],
       ['communication_style', 'Estilo de Comunicação'], ['goals', 'Objetivos'],
-      ['pitch_30s', 'Discurso de 30 Segundos'], ['action_plan', 'Plano de Ação'],
+      ['pitch_30s', 'Pitch de 30 Segundos'], ['action_plan', 'Plano de Ação'],
     ];
   },
   async generatePlaybookDraft(id) {
@@ -474,7 +482,7 @@ export const MockDB = {
       linkedin_summary: 'Ajudo consultores e coaches estabelecidos a fecharem a lacuna entre sua real expertise e como são percebidos — com posicionamento mais afiado, uma história mais clara e um discurso que realmente convence.',
     };
     save(db);
-    this.logActivity(id, 'pitches_generated', 'Variações de discurso geradas');
+    this.logActivity(id, 'pitches_generated', 'Variações de pitch geradas');
     return c.pitches;
   },
 
@@ -499,8 +507,91 @@ export const MockDB = {
     return Math.round((hw.filter((t) => t.status === 'completed').length / hw.length) * 100);
   },
 
+  // --- Pitch practice recordings ---
+  // Uses object URLs (blob:...) so they play back within this browser tab/session.
+  // A real build stores these in Supabase Storage instead; the URL only needs to
+  // survive the session here, matching how far this prototype goes without a backend.
+  addHomeworkMedia(id, taskId, file) {
+    const db = load();
+    const t = client(db, id).homework.find((t) => t.id === taskId);
+    if (!t) return;
+    if (!t.submissions) t.submissions = [];
+    t.submissions.push({
+      id: `m${Date.now()}`,
+      kind: file.type.startsWith('video') ? 'video' : 'audio',
+      name: file.name,
+      url: URL.createObjectURL(file),
+      uploadedAt: new Date().toISOString(),
+    });
+    t.status = 'completed';
+    save(db);
+    this.logActivity(id, 'pitch_recording_uploaded', 'Nova gravação de prática do pitch enviada');
+  },
+  removeHomeworkMedia(id, taskId, submissionId) {
+    const db = load();
+    const t = client(db, id).homework.find((t) => t.id === taskId);
+    if (!t) return;
+    t.submissions = (t.submissions || []).filter((s) => s.id !== submissionId);
+    if (t.submissions.length === 0) t.status = 'pending';
+    save(db);
+  },
+
+  // --- Playbook experience (podcast / video / audiobook) ---
+  getPlaybookExperience(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).playbookExperience;
+  },
+  completePlaybookExperience(id, format) {
+    const db = load();
+    client(db, id).playbookExperience = { format, completedAt: new Date().toISOString() };
+    save(db);
+    this.logActivity(id, 'playbook_experienced', `Playbook vivenciado em formato ${format}`);
+  },
+
+  // --- Quiz: short, fun check on what the client just learned ---
+  getQuiz(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).quiz;
+  },
+  buildQuizQuestions(id = DEFAULT_CLIENT_ID) {
+    const published = this.getPublishedPlaybook(id);
+    if (!published) return [];
+    const s = published.sections;
+    const DECOYS = {
+      positioning: ['A opção mais barata do mercado para qualquer perfil de cliente.', 'Alguém que atende qualquer segmento, sem distinção.'],
+      mission: ['Vender o máximo de serviços possível, independente do encaixe.', 'Ser conhecida por estar em todas as redes sociais ao mesmo tempo.'],
+      target_audience: ['Qualquer pessoa disposta a pagar, sem critério de encaixe.', 'Apenas grandes empresas com equipes de marketing próprias.'],
+      pitch_30s: ['Um resumo técnico do currículo, sem conexão com o cliente.', 'Uma lista de certificados e ferramentas dominadas.'],
+    };
+    const bank = [
+      ['positioning', 'Qual é o seu posicionamento?'],
+      ['mission', 'Qual é a sua missão?'],
+      ['target_audience', 'Quem é o seu público-alvo?'],
+      ['pitch_30s', 'Qual é o seu pitch de 30 segundos?'],
+    ];
+    return bank
+      .filter(([key]) => s[key])
+      .map(([key, question]) => {
+        const options = shuffle([s[key], ...DECOYS[key]]);
+        return { key, question, options, correct: s[key] };
+      });
+  },
+  submitQuiz(id, score, total) {
+    const db = load();
+    client(db, id).quiz = { score, total, completedAt: new Date().toISOString() };
+    save(db);
+    this.logActivity(id, 'quiz_completed', `Quiz do playbook concluído (${score}/${total})`);
+  },
+
   // --- Activity ---
   getActivity(id = DEFAULT_CLIENT_ID) {
     return client(load(), id).activity;
   },
 };
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}

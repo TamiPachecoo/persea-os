@@ -42,7 +42,7 @@ const CLIENT_NAV = [
   ['dashboard.html', 'Painel'],
   ['questionnaire.html', 'Questionário'],
   ['playbook.html', 'Playbook'],
-  ['pitch.html', 'Discurso'],
+  ['pitch.html', 'Pitch'],
   ['homework.html', 'Tarefas'],
   ['activity.html', 'Atividade'],
 ];

@@ -9,7 +9,7 @@ const TABS = [
   ['questionnaire', 'Questionário'],
   ['meeting', 'Reunião e Transcrição'],
   ['playbook', 'Editor de Playbook'],
-  ['pitch', 'Editor de Discurso'],
+  ['pitch', 'Editor de Pitch'],
   ['assessment', 'Avaliação'],
   ['homework', 'Tarefas'],
   ['meeting-prep', 'Preparação de Reunião'],
@@ -150,7 +150,7 @@ function renderPitchTab() {
   return `
     ${card(`
       <div class="flex items-center justify-between mb-4">
-        <p class="text-sm text-white/50">Variações de Discurso</p>
+        <p class="text-sm text-white/50">Variações de Pitch</p>
         <button id="generate-pitch" class="btn-ghost">${pitches ? 'Regenerar' : 'Gerar'}</button>
       </div>
       <div id="pitch-body">
@@ -184,9 +184,25 @@ function renderHomeworkTab() {
     <p class="text-sm text-white/50 mb-4">Conclusão: ${pct}%</p>
     <div class="space-y-3">
       ${tasks.map((t) => `
-        <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-          <span>${t.title}</span>
-          ${statusBadge(t.status)}
+        <div class="py-3 border-b border-white/5 last:border-0">
+          <div class="flex items-center justify-between">
+            <span>${t.title}</span>
+            ${statusBadge(t.status)}
+          </div>
+          ${t.type === 'media_upload' && (t.submissions || []).length ? `
+            <div class="mt-3 space-y-2">
+              ${t.submissions.map((s) => `
+                <div class="rounded border p-3" style="border-color:var(--line);">
+                  <p class="text-xs mb-2" style="color:var(--muted);">${s.name} · ${formatDateTime(s.uploadedAt)}</p>
+                  ${s.url
+                    ? (s.kind === 'video'
+                        ? `<video src="${s.url}" controls class="w-full rounded" style="max-height:220px;"></video>`
+                        : `<audio src="${s.url}" controls class="w-full"></audio>`)
+                    : `<p class="text-xs italic" style="color:var(--muted);">Gravação de sessão anterior — não reproduzível neste protótipo.</p>`}
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
       `).join('')}
     </div>
@@ -199,10 +215,14 @@ function renderMeetingPrepTab() {
   const pb = MockDB.getPublishedPlaybook(clientId);
   const hw = MockDB.getHomework(clientId);
   const questionsSubmitted = hw.find((t) => t.id === 'h3')?.status === 'completed';
+  const experience = MockDB.getPlaybookExperience(clientId);
+  const quiz = MockDB.getQuiz(clientId);
   const attention = [];
   if (!pb) attention.push('Playbook ainda não publicado para a cliente');
   if (pct < 100) attention.push('Tarefas não totalmente concluídas');
   if (!questionsSubmitted) attention.push('Perguntas de reflexão não enviadas');
+  if (pb && !experience.completedAt) attention.push('Cliente ainda não vivenciou o playbook (podcast/vídeo/audiobook)');
+  if (pb && experience.completedAt && !quiz.completedAt) attention.push('Quiz do playbook ainda não feito');
 
   return `
     ${card(`
@@ -212,6 +232,8 @@ function renderMeetingPrepTab() {
         <div class="flex justify-between py-2 border-b border-white/5"><span>Tarefas</span><span>${pct}%</span></div>
         <div class="flex justify-between py-2 border-b border-white/5"><span>Playbook Publicado</span>${statusBadge(pb ? 'published' : 'draft')}</div>
         <div class="flex justify-between py-2 border-b border-white/5"><span>Perguntas Enviadas</span>${statusBadge(questionsSubmitted ? 'completed' : 'pending')}</div>
+        <div class="flex justify-between py-2 border-b border-white/5"><span>Experiência do Playbook</span>${statusBadge(experience.completedAt ? 'completed' : 'pending')}</div>
+        <div class="flex justify-between py-2 border-b border-white/5"><span>Quiz</span>${quiz.completedAt ? `<span class="text-xs">${quiz.score}/${quiz.total}</span>` : statusBadge('pending')}</div>
       </div>
     `, 'mb-6')}
     ${card(`
@@ -294,7 +316,7 @@ function wireTabEvents() {
   tc.querySelector('#generate-pitch')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando…';
     await MockDB.generatePitches(clientId);
-    toast('Discursos gerados.');
+    toast('Pitches gerados.');
     render();
   });
 

@@ -1,18 +1,18 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, toast } from '../shared/ui.js';
 
-document.body.innerHTML = renderShell({ role: 'client', active: 'pitch.html', title: 'Seu Discurso' });
+document.body.innerHTML = renderShell({ role: 'client', active: 'pitch.html', title: 'Seu Pitch' });
 
 const pitches = MockDB.getPitches(DEFAULT_CLIENT_ID);
 const content = document.getElementById('app-content');
 
 const LABELS = {
-  pitch_10s: 'Discurso de 10 Segundos', pitch_30s: 'Discurso de 30 Segundos', pitch_60s: 'Discurso de 60 Segundos',
+  pitch_10s: 'Pitch de 10 Segundos', pitch_30s: 'Pitch de 30 Segundos', pitch_60s: 'Pitch de 60 Segundos',
   pitch_networking: 'Versão para Networking', instagram_bio: 'Bio do Instagram', linkedin_summary: 'Resumo do LinkedIn',
 };
 
 if (!pitches) {
-  content.innerHTML = card(`<p class="text-white/50">Suas variações de discurso ainda não foram geradas — elas aparecerão aqui assim que sua consultora publicá-las.</p>`);
+  content.innerHTML = card(`<p class="text-white/50">Suas variações de pitch ainda não foram geradas — elas aparecerão aqui assim que sua consultora publicá-las.</p>`);
 } else {
   content.innerHTML = `
     <div class="grid md:grid-cols-2 gap-6">
