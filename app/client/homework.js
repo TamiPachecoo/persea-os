@@ -1,12 +1,12 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, progressBar } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'homework.html', title: 'Tarefas' });
 const content = document.getElementById('app-content');
 
 function render() {
-  const tasks = MockDB.getHomework();
-  const pct = MockDB.homeworkCompletionPct();
+  const tasks = MockDB.getHomework(DEFAULT_CLIENT_ID);
+  const pct = MockDB.homeworkCompletionPct(DEFAULT_CLIENT_ID);
 
   content.innerHTML = `
     ${card(`
@@ -34,10 +34,10 @@ function render() {
   `;
 
   content.querySelectorAll('[data-toggle]').forEach((el) => {
-    el.addEventListener('change', () => { MockDB.toggleHomework(el.dataset.toggle); render(); });
+    el.addEventListener('change', () => { MockDB.toggleHomework(DEFAULT_CLIENT_ID, el.dataset.toggle); render(); });
   });
   content.querySelectorAll('[data-submit]').forEach((el) => {
-    el.addEventListener('blur', () => { MockDB.submitHomeworkText(el.dataset.submit, el.value); render(); });
+    el.addEventListener('blur', () => { MockDB.submitHomeworkText(DEFAULT_CLIENT_ID, el.dataset.submit, el.value); render(); });
   });
 }
 

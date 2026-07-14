@@ -1,9 +1,9 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, toast } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'pitch.html', title: 'Seu Discurso' });
 
-const pitches = MockDB.getPitches();
+const pitches = MockDB.getPitches(DEFAULT_CLIENT_ID);
 const content = document.getElementById('app-content');
 
 const LABELS = {

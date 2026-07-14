@@ -1,11 +1,11 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, progressBar, statusBadge, formatDateTime } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'dashboard.html' });
 
-const client = MockDB.getClient();
-const journey = MockDB.getJourney();
-const homeworkPct = MockDB.homeworkCompletionPct();
+const client = MockDB.getClient(DEFAULT_CLIENT_ID);
+const journey = MockDB.getJourney(DEFAULT_CLIENT_ID);
+const homeworkPct = MockDB.homeworkCompletionPct(DEFAULT_CLIENT_ID);
 const completedSteps = journey.steps.filter((s) => s.status === 'completed').length;
 const journeyPct = Math.round((completedSteps / journey.steps.length) * 100);
 const outstanding = journey.steps.filter((s) => s.status === 'available' || s.status === 'in_progress');

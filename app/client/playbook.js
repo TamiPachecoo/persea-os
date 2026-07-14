@@ -1,9 +1,9 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, formatDate } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
 
-const published = MockDB.getPublishedPlaybook();
+const published = MockDB.getPublishedPlaybook(DEFAULT_CLIENT_ID);
 const sectionDefs = MockDB.getSectionDefs();
 const content = document.getElementById('app-content');
 

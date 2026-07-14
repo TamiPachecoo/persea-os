@@ -1,9 +1,9 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, formatDateTime } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'activity.html', title: 'Atividade' });
 
-const events = MockDB.getActivity();
+const events = MockDB.getActivity(DEFAULT_CLIENT_ID);
 document.getElementById('app-content').innerHTML = card(`
   <div class="space-y-4">
     ${events.map((e) => `

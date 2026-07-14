@@ -1,9 +1,9 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, toast } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'questionnaire.html', title: 'Questionário de Identidade' });
 
-const q = MockDB.getQuestionnaire();
+const q = MockDB.getQuestionnaire(DEFAULT_CLIENT_ID);
 const content = document.getElementById('app-content');
 
 function render() {
@@ -33,12 +33,12 @@ function render() {
   `;
 
   content.querySelectorAll('[data-qid]').forEach((el) => {
-    el.addEventListener('change', () => MockDB.saveAnswer(el.dataset.qid, el.value));
+    el.addEventListener('change', () => MockDB.saveAnswer(DEFAULT_CLIENT_ID, el.dataset.qid, el.value));
   });
 
   content.querySelector('#submit-btn').addEventListener('click', () => {
     const wasSubmitted = q.status === 'submitted';
-    MockDB.submitQuestionnaire();
+    MockDB.submitQuestionnaire(DEFAULT_CLIENT_ID);
     q.status = 'submitted';
     toast(wasSubmitted ? 'Respostas atualizadas.' : 'Questionário enviado!');
     render();

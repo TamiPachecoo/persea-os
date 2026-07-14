@@ -1,9 +1,10 @@
-import { MockDB } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, toast, formatDateTime, formatDate } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'admin', active: 'client-detail.html' });
 
-const client = MockDB.getClient();
+const clientId = new URLSearchParams(location.search).get('id') || DEFAULT_CLIENT_ID;
+const client = MockDB.getClient(clientId);
 const TABS = [
   ['questionnaire', 'Questionário'],
   ['meeting', 'Reunião e Transcrição'],
@@ -20,6 +21,7 @@ const content = document.getElementById('app-content');
 
 function shell(inner) {
   return `
+    <a href="dashboard.html" class="btn-text mb-4 inline-block">&larr; Todos os clientes</a>
     <div class="mb-8 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-serif">${client.fullName}</h1>
@@ -37,8 +39,8 @@ function shell(inner) {
 }
 
 function renderQuestionnaireTab() {
-  const q = MockDB.getQuestionnaire();
-  const a = MockDB.getQuestionnaireAnalysis();
+  const q = MockDB.getQuestionnaire(clientId);
+  const a = MockDB.getQuestionnaireAnalysis(clientId);
   return `
     ${card(`
       <p class="text-sm text-white/50 mb-4">Respostas da Cliente</p>
@@ -76,8 +78,8 @@ function renderQABody(a) {
 }
 
 function renderMeetingTab() {
-  const meeting = MockDB.getMeeting();
-  const ta = MockDB.getTranscriptAnalysis();
+  const meeting = MockDB.getMeeting(clientId);
+  const ta = MockDB.getTranscriptAnalysis(clientId);
   return `
     ${card(`
       <div class="flex items-center justify-between mb-4">
@@ -86,13 +88,13 @@ function renderMeetingTab() {
       </div>
       <p class="text-sm text-white/40 mb-4">Transcrição ${meeting.transcriptUploaded ? 'enviada' : 'não enviada'}. Este protótipo simula o upload/análise — nenhuma leitura real de arquivo ou chamada ao modelo acontece.</p>
       <div class="flex gap-3">
-        <button id="upload-btn" class="btn-ghost">Simular Envio de Transcrição</button>
-        <button id="analyze-btn" class="btn-ghost">Analisar Transcrição</button>
+        <button id="upload-btn" class="btn-ghost" ${meeting.transcriptUploaded ? 'disabled' : ''}>Simular Envio de Transcrição</button>
+        <button id="analyze-btn" class="btn-ghost" ${!meeting.transcriptUploaded ? 'disabled' : ''}>Analisar Transcrição</button>
       </div>
     `, 'mb-6')}
     ${card(`
       <p class="text-sm text-white/50 mb-4">Análise da Transcrição</p>
-      <div id="ta-body" class="space-y-4 text-sm">${renderTABody(ta)}</div>
+      <div id="ta-body" class="space-y-4 text-sm">${ta ? renderTABody(ta) : '<p class="text-white/30 text-sm">Ainda não analisada — envie e analise a transcrição acima.</p>'}</div>
     `)}
   `;
 }
@@ -109,15 +111,26 @@ function renderTABody(ta) {
 }
 
 function renderPlaybookTab() {
-  const pb = MockDB.getPlaybook();
+  const pb = MockDB.getPlaybook(clientId);
   const latest = pb.versions[pb.versions.length - 1];
   const sectionDefs = MockDB.getSectionDefs();
+
+  if (!latest) {
+    return card(`
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm text-white/50">Nenhuma versão gerada ainda</p>
+        <button id="generate-pb" class="btn-ghost">Gerar Primeira Versão</button>
+      </div>
+      <p class="text-xs text-white/30">Requer questionário e transcrição analisados.</p>
+    `);
+  }
+
   return `
     <div class="flex items-center justify-between mb-4">
       <p class="text-sm text-white/50">Versão ${latest.version} ${statusBadge(latest.status)}</p>
       <div class="flex gap-3">
         <button id="generate-pb" class="btn-ghost">Gerar Nova Versão</button>
-        <button id="publish-pb" class="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-medium hover:bg-white/90 ${latest.status === 'published' ? 'opacity-40 pointer-events-none' : ''}">Publicar</button>
+        <button id="publish-pb" class="btn-primary" style="padding:9px 18px;font-size:12.5px;" ${latest.status === 'published' ? 'disabled' : ''}>Publicar</button>
       </div>
     </div>
     <p class="text-xs text-white/30 mb-6">${pb.versions.length} versão(ões) no total — histórico completo preservado.</p>
@@ -125,7 +138,7 @@ function renderPlaybookTab() {
       ${sectionDefs.map(([key, title]) => `
         <div class="card">
           <p class="text-xs uppercase tracking-wider text-white/40 mb-2">${title}</p>
-          <textarea data-section="${key}" rows="2" class="w-full border border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:border-white/40 text-sm">${latest.sections[key]}</textarea>
+          <textarea data-section="${key}" rows="2" class="field text-sm">${latest.sections[key]}</textarea>
         </div>
       `).join('')}
     </div>
@@ -133,7 +146,7 @@ function renderPlaybookTab() {
 }
 
 function renderPitchTab() {
-  const pitches = MockDB.getPitches();
+  const pitches = MockDB.getPitches(clientId);
   return `
     ${card(`
       <div class="flex items-center justify-between mb-4">
@@ -150,7 +163,7 @@ function renderPitchTab() {
 }
 
 function renderAssessmentTab() {
-  const a = MockDB.getAssessment();
+  const a = MockDB.getAssessment(clientId);
   return card(`
     <div class="flex items-center justify-between mb-3">
       <p class="font-medium">${a.title}</p>
@@ -159,14 +172,14 @@ function renderAssessmentTab() {
     <p class="text-sm text-white/50 mb-4">${a.description}</p>
     <div class="flex items-center gap-3">
       <a href="${a.externalUrl}" target="_blank" class="btn-ghost">Abrir Teste Externo</a>
-      <button id="mark-complete" class="btn-ghost ${a.status === 'completed' ? 'opacity-40 pointer-events-none' : ''}">Marcar como Concluído</button>
+      <button id="mark-complete" class="btn-ghost" ${a.status === 'completed' ? 'disabled' : ''}>Marcar como Concluído</button>
     </div>
   `);
 }
 
 function renderHomeworkTab() {
-  const tasks = MockDB.getHomework();
-  const pct = MockDB.homeworkCompletionPct();
+  const tasks = MockDB.getHomework(clientId);
+  const pct = MockDB.homeworkCompletionPct(clientId);
   return card(`
     <p class="text-sm text-white/50 mb-4">Conclusão: ${pct}%</p>
     <div class="space-y-3">
@@ -181,10 +194,10 @@ function renderHomeworkTab() {
 }
 
 function renderMeetingPrepTab() {
-  const q = MockDB.getQuestionnaire();
-  const pct = MockDB.homeworkCompletionPct();
-  const pb = MockDB.getPublishedPlaybook();
-  const hw = MockDB.getHomework();
+  const q = MockDB.getQuestionnaire(clientId);
+  const pct = MockDB.homeworkCompletionPct(clientId);
+  const pb = MockDB.getPublishedPlaybook(clientId);
+  const hw = MockDB.getHomework(clientId);
   const questionsSubmitted = hw.find((t) => t.id === 'h3')?.status === 'completed';
   const attention = [];
   if (!pb) attention.push('Playbook ainda não publicado para a cliente');
@@ -203,18 +216,18 @@ function renderMeetingPrepTab() {
     `, 'mb-6')}
     ${card(`
       <p class="text-sm text-white/50 mb-3">Áreas que Requerem Atenção</p>
-      ${attention.length ? `<ul class="list-disc list-inside space-y-1 text-sm text-amber-300">${attention.map((a) => `<li>${a}</li>`).join('')}</ul>` : '<p class="text-emerald-300 text-sm">Tudo em dia.</p>'}
+      ${attention.length ? `<ul class="list-disc list-inside space-y-1 text-sm" style="color:var(--gold);">${attention.map((a) => `<li>${a}</li>`).join('')}</ul>` : '<p class="text-sm" style="color:var(--gold);">Tudo em dia.</p>'}
     `)}
   `;
 }
 
 function renderActivityTab() {
-  const events = MockDB.getActivity();
+  const events = MockDB.getActivity(clientId);
   return card(`
     <div class="space-y-4">
       ${events.map((e) => `
         <div class="flex items-start gap-4 py-3 border-b border-white/5 last:border-0">
-          <div class="w-2 h-2 mt-2 rounded-full bg-[#e8c99b] shrink-0"></div>
+          <div class="w-2 h-2 mt-2 rounded-full shrink-0" style="background:var(--terracotta);"></div>
           <div><p>${e.text}</p><p class="text-xs text-white/30 mt-1">${formatDateTime(e.at)}</p></div>
         </div>
       `).join('')}
@@ -238,7 +251,7 @@ function wireTabEvents() {
 
   tc.querySelector('#regen-qa')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando…';
-    const a = await MockDB.regenerateQuestionnaireAnalysis();
+    const a = await MockDB.regenerateQuestionnaireAnalysis(clientId);
     document.getElementById('qa-body').innerHTML = renderQABody(a);
     toast('Análise regenerada.');
     render();
@@ -246,47 +259,47 @@ function wireTabEvents() {
 
   tc.querySelector('#upload-btn')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Enviando…';
-    await MockDB.uploadTranscript();
+    await MockDB.uploadTranscript(clientId);
     toast('Transcrição enviada.');
     render();
   });
   tc.querySelector('#analyze-btn')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Analisando…';
-    await MockDB.analyzeTranscript();
+    await MockDB.analyzeTranscript(clientId);
     toast('Transcrição analisada.');
     render();
   });
 
   tc.querySelector('#generate-pb')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando…';
-    await MockDB.generatePlaybookDraft();
+    await MockDB.generatePlaybookDraft(clientId);
     toast('Novo rascunho de playbook gerado.');
     render();
   });
   tc.querySelector('#publish-pb')?.addEventListener('click', () => {
-    const pb = MockDB.getPlaybook();
+    const pb = MockDB.getPlaybook(clientId);
     const latest = pb.versions[pb.versions.length - 1];
-    MockDB.publishPlaybook(latest.version);
+    MockDB.publishPlaybook(clientId, latest.version);
     toast('Playbook publicado — cliente notificada.');
     render();
   });
   tc.querySelectorAll('[data-section]').forEach((el) => {
     el.addEventListener('blur', () => {
-      const pb = MockDB.getPlaybook();
+      const pb = MockDB.getPlaybook(clientId);
       const latest = pb.versions[pb.versions.length - 1];
-      MockDB.saveSectionEdit(latest.version, el.dataset.section, el.value);
+      MockDB.saveSectionEdit(clientId, latest.version, el.dataset.section, el.value);
     });
   });
 
   tc.querySelector('#generate-pitch')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando…';
-    await MockDB.generatePitches();
+    await MockDB.generatePitches(clientId);
     toast('Discursos gerados.');
     render();
   });
 
   tc.querySelector('#mark-complete')?.addEventListener('click', () => {
-    MockDB.markAssessmentComplete();
+    MockDB.markAssessmentComplete(clientId);
     toast('Avaliação marcada como concluída.');
     render();
   });
