@@ -5,14 +5,14 @@ document.body.innerHTML = renderShell({ role: 'admin', active: 'client-detail.ht
 
 const client = MockDB.getClient();
 const TABS = [
-  ['questionnaire', 'Questionnaire'],
-  ['meeting', 'Meeting & Transcript'],
-  ['playbook', 'Playbook Editor'],
-  ['pitch', 'Pitch Editor'],
-  ['assessment', 'Assessment'],
-  ['homework', 'Homework'],
-  ['meeting-prep', 'Meeting Prep'],
-  ['activity', 'Activity'],
+  ['questionnaire', 'Questionário'],
+  ['meeting', 'Reunião e Transcrição'],
+  ['playbook', 'Editor de Playbook'],
+  ['pitch', 'Editor de Discurso'],
+  ['assessment', 'Avaliação'],
+  ['homework', 'Tarefas'],
+  ['meeting-prep', 'Preparação de Reunião'],
+  ['activity', 'Atividade'],
 ];
 
 let activeTab = 'questionnaire';
@@ -41,7 +41,7 @@ function renderQuestionnaireTab() {
   const a = MockDB.getQuestionnaireAnalysis();
   return `
     ${card(`
-      <p class="text-sm text-white/50 mb-4">Client Answers</p>
+      <p class="text-sm text-white/50 mb-4">Respostas da Cliente</p>
       <div class="space-y-4">
         ${q.questions.map((qu) => `
           <div class="pb-4 border-b border-white/5 last:border-0 last:pb-0">
@@ -53,8 +53,8 @@ function renderQuestionnaireTab() {
     `, 'mb-6')}
     ${card(`
       <div class="flex items-center justify-between mb-4">
-        <p class="text-sm text-white/50">AI Analysis <span class="text-white/30">· v${a.version}</span></p>
-        <button id="regen-qa" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Regenerate</button>
+        <p class="text-sm text-white/50">Análise de IA <span class="text-white/30">· v${a.version}</span></p>
+        <button id="regen-qa" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Regenerar</button>
       </div>
       <div id="qa-body" class="space-y-4 text-sm">
         ${renderQABody(a)}
@@ -65,13 +65,13 @@ function renderQuestionnaireTab() {
 
 function renderQABody(a) {
   return `
-    <div><p class="text-white/40 mb-1">Executive Summary</p><p>${a.executiveSummary}</p></div>
-    <div><p class="text-white/40 mb-1">Strengths</p><ul class="list-disc list-inside space-y-1">${a.strengths.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Goals</p><ul class="list-disc list-inside space-y-1">${a.goals.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Pain Points</p><ul class="list-disc list-inside space-y-1">${a.painPoints.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Opportunities</p><ul class="list-disc list-inside space-y-1">${a.opportunities.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Suggested Questions</p><ul class="list-disc list-inside space-y-1">${a.suggestedQuestions.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Business Maturity</p><p>${a.businessMaturity}</p></div>
+    <div><p class="text-white/40 mb-1">Resumo Executivo</p><p>${a.executiveSummary}</p></div>
+    <div><p class="text-white/40 mb-1">Pontos Fortes</p><ul class="list-disc list-inside space-y-1">${a.strengths.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Objetivos</p><ul class="list-disc list-inside space-y-1">${a.goals.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Pontos de Dor</p><ul class="list-disc list-inside space-y-1">${a.painPoints.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Oportunidades</p><ul class="list-disc list-inside space-y-1">${a.opportunities.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Perguntas Sugeridas</p><ul class="list-disc list-inside space-y-1">${a.suggestedQuestions.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Maturidade do Negócio</p><p>${a.businessMaturity}</p></div>
   `;
 }
 
@@ -84,14 +84,14 @@ function renderMeetingTab() {
         <p class="text-sm text-white/50">${meeting.title}</p>
         ${statusBadge(meeting.status)}
       </div>
-      <p class="text-sm text-white/40 mb-4">Transcript ${meeting.transcriptUploaded ? 'uploaded' : 'not uploaded'}. This prototype simulates upload/analysis — no real file parsing or model call happens.</p>
+      <p class="text-sm text-white/40 mb-4">Transcrição ${meeting.transcriptUploaded ? 'enviada' : 'não enviada'}. Este protótipo simula o upload/análise — nenhuma leitura real de arquivo ou chamada ao modelo acontece.</p>
       <div class="flex gap-3">
-        <button id="upload-btn" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Simulate Transcript Upload</button>
-        <button id="analyze-btn" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Analyze Transcript</button>
+        <button id="upload-btn" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Simular Envio de Transcrição</button>
+        <button id="analyze-btn" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Analisar Transcrição</button>
       </div>
     `, 'mb-6')}
     ${card(`
-      <p class="text-sm text-white/50 mb-4">Transcript Analysis</p>
+      <p class="text-sm text-white/50 mb-4">Análise da Transcrição</p>
       <div id="ta-body" class="space-y-4 text-sm">${renderTABody(ta)}</div>
     `)}
   `;
@@ -99,12 +99,12 @@ function renderMeetingTab() {
 
 function renderTABody(ta) {
   return `
-    <div><p class="text-white/40 mb-1">Meeting Summary</p><p>${ta.summary}</p></div>
-    <div><p class="text-white/40 mb-1">Goals</p><ul class="list-disc list-inside space-y-1">${ta.goals.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Challenges</p><ul class="list-disc list-inside space-y-1">${ta.challenges.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Action Items</p><ul class="list-disc list-inside space-y-1">${ta.actionItems.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Homework</p><ul class="list-disc list-inside space-y-1">${ta.homework.map((s) => `<li>${s}</li>`).join('')}</ul></div>
-    <div><p class="text-white/40 mb-1">Key Insights</p><ul class="list-disc list-inside space-y-1">${ta.keyInsights.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Resumo da Reunião</p><p>${ta.summary}</p></div>
+    <div><p class="text-white/40 mb-1">Objetivos</p><ul class="list-disc list-inside space-y-1">${ta.goals.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Desafios</p><ul class="list-disc list-inside space-y-1">${ta.challenges.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Itens de Ação</p><ul class="list-disc list-inside space-y-1">${ta.actionItems.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Tarefas</p><ul class="list-disc list-inside space-y-1">${ta.homework.map((s) => `<li>${s}</li>`).join('')}</ul></div>
+    <div><p class="text-white/40 mb-1">Principais Insights</p><ul class="list-disc list-inside space-y-1">${ta.keyInsights.map((s) => `<li>${s}</li>`).join('')}</ul></div>
   `;
 }
 
@@ -114,13 +114,13 @@ function renderPlaybookTab() {
   const sectionDefs = MockDB.getSectionDefs();
   return `
     <div class="flex items-center justify-between mb-4">
-      <p class="text-sm text-white/50">Version ${latest.version} ${statusBadge(latest.status)}</p>
+      <p class="text-sm text-white/50">Versão ${latest.version} ${statusBadge(latest.status)}</p>
       <div class="flex gap-3">
-        <button id="generate-pb" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Generate New Version</button>
-        <button id="publish-pb" class="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-medium hover:bg-white/90 ${latest.status === 'published' ? 'opacity-40 pointer-events-none' : ''}">Publish</button>
+        <button id="generate-pb" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Gerar Nova Versão</button>
+        <button id="publish-pb" class="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-medium hover:bg-white/90 ${latest.status === 'published' ? 'opacity-40 pointer-events-none' : ''}">Publicar</button>
       </div>
     </div>
-    <p class="text-xs text-white/30 mb-6">${pb.versions.length} version(s) total — full history preserved.</p>
+    <p class="text-xs text-white/30 mb-6">${pb.versions.length} versão(ões) no total — histórico completo preservado.</p>
     <div class="space-y-4">
       ${sectionDefs.map(([key, title]) => `
         <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
@@ -137,13 +137,13 @@ function renderPitchTab() {
   return `
     ${card(`
       <div class="flex items-center justify-between mb-4">
-        <p class="text-sm text-white/50">Pitch Variants</p>
-        <button id="generate-pitch" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">${pitches ? 'Regenerate' : 'Generate'}</button>
+        <p class="text-sm text-white/50">Variações de Discurso</p>
+        <button id="generate-pitch" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">${pitches ? 'Regenerar' : 'Gerar'}</button>
       </div>
       <div id="pitch-body">
         ${pitches ? Object.entries(pitches).filter(([k]) => k !== 'version').map(([k, v]) => `
           <div class="mb-4 last:mb-0"><p class="text-xs text-white/40 mb-1 capitalize">${k.replace(/_/g, ' ')}</p><p class="text-sm">${v}</p></div>
-        `).join('') : '<p class="text-white/30 text-sm">Not generated yet.</p>'}
+        `).join('') : '<p class="text-white/30 text-sm">Ainda não gerado.</p>'}
       </div>
     `)}
   `;
@@ -158,8 +158,8 @@ function renderAssessmentTab() {
     </div>
     <p class="text-sm text-white/50 mb-4">${a.description}</p>
     <div class="flex items-center gap-3">
-      <a href="${a.externalUrl}" target="_blank" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Open External Test</a>
-      <button id="mark-complete" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5 ${a.status === 'completed' ? 'opacity-40 pointer-events-none' : ''}">Mark Complete</button>
+      <a href="${a.externalUrl}" target="_blank" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Abrir Teste Externo</a>
+      <button id="mark-complete" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5 ${a.status === 'completed' ? 'opacity-40 pointer-events-none' : ''}">Marcar como Concluído</button>
     </div>
   `);
 }
@@ -168,7 +168,7 @@ function renderHomeworkTab() {
   const tasks = MockDB.getHomework();
   const pct = MockDB.homeworkCompletionPct();
   return card(`
-    <p class="text-sm text-white/50 mb-4">Completion: ${pct}%</p>
+    <p class="text-sm text-white/50 mb-4">Conclusão: ${pct}%</p>
     <div class="space-y-3">
       ${tasks.map((t) => `
         <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
@@ -187,23 +187,23 @@ function renderMeetingPrepTab() {
   const hw = MockDB.getHomework();
   const questionsSubmitted = hw.find((t) => t.id === 'h3')?.status === 'completed';
   const attention = [];
-  if (!pb) attention.push('Playbook not yet published to client');
-  if (pct < 100) attention.push('Homework not fully complete');
-  if (!questionsSubmitted) attention.push('Reflection questions not submitted');
+  if (!pb) attention.push('Playbook ainda não publicado para a cliente');
+  if (pct < 100) attention.push('Tarefas não totalmente concluídas');
+  if (!questionsSubmitted) attention.push('Perguntas de reflexão não enviadas');
 
   return `
     ${card(`
-      <p class="text-sm text-white/50 mb-4">Pre-Meeting-2 Checklist</p>
+      <p class="text-sm text-white/50 mb-4">Checklist Pré-Reunião 2</p>
       <div class="grid md:grid-cols-2 gap-4 text-sm">
-        <div class="flex justify-between py-2 border-b border-white/5"><span>Questionnaire</span>${statusBadge(q.status === 'submitted' ? 'completed' : 'pending')}</div>
-        <div class="flex justify-between py-2 border-b border-white/5"><span>Homework</span><span>${pct}%</span></div>
-        <div class="flex justify-between py-2 border-b border-white/5"><span>Playbook Published</span>${statusBadge(pb ? 'published' : 'draft')}</div>
-        <div class="flex justify-between py-2 border-b border-white/5"><span>Questions Submitted</span>${statusBadge(questionsSubmitted ? 'completed' : 'pending')}</div>
+        <div class="flex justify-between py-2 border-b border-white/5"><span>Questionário</span>${statusBadge(q.status === 'submitted' ? 'completed' : 'pending')}</div>
+        <div class="flex justify-between py-2 border-b border-white/5"><span>Tarefas</span><span>${pct}%</span></div>
+        <div class="flex justify-between py-2 border-b border-white/5"><span>Playbook Publicado</span>${statusBadge(pb ? 'published' : 'draft')}</div>
+        <div class="flex justify-between py-2 border-b border-white/5"><span>Perguntas Enviadas</span>${statusBadge(questionsSubmitted ? 'completed' : 'pending')}</div>
       </div>
     `, 'mb-6')}
     ${card(`
-      <p class="text-sm text-white/50 mb-3">Areas Requiring Attention</p>
-      ${attention.length ? `<ul class="list-disc list-inside space-y-1 text-sm text-amber-300">${attention.map((a) => `<li>${a}</li>`).join('')}</ul>` : '<p class="text-emerald-300 text-sm">All caught up.</p>'}
+      <p class="text-sm text-white/50 mb-3">Áreas que Requerem Atenção</p>
+      ${attention.length ? `<ul class="list-disc list-inside space-y-1 text-sm text-amber-300">${attention.map((a) => `<li>${a}</li>`).join('')}</ul>` : '<p class="text-emerald-300 text-sm">Tudo em dia.</p>'}
     `)}
   `;
 }
@@ -237,37 +237,37 @@ function wireTabEvents() {
   const tc = document.getElementById('tab-content');
 
   tc.querySelector('#regen-qa')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Generating…';
+    e.target.disabled = true; e.target.textContent = 'Gerando…';
     const a = await MockDB.regenerateQuestionnaireAnalysis();
     document.getElementById('qa-body').innerHTML = renderQABody(a);
-    toast('Analysis regenerated.');
+    toast('Análise regenerada.');
     render();
   });
 
   tc.querySelector('#upload-btn')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Uploading…';
+    e.target.disabled = true; e.target.textContent = 'Enviando…';
     await MockDB.uploadTranscript();
-    toast('Transcript uploaded.');
+    toast('Transcrição enviada.');
     render();
   });
   tc.querySelector('#analyze-btn')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Analyzing…';
+    e.target.disabled = true; e.target.textContent = 'Analisando…';
     await MockDB.analyzeTranscript();
-    toast('Transcript analyzed.');
+    toast('Transcrição analisada.');
     render();
   });
 
   tc.querySelector('#generate-pb')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Generating…';
+    e.target.disabled = true; e.target.textContent = 'Gerando…';
     await MockDB.generatePlaybookDraft();
-    toast('New playbook draft generated.');
+    toast('Novo rascunho de playbook gerado.');
     render();
   });
   tc.querySelector('#publish-pb')?.addEventListener('click', () => {
     const pb = MockDB.getPlaybook();
     const latest = pb.versions[pb.versions.length - 1];
     MockDB.publishPlaybook(latest.version);
-    toast('Playbook published — client notified.');
+    toast('Playbook publicado — cliente notificada.');
     render();
   });
   tc.querySelectorAll('[data-section]').forEach((el) => {
@@ -279,15 +279,15 @@ function wireTabEvents() {
   });
 
   tc.querySelector('#generate-pitch')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Generating…';
+    e.target.disabled = true; e.target.textContent = 'Gerando…';
     await MockDB.generatePitches();
-    toast('Pitches generated.');
+    toast('Discursos gerados.');
     render();
   });
 
   tc.querySelector('#mark-complete')?.addEventListener('click', () => {
     MockDB.markAssessmentComplete();
-    toast('Assessment marked complete.');
+    toast('Avaliação marcada como concluída.');
     render();
   });
 }

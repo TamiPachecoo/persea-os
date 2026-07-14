@@ -1,11 +1,11 @@
 // Minimal shared UI helpers — stand-in for agency-framework/ui/components/*.
 
 export function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 export function formatDateTime(iso) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(iso).toLocaleString('pt-BR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function toast(message, { tone = 'success' } = {}) {
@@ -26,31 +26,31 @@ export function toast(message, { tone = 'success' } = {}) {
 
 export function statusBadge(status) {
   const map = {
-    completed: ['Completed', 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'],
-    published: ['Published', 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'],
-    in_progress: ['In Progress', 'bg-amber-500/15 text-amber-300 border-amber-500/30'],
-    draft: ['Draft', 'bg-amber-500/15 text-amber-300 border-amber-500/30'],
-    available: ['Available', 'bg-sky-500/15 text-sky-300 border-sky-500/30'],
-    locked: ['Locked', 'bg-white/5 text-white/40 border-white/10'],
-    not_started: ['Not Started', 'bg-white/5 text-white/40 border-white/10'],
-    pending: ['Pending', 'bg-white/5 text-white/40 border-white/10'],
+    completed: ['Concluído', 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'],
+    published: ['Publicado', 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'],
+    in_progress: ['Em Andamento', 'bg-amber-500/15 text-amber-300 border-amber-500/30'],
+    draft: ['Rascunho', 'bg-amber-500/15 text-amber-300 border-amber-500/30'],
+    available: ['Disponível', 'bg-sky-500/15 text-sky-300 border-sky-500/30'],
+    locked: ['Bloqueado', 'bg-white/5 text-white/40 border-white/10'],
+    not_started: ['Não Iniciado', 'bg-white/5 text-white/40 border-white/10'],
+    pending: ['Pendente', 'bg-white/5 text-white/40 border-white/10'],
   };
   const [label, cls] = map[status] || [status, 'bg-white/5 text-white/40 border-white/10'];
   return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${cls}">${label}</span>`;
 }
 
 const CLIENT_NAV = [
-  ['dashboard.html', 'Dashboard'],
-  ['questionnaire.html', 'Questionnaire'],
+  ['dashboard.html', 'Painel'],
+  ['questionnaire.html', 'Questionário'],
   ['playbook.html', 'Playbook'],
-  ['pitch.html', 'Pitch'],
-  ['homework.html', 'Homework'],
-  ['activity.html', 'Activity'],
+  ['pitch.html', 'Discurso'],
+  ['homework.html', 'Tarefas'],
+  ['activity.html', 'Atividade'],
 ];
 
 const ADMIN_NAV = [
-  ['dashboard.html', 'Dashboard'],
-  ['client-detail.html', 'Clients'],
+  ['dashboard.html', 'Painel'],
+  ['client-detail.html', 'Clientes'],
 ];
 
 export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
@@ -68,8 +68,8 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
             <nav class="hidden md:flex items-center gap-1">${navHtml}</nav>
           </div>
           <div class="flex items-center gap-4">
-            <span class="text-xs uppercase tracking-wider text-white/40">${role === 'admin' ? 'Admin' : 'Client'} view</span>
-            <a href="../index.html" class="text-xs text-white/40 hover:text-white/70">Switch role</a>
+            <span class="text-xs uppercase tracking-wider text-white/40">Visão ${role === 'admin' ? 'Admin' : 'Cliente'}</span>
+            <a href="../index.html" class="text-xs text-white/40 hover:text-white/70">Trocar perfil</a>
           </div>
         </div>
       </header>

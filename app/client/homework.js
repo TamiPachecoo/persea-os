@@ -1,7 +1,7 @@
 import { MockDB } from '../shared/mock-db.js';
 import { renderShell, card, progressBar } from '../shared/ui.js';
 
-document.body.innerHTML = renderShell({ role: 'client', active: 'homework.html', title: 'Homework' });
+document.body.innerHTML = renderShell({ role: 'client', active: 'homework.html', title: 'Tarefas' });
 const content = document.getElementById('app-content');
 
 function render() {
@@ -11,7 +11,7 @@ function render() {
   content.innerHTML = `
     ${card(`
       <div class="flex items-center justify-between mb-3">
-        <p class="text-sm text-white/50">Completion</p>
+        <p class="text-sm text-white/50">Conclusão</p>
         <p class="text-sm font-medium">${pct}%</p>
       </div>
       ${progressBar(pct)}
@@ -26,7 +26,7 @@ function render() {
             </label>
           ` : `
             <p class="mb-3">${t.title}</p>
-            <textarea data-submit="${t.id}" rows="3" class="w-full bg-transparent border border-white/15 rounded-lg px-4 py-3 focus:outline-none focus:border-white/40" placeholder="Write your reflection...">${t.submission || ''}</textarea>
+            <textarea data-submit="${t.id}" rows="3" class="w-full bg-transparent border border-white/15 rounded-lg px-4 py-3 focus:outline-none focus:border-white/40" placeholder="Escreva sua reflexão...">${t.submission || ''}</textarea>
           `}
         </div>
       `).join('')}

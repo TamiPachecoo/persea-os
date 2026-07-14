@@ -1,7 +1,7 @@
 import { MockDB } from '../shared/mock-db.js';
 import { renderShell, card, formatDateTime } from '../shared/ui.js';
 
-document.body.innerHTML = renderShell({ role: 'client', active: 'activity.html', title: 'Activity' });
+document.body.innerHTML = renderShell({ role: 'client', active: 'activity.html', title: 'Atividade' });
 
 const events = MockDB.getActivity();
 document.getElementById('app-content').innerHTML = card(`

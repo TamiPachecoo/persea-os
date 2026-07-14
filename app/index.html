@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<title>PERSEA — Prototype</title>
+<title>PERSEA — Protótipo</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,20 +14,20 @@
 </head>
 <body class="min-h-screen bg-[#0e0d0c] text-white/90 flex items-center justify-center">
   <div class="max-w-md w-full px-6 text-center">
-    <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-3">Operating System — Prototype</p>
+    <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-3">Sistema Operacional — Protótipo</p>
     <h1 class="text-4xl font-serif mb-2">PERSEA</h1>
-    <p class="text-white/50 mb-10 text-sm">No backend wired up yet. This runs entirely on mock, in-browser data so you can see the experience before we connect Supabase.</p>
+    <p class="text-white/50 mb-10 text-sm">Ainda sem backend conectado. Isso roda inteiramente com dados de exemplo no navegador, para você ver a experiência antes de conectarmos o Supabase.</p>
     <div class="space-y-3">
-      <a href="client/dashboard.html" class="block w-full py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition-colors">Continue as Client</a>
-      <a href="admin/dashboard.html" class="block w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 transition-colors">Continue as Admin</a>
+      <a href="client/dashboard.html" class="block w-full py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition-colors">Continuar como Cliente</a>
+      <a href="admin/dashboard.html" class="block w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 transition-colors">Continuar como Admin</a>
     </div>
-    <button id="reset-btn" class="mt-8 text-xs text-white/30 hover:text-white/60 underline">Reset sample data</button>
+    <button id="reset-btn" class="mt-8 text-xs text-white/30 hover:text-white/60 underline">Redefinir dados de exemplo</button>
   </div>
   <script type="module">
     import { MockDB } from './shared/mock-db.js';
     document.getElementById('reset-btn').addEventListener('click', () => {
       MockDB.reset();
-      alert('Sample data reset to defaults.');
+      alert('Dados de exemplo redefinidos.');
     });
   </script>
 </body>

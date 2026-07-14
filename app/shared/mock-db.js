@@ -17,51 +17,51 @@ const SEED = {
     status: 'active',
   },
   journey: {
-    programName: 'Identity',
+    programName: 'Identidade',
     steps: [
-      { key: 'questionnaire', title: 'Identity Questionnaire', status: 'completed' },
-      { key: 'meeting_1', title: 'Meeting 1', status: 'completed' },
-      { key: 'playbook_review', title: 'Personal Brand Playbook', status: 'in_progress' },
-      { key: 'assessment', title: 'Archetype Assessment', status: 'available' },
-      { key: 'pitch', title: 'Pitch Generator', status: 'locked' },
-      { key: 'homework', title: 'Homework', status: 'locked' },
+      { key: 'questionnaire', title: 'Questionário de Identidade', status: 'completed' },
+      { key: 'meeting_1', title: 'Reunião 1', status: 'completed' },
+      { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'in_progress' },
+      { key: 'assessment', title: 'Teste de Arquétipo', status: 'available' },
+      { key: 'pitch', title: 'Gerador de Discurso', status: 'locked' },
+      { key: 'homework', title: 'Tarefas', status: 'locked' },
     ],
-    upcomingMeeting: { title: 'Meeting 2 — Positioning Deep Dive', date: '2026-07-22T15:00:00' },
+    upcomingMeeting: { title: 'Reunião 2 — Aprofundamento de Posicionamento', date: '2026-07-22T15:00:00' },
   },
   questionnaire: {
-    title: 'Identity Questionnaire',
+    title: 'Questionário de Identidade',
     questions: [
-      { id: 'q1', text: 'What do you want to be known for in 3 years?', type: 'long_text', answer: 'Being the go-to strategist for premium personal brands in Latin America.' },
-      { id: 'q2', text: 'What feels most true about who you are right now?', type: 'long_text', answer: 'Precise, warm, and allergic to fluff.' },
-      { id: 'q3', text: 'What is the transformation you help people make?', type: 'long_text', answer: 'From invisible expert to recognized authority.' },
-      { id: 'q4', text: 'Rate your current confidence in your personal brand (1-10)', type: 'scale', answer: '5' },
+      { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: 'Ser a estrategista de referência para marcas pessoais premium na América Latina.' },
+      { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: 'Precisa, calorosa e alérgica a enrolação.' },
+      { id: 'q3', text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', type: 'long_text', answer: 'De especialista invisível a autoridade reconhecida.' },
+      { id: 'q4', text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', type: 'scale', answer: '5' },
     ],
     status: 'submitted',
   },
   questionnaireAnalysis: {
     version: 1,
     generatedAt: '2026-07-01T10:00:00',
-    executiveSummary: 'Marina is a high-competence operator whose external positioning has not caught up with her actual expertise. She under-claims authority in writing but over-delivers in practice.',
-    strengths: ['Deep subject-matter credibility', 'Clear point of view once prompted', 'Strong client empathy'],
-    goals: ['Be recognized as a category authority, not a generalist', 'Raise price point via perceived positioning'],
-    painPoints: ['Describes herself in vague, safe language', 'No consistent narrative across platforms'],
-    opportunities: ['A sharp point-of-view content pillar', 'A signature framework she already uses informally'],
-    suggestedQuestions: ['What have you stopped explaining because people should "just get it"?', 'Who do you secretly think is doing this worse than you?'],
-    businessMaturity: 'Established practitioner, pre-brand — strong delivery, weak narrative.',
+    executiveSummary: 'Marina é uma profissional de alta competência cujo posicionamento externo ainda não acompanhou sua real expertise. Ela subestima sua autoridade por escrito, mas entrega além na prática.',
+    strengths: ['Credibilidade técnica profunda', 'Ponto de vista claro quando provocada', 'Forte empatia com clientes'],
+    goals: ['Ser reconhecida como autoridade de categoria, não generalista', 'Elevar o valor cobrado por meio de posicionamento percebido'],
+    painPoints: ['Descreve-se com linguagem vaga e segura', 'Sem narrativa consistente entre plataformas'],
+    opportunities: ['Um pilar de conteúdo com ponto de vista afiado', 'Uma metodologia própria que já usa informalmente'],
+    suggestedQuestions: ['O que você parou de explicar porque acha que as pessoas "já deveriam entender"?', 'Quem você secretamente acha que faz isso pior do que você?'],
+    businessMaturity: 'Profissional estabelecida, pré-marca — entrega forte, narrativa fraca.',
   },
   meeting: {
-    title: 'Meeting 1',
+    title: 'Reunião 1',
     transcriptUploaded: true,
     status: 'analyzed',
   },
   transcriptAnalysis: {
     version: 1,
-    summary: 'Marina described a pattern of winning clients through referral but struggling to convert cold audiences, tracing back to generic self-description.',
-    goals: ['Land 3 speaking engagements this year', 'Raise rates 30% without losing conversion'],
-    challenges: ['Imposter feelings around "picking a lane"', 'Fear of alienating past clients by narrowing focus'],
-    actionItems: ['Draft one clear positioning statement', 'Audit last 10 pieces of content for consistency'],
-    homework: ['Read Playbook v1', 'Practice 30-second pitch out loud 5x', 'Answer reflection questions'],
-    keyInsights: ['The "generalist" framing is a safety behavior, not a strategic choice.'],
+    summary: 'Marina descreveu um padrão de conquistar clientes por indicação, mas com dificuldade de converter públicos frios — o que remete a uma autodescrição genérica.',
+    goals: ['Conseguir 3 palestras este ano', 'Aumentar os valores em 30% sem perder conversão'],
+    challenges: ['Sensação de impostora ao "escolher um nicho"', 'Medo de afastar clientes antigos ao se especializar'],
+    actionItems: ['Redigir uma declaração de posicionamento clara', 'Auditar os últimos 10 conteúdos quanto à consistência'],
+    homework: ['Ler o Playbook v1', 'Praticar o discurso de 30 segundos em voz alta 5x', 'Responder às perguntas de reflexão'],
+    keyInsights: ['O rótulo de "generalista" é um comportamento de segurança, não uma escolha estratégica.'],
   },
   playbook: {
     status: 'draft', // draft | published
@@ -72,39 +72,39 @@ const SEED = {
         status: 'draft',
         createdAt: '2026-07-05T09:00:00',
         sections: {
-          identity: 'A precision-minded brand strategist who turns quiet expertise into visible authority.',
-          mission: 'Help accomplished experts stop under-selling themselves in public.',
-          vision: 'A world where competence and perception are never mismatched.',
-          core_story: 'Started as the person clients called after their first consultant failed them — realized the gap was never skill, it was story.',
-          golden_circle: 'Why: mismatched competence and perception is a solvable problem. How: precision positioning + confident narrative. What: brand strategy for experts.',
-          target_audience: 'Established consultants and coaches with strong delivery but weak public narrative.',
-          value_proposition: 'We make your positioning as sharp as your actual expertise.',
-          positioning: 'The strategist for experts who are tired of sounding like everyone else.',
-          brand_voice: 'Precise, warm, no fluff, quietly confident.',
-          communication_style: 'Direct, short sentences, concrete examples over abstractions.',
-          goals: 'Book 3 speaking engagements. Raise rates 30%. Build one signature framework.',
-          pitch_30s: 'I help accomplished experts turn quiet expertise into a brand people actually notice — without sounding like everyone else in their category.',
-          action_plan: '1) Publish positioning statement. 2) Rebuild bio across platforms. 3) Pitch 3 speaking slots this quarter.',
+          identity: 'Uma estrategista de marca focada em precisão, que transforma expertise silenciosa em autoridade visível.',
+          mission: 'Ajudar especialistas de alto nível a pararem de se subestimar em público.',
+          vision: 'Um mundo onde competência e percepção nunca estão desalinhadas.',
+          core_story: 'Começou como a pessoa a quem os clientes recorriam depois que o primeiro consultor falhava — percebeu que a lacuna nunca foi de habilidade, e sim de narrativa.',
+          golden_circle: 'Por quê: o desalinhamento entre competência e percepção é um problema solucionável. Como: posicionamento de precisão + narrativa confiante. O quê: estratégia de marca para especialistas.',
+          target_audience: 'Consultores e coaches estabelecidos, com forte entrega mas narrativa pública fraca.',
+          value_proposition: 'Tornamos seu posicionamento tão afiado quanto sua real expertise.',
+          positioning: 'A estrategista para especialistas cansados de soar como todo mundo.',
+          brand_voice: 'Precisa, calorosa, sem enrolação, discretamente confiante.',
+          communication_style: 'Direto, frases curtas, exemplos concretos em vez de abstrações.',
+          goals: 'Conquistar 3 palestras. Aumentar os valores em 30%. Construir uma metodologia própria.',
+          pitch_30s: 'Ajudo especialistas de alto nível a transformarem sua expertise silenciosa em uma marca que as pessoas realmente notam — sem soar como todo mundo na categoria.',
+          action_plan: '1) Publicar a declaração de posicionamento. 2) Reconstruir a bio em todas as plataformas. 3) Buscar 3 oportunidades de palestra neste trimestre.',
         },
       },
     ],
   },
   assessment: {
-    title: 'Archetype Assessment',
-    description: 'A short external assessment to identify your dominant brand archetype.',
+    title: 'Teste de Arquétipo',
+    description: 'Uma breve avaliação externa para identificar seu arquétipo de marca dominante.',
     externalUrl: 'https://example.com/archetype-test',
     status: 'not_started',
   },
-  pitches: null, // generated later
+  pitches: null, // gerado depois
   homework: [
-    { id: 'h1', title: 'Read Playbook', type: 'boolean', status: 'pending' },
-    { id: 'h2', title: 'Practice Pitch (5x out loud)', type: 'boolean', status: 'pending' },
-    { id: 'h3', title: 'Reflection Questions', type: 'text_submission', status: 'pending', submission: '' },
+    { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
+    { id: 'h2', title: 'Praticar o Discurso (5x em voz alta)', type: 'boolean', status: 'pending' },
+    { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
   ],
   activity: [
-    { type: 'questionnaire_submitted', text: 'Completed Identity Questionnaire', at: '2026-07-01T09:40:00' },
-    { type: 'meeting_analyzed', text: 'Meeting 1 transcript analyzed', at: '2026-07-04T16:10:00' },
-    { type: 'playbook_draft_created', text: 'Playbook v1 draft generated', at: '2026-07-05T09:00:00' },
+    { type: 'questionnaire_submitted', text: 'Questionário de Identidade concluído', at: '2026-07-01T09:40:00' },
+    { type: 'meeting_analyzed', text: 'Transcrição da Reunião 1 analisada', at: '2026-07-04T16:10:00' },
+    { type: 'playbook_draft_created', text: 'Rascunho do Playbook v1 gerado', at: '2026-07-05T09:00:00' },
   ],
 };
 
@@ -160,7 +160,7 @@ export const MockDB = {
     const db = load();
     db.questionnaire.status = 'submitted';
     save(db);
-    this.logActivity('questionnaire_submitted', 'Completed Identity Questionnaire');
+    this.logActivity('questionnaire_submitted', 'Questionário de Identidade concluído');
   },
 
   // --- AI: Questionnaire Analysis ---
@@ -174,7 +174,7 @@ export const MockDB = {
       ...db.questionnaireAnalysis,
       version: db.questionnaireAnalysis.version + 1,
       generatedAt: new Date().toISOString(),
-      executiveSummary: db.questionnaireAnalysis.executiveSummary + ' (regenerated — sample content, no live model call in this prototype)',
+      executiveSummary: db.questionnaireAnalysis.executiveSummary + ' (regenerado — conteúdo de exemplo, sem chamada real ao modelo neste protótipo)',
     };
     save(db);
     return db.questionnaireAnalysis;
@@ -199,7 +199,7 @@ export const MockDB = {
     const db = load();
     db.meeting.status = 'analyzed';
     save(db);
-    this.logActivity('meeting_analyzed', 'Meeting transcript analyzed');
+    this.logActivity('meeting_analyzed', 'Transcrição da reunião analisada');
     return db.transcriptAnalysis;
   },
 
@@ -209,12 +209,12 @@ export const MockDB = {
   },
   getSectionDefs() {
     return [
-      ['identity', 'Identity'], ['mission', 'Mission'], ['vision', 'Vision'],
-      ['core_story', 'Core Story'], ['golden_circle', 'Golden Circle'],
-      ['target_audience', 'Target Audience'], ['value_proposition', 'Value Proposition'],
-      ['positioning', 'Positioning'], ['brand_voice', 'Brand Voice'],
-      ['communication_style', 'Communication Style'], ['goals', 'Goals'],
-      ['pitch_30s', '30 Second Pitch'], ['action_plan', 'Action Plan'],
+      ['identity', 'Identidade'], ['mission', 'Missão'], ['vision', 'Visão'],
+      ['core_story', 'História Central'], ['golden_circle', 'Círculo Dourado'],
+      ['target_audience', 'Público-Alvo'], ['value_proposition', 'Proposta de Valor'],
+      ['positioning', 'Posicionamento'], ['brand_voice', 'Voz da Marca'],
+      ['communication_style', 'Estilo de Comunicação'], ['goals', 'Objetivos'],
+      ['pitch_30s', 'Discurso de 30 Segundos'], ['action_plan', 'Plano de Ação'],
     ];
   },
   async generatePlaybookDraft() {
@@ -230,7 +230,7 @@ export const MockDB = {
     db.playbook.versions.push(newVersion);
     db.playbook.currentVersion = newVersion.version;
     save(db);
-    this.logActivity('playbook_draft_created', `Playbook v${newVersion.version} draft generated`);
+    this.logActivity('playbook_draft_created', `Rascunho do Playbook v${newVersion.version} gerado`);
     return newVersion;
   },
   saveSectionEdit(version, sectionKey, content) {
@@ -248,7 +248,7 @@ export const MockDB = {
     db.playbook.status = 'published';
     db.playbook.currentVersion = version;
     save(db);
-    this.logActivity('playbook_published', `Playbook v${version} published`);
+    this.logActivity('playbook_published', `Playbook v${version} publicado`);
   },
   getPublishedPlaybook() {
     const db = load();
@@ -263,7 +263,7 @@ export const MockDB = {
     const db = load();
     db.assessment.status = 'completed';
     save(db);
-    this.logActivity('assessment_completed', 'Archetype Assessment completed');
+    this.logActivity('assessment_completed', 'Teste de Arquétipo concluído');
   },
 
   // --- Pitch ---
@@ -275,15 +275,15 @@ export const MockDB = {
     const db = load();
     db.pitches = {
       version: 1,
-      pitch_10s: 'I turn overlooked experts into recognized authorities.',
-      pitch_30s: 'I help accomplished experts turn quiet expertise into a brand people actually notice — without sounding like everyone else in their category.',
-      pitch_60s: 'Most experts I meet are better than their reputation suggests. I help them close that gap — sharpening their positioning, their story, and their pitch — so the way they\'re perceived finally matches the level they actually operate at.',
-      pitch_networking: 'I work with experts who are great at what they do but forgettable in how they describe it — I fix the describing part.',
-      instagram_bio: 'Brand strategist for experts ✨ Turning quiet expertise into visible authority.',
-      linkedin_summary: 'I help established consultants and coaches close the gap between their real expertise and how they\'re perceived — through sharper positioning, a clearer story, and a pitch that actually lands.',
+      pitch_10s: 'Transformo especialistas invisíveis em autoridades reconhecidas.',
+      pitch_30s: 'Ajudo especialistas de alto nível a transformarem sua expertise silenciosa em uma marca que as pessoas realmente notam — sem soar como todo mundo na categoria.',
+      pitch_60s: 'A maioria dos especialistas que conheço é melhor do que sua reputação sugere. Eu ajudo a fechar essa lacuna — afiando o posicionamento, a história e o discurso — para que a percepção finalmente corresponda ao nível em que realmente atuam.',
+      pitch_networking: 'Trabalho com especialistas que são ótimos no que fazem, mas esquecíveis em como se descrevem — eu resolvo a parte da descrição.',
+      instagram_bio: 'Estrategista de marca para especialistas ✨ Transformando expertise silenciosa em autoridade visível.',
+      linkedin_summary: 'Ajudo consultores e coaches estabelecidos a fecharem a lacuna entre sua real expertise e como são percebidos — com posicionamento mais afiado, uma história mais clara e um discurso que realmente convence.',
     };
     save(db);
-    this.logActivity('pitches_generated', 'Pitch variants generated');
+    this.logActivity('pitches_generated', 'Variações de discurso geradas');
     return db.pitches;
   },
   saveePitchEdit() {}, // reserved
