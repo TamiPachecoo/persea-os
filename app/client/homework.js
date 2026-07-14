@@ -18,7 +18,7 @@ function render() {
     `, 'mb-6')}
     <div class="space-y-4">
       ${tasks.map((t) => `
-        <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+        <div class="card">
           ${t.type === 'boolean' ? `
             <label class="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" data-toggle="${t.id}" ${t.status === 'completed' ? 'checked' : ''} class="w-5 h-5 rounded accent-[#e8c99b]" />

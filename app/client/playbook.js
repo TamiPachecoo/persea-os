@@ -21,7 +21,7 @@ if (!published) {
     </div>
     <div class="space-y-6">
       ${sectionDefs.map(([key, title]) => `
-        <div id="${key}" class="rounded-2xl border border-white/10 bg-white/[0.03] p-6 scroll-mt-24">
+        <div id="${key}" class="card scroll-mt-24">
           <p class="text-xs uppercase tracking-wider text-white/40 mb-2">${title}</p>
           <p class="text-lg leading-relaxed font-serif">${published.sections[key]}</p>
         </div>

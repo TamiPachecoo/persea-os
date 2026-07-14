@@ -15,7 +15,7 @@ function render() {
     ` : ''}
     <div class="space-y-6">
       ${q.questions.map((question, i) => `
-        <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+        <div class="card">
           <label class="block text-sm text-white/50 mb-3">Pergunta ${i + 1} de ${q.questions.length}</label>
           <p class="text-lg font-medium mb-4">${question.text}</p>
           ${question.type === 'scale'

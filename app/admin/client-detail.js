@@ -29,7 +29,7 @@ function shell(inner) {
     </div>
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
       ${TABS.map(([key, label]) => `
-        <button data-tab="${key}" class="px-4 py-3 text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === key ? 'border-[#e8c99b] text-white' : 'border-transparent text-white/40 hover:text-white/70'}">${label}</button>
+        <button data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>
       `).join('')}
     </div>
     <div id="tab-content">${inner}</div>
@@ -54,7 +54,7 @@ function renderQuestionnaireTab() {
     ${card(`
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-white/50">Análise de IA <span class="text-white/30">· v${a.version}</span></p>
-        <button id="regen-qa" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Regenerar</button>
+        <button id="regen-qa" class="btn-ghost">Regenerar</button>
       </div>
       <div id="qa-body" class="space-y-4 text-sm">
         ${renderQABody(a)}
@@ -86,8 +86,8 @@ function renderMeetingTab() {
       </div>
       <p class="text-sm text-white/40 mb-4">Transcrição ${meeting.transcriptUploaded ? 'enviada' : 'não enviada'}. Este protótipo simula o upload/análise — nenhuma leitura real de arquivo ou chamada ao modelo acontece.</p>
       <div class="flex gap-3">
-        <button id="upload-btn" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Simular Envio de Transcrição</button>
-        <button id="analyze-btn" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Analisar Transcrição</button>
+        <button id="upload-btn" class="btn-ghost">Simular Envio de Transcrição</button>
+        <button id="analyze-btn" class="btn-ghost">Analisar Transcrição</button>
       </div>
     `, 'mb-6')}
     ${card(`
@@ -116,14 +116,14 @@ function renderPlaybookTab() {
     <div class="flex items-center justify-between mb-4">
       <p class="text-sm text-white/50">Versão ${latest.version} ${statusBadge(latest.status)}</p>
       <div class="flex gap-3">
-        <button id="generate-pb" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Gerar Nova Versão</button>
+        <button id="generate-pb" class="btn-ghost">Gerar Nova Versão</button>
         <button id="publish-pb" class="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-medium hover:bg-white/90 ${latest.status === 'published' ? 'opacity-40 pointer-events-none' : ''}">Publicar</button>
       </div>
     </div>
     <p class="text-xs text-white/30 mb-6">${pb.versions.length} versão(ões) no total — histórico completo preservado.</p>
     <div class="space-y-4">
       ${sectionDefs.map(([key, title]) => `
-        <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+        <div class="card">
           <p class="text-xs uppercase tracking-wider text-white/40 mb-2">${title}</p>
           <textarea data-section="${key}" rows="2" class="w-full border border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:border-white/40 text-sm">${latest.sections[key]}</textarea>
         </div>
@@ -138,7 +138,7 @@ function renderPitchTab() {
     ${card(`
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-white/50">Variações de Discurso</p>
-        <button id="generate-pitch" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">${pitches ? 'Regenerar' : 'Gerar'}</button>
+        <button id="generate-pitch" class="btn-ghost">${pitches ? 'Regenerar' : 'Gerar'}</button>
       </div>
       <div id="pitch-body">
         ${pitches ? Object.entries(pitches).filter(([k]) => k !== 'version').map(([k, v]) => `
@@ -158,8 +158,8 @@ function renderAssessmentTab() {
     </div>
     <p class="text-sm text-white/50 mb-4">${a.description}</p>
     <div class="flex items-center gap-3">
-      <a href="${a.externalUrl}" target="_blank" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5">Abrir Teste Externo</a>
-      <button id="mark-complete" class="text-xs px-3 py-1.5 rounded-lg border border-white/15 hover:bg-white/5 ${a.status === 'completed' ? 'opacity-40 pointer-events-none' : ''}">Marcar como Concluído</button>
+      <a href="${a.externalUrl}" target="_blank" class="btn-ghost">Abrir Teste Externo</a>
+      <button id="mark-complete" class="btn-ghost ${a.status === 'completed' ? 'opacity-40 pointer-events-none' : ''}">Marcar como Concluído</button>
     </div>
   `);
 }

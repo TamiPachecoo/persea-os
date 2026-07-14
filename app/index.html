@@ -6,22 +6,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  body { font-family: 'Inter', system-ui, sans-serif; }
-  .font-serif { font-family: 'Fraunces', serif; }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css">
 </head>
-<body class="min-h-screen bg-[#0e0d0c] text-white/90 flex items-center justify-center">
-  <div class="max-w-md w-full px-6 text-center">
-    <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-3">Sistema Operacional — Protótipo</p>
-    <h1 class="text-4xl font-serif mb-2">PERSEA</h1>
-    <p class="text-white/50 mb-10 text-sm">Ainda sem backend conectado. Isso roda inteiramente com dados de exemplo no navegador, para você ver a experiência antes de conectarmos o Supabase.</p>
+<body class="min-h-screen flex items-center justify-center">
+  <div class="ambient"></div>
+  <div class="grain"></div>
+  <div class="max-w-md w-full px-6 text-center relative" style="z-index:1;">
+    <p class="eyebrow mb-4">Sistema Operacional — Protótipo</p>
+    <h1 class="font-serif mb-3" style="font-size:3rem; text-shadow:0 0 40px rgba(142,64,73,.35);">PERSEA</h1>
+    <div class="divider mx-auto mb-6"></div>
+    <p class="mb-10 text-sm" style="color:var(--muted); line-height:1.7;">Ainda sem backend conectado. Isso roda inteiramente com dados de exemplo no navegador, para você ver a experiência antes de conectarmos o Supabase.</p>
     <div class="space-y-3">
-      <a href="client/dashboard.html" class="block w-full py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition-colors">Continuar como Cliente</a>
-      <a href="admin/dashboard.html" class="block w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 transition-colors">Continuar como Admin</a>
+      <a href="client/dashboard.html" class="btn-primary block w-full text-center" style="padding-top:13px;padding-bottom:13px;">Continuar como Cliente</a>
+      <a href="admin/dashboard.html" class="btn-ghost block w-full text-center" style="padding-top:12px;padding-bottom:12px;">Continuar como Admin</a>
     </div>
-    <button id="reset-btn" class="mt-8 text-xs text-white/30 hover:text-white/60 underline">Redefinir dados de exemplo</button>
+    <button id="reset-btn" class="btn-text mt-8 underline">Redefinir dados de exemplo</button>
   </div>
   <script type="module">
     import { MockDB } from './shared/mock-db.js';
