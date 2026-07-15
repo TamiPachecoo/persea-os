@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, toast, showMoodPrompt } from '../shared/ui.js';
+import { renderShell, card, toast, showMoodPrompt, stepEyebrow, initScrollReveal } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'questionnaire.html', title: 'Questionário de Identidade' });
 
@@ -15,9 +15,9 @@ function render() {
     ` : ''}
     <div class="space-y-6">
       ${q.questions.map((question, i) => `
-        <div class="card reveal" style="animation-delay:${(i * 0.08).toFixed(2)}s;">
-          <label class="block text-sm text-white/50 mb-3">Pergunta ${i + 1} de ${q.questions.length}</label>
-          <p class="text-lg font-medium mb-4">${question.text}</p>
+        <div class="card reveal-scroll">
+          ${stepEyebrow(i + 1, q.questions.length, 'Pergunta')}
+          <p class="text-lg font-medium mb-4 mt-2">${question.text}</p>
           ${question.type === 'scale'
             ? `<input type="number" min="1" max="10" data-qid="${question.id}" value="${question.answer}" class="w-24 border border-white/15 rounded-lg px-3 py-2 focus:outline-none focus:border-white/40" />`
             : `<textarea data-qid="${question.id}" rows="3" class="w-full border border-white/15 rounded-lg px-4 py-3 focus:outline-none focus:border-white/40">${question.answer}</textarea>`
@@ -49,6 +49,7 @@ function render() {
       });
     }
   });
+  initScrollReveal();
 }
 
 render();

@@ -175,3 +175,65 @@ export function showMoodPrompt({ label, onSelect }) {
     });
   });
 }
+
+// Numbered section header, e.g. "01 — 06 · PROGRESSO DA ETAPA" — the
+// step-through, product-configurator feel from the Euveka reference.
+export function stepEyebrow(current, total, label) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `
+    <p class="eyebrow flex items-center gap-2">
+      <span style="color:var(--gold);">${pad(current)} — ${pad(total)}</span>
+      <span style="color:var(--terracotta); opacity:.6;">·</span>
+      <span>${label}</span>
+    </p>
+  `;
+}
+
+// Scroll-triggered reveal: elements with .reveal-scroll stay hidden until
+// they cross into view, then play the same rise-and-fade as the load-time
+// .reveal animation. Call once after injecting HTML containing the class.
+export function initScrollReveal(root = document) {
+  const els = root.querySelectorAll('.reveal-scroll:not(.is-visible)');
+  if (!('IntersectionObserver' in window)) {
+    els.forEach((el) => el.classList.add('is-visible'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  els.forEach((el) => io.observe(el));
+}
+
+// Subtle magnetic/tilt effect on interactive cards — cursor-tracked, eases
+// back to neutral on leave. Call once after injecting HTML containing
+// .tilt-card elements.
+export function enableTilt(root = document) {
+  root.querySelectorAll('.tilt-card:not([data-tilt-bound])').forEach((el) => {
+    el.setAttribute('data-tilt-bound', '1');
+    el.addEventListener('pointermove', (e) => {
+      const rect = el.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+      el.style.transform = `perspective(900px) rotateY(${(x * 5).toFixed(2)}deg) rotateX(${(-y * 5).toFixed(2)}deg) translateY(-3px)`;
+    });
+    el.addEventListener('pointerleave', () => { el.style.transform = ''; });
+  });
+}
+
+// Counts a number up from 0 with ease-out — used for stat callouts
+// (percentages, scores) so the dashboard feels alive rather than static.
+export function animateCount(el, target, { duration = 1100, suffix = '' } = {}) {
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(target * eased) + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}

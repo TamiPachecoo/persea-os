@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt } from '../shared/ui.js';
+import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt, stepEyebrow, initScrollReveal, enableTilt } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
 
@@ -46,7 +46,7 @@ function renderExperienceHero() {
       <p class="text-sm mb-6" style="color:var(--muted);">Escolha um jeito de vivenciar sua nova marca — não precisa ser só leitura.</p>
       <div class="grid md:grid-cols-3 gap-3">
         ${Object.entries(FORMATS).map(([key, f]) => `
-          <button data-format="${key}" class="card text-left" style="cursor:pointer;">
+          <button data-format="${key}" class="card tilt-card text-left" style="cursor:pointer;">
             <p style="font-size:1.6rem;" class="mb-2">${f.icon}</p>
             <p class="font-medium mb-1">${f.label}</p>
             <p class="text-xs" style="color:var(--muted);">${f.desc}</p>
@@ -141,14 +141,16 @@ function renderPage() {
     </div>
     <div class="space-y-6">
       ${sectionDefs.map(([key, title], i) => `
-        <div id="${key}" class="card scroll-mt-24 reveal" style="animation-delay:${(i * 0.06).toFixed(2)}s;">
-          <p class="text-xs uppercase tracking-wider text-white/40 mb-2">${title}</p>
-          <p class="text-lg leading-relaxed font-serif">${published.sections[key]}</p>
+        <div id="${key}" class="card scroll-mt-24 reveal-scroll">
+          ${stepEyebrow(i + 1, sectionDefs.length, title)}
+          <p class="text-lg leading-relaxed font-serif mt-2">${published.sections[key]}</p>
         </div>
       `).join('')}
     </div>
   `;
   wireHeroEvents();
+  initScrollReveal();
+  enableTilt();
 }
 
 renderPage();

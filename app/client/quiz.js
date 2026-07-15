@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, showMoodPrompt } from '../shared/ui.js';
+import { renderShell, card, progressBar, showMoodPrompt, enableTilt, animateCount } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Quiz Rápido' });
 const content = document.getElementById('app-content');
@@ -35,13 +35,14 @@ function renderQuestion() {
       ${progressBar(Math.round((step / questions.length) * 100))}
       <h2 class="pg-title mt-5 mb-6" style="font-size:1.4rem;">${q.question}</h2>
       <div class="space-y-3" id="options">
-        ${q.options.map((opt, i) => `<button data-opt="${i}" class="card text-left w-full" style="cursor:pointer;">${opt}</button>`).join('')}
+        ${q.options.map((opt, i) => `<button data-opt="${i}" class="card tilt-card text-left w-full" style="cursor:pointer;">${opt}</button>`).join('')}
       </div>
     `)}
   `;
   document.querySelectorAll('[data-opt]').forEach((btn, i) => {
     btn.addEventListener('click', () => selectOption(q, i));
   });
+  enableTilt();
 }
 
 function selectOption(q, i) {
@@ -66,13 +67,15 @@ function renderResult() {
   content.innerHTML = card(`
     <p style="font-size:2.4rem;" class="mb-3">${msg.emoji}</p>
     <p class="eyebrow mb-2">Resultado</p>
-    <h2 class="pg-title mb-3" style="font-size:1.8rem;">${score} de ${questions.length}</h2>
+    <h2 class="pg-title mb-3" style="font-size:1.8rem;"><span id="score-counter">0</span> de ${questions.length}</h2>
     <p class="text-sm mb-6" style="color:var(--muted);">${msg.text}</p>
     <div class="flex gap-3">
       <a href="playbook.html" class="btn-primary">Voltar ao Playbook</a>
       <a href="pitch.html" class="btn-ghost">Ver Meu Pitch</a>
     </div>
   `);
+  const scoreCounter = document.getElementById('score-counter');
+  if (scoreCounter) animateCount(scoreCounter, score, { duration: 900 });
   showMoodPrompt({
     label: 'Como você se sentiu fazendo o quiz?',
     onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'quiz_completed', mood),

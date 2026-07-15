@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, toast } from '../shared/ui.js';
+import { renderShell, card, toast, stepEyebrow, initScrollReveal, enableTilt } from '../shared/ui.js';
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'pitch.html', title: 'Seu Pitch' });
 
@@ -14,12 +14,13 @@ const LABELS = {
 if (!pitches) {
   content.innerHTML = card(`<p class="text-white/50">Suas variações de pitch ainda não foram geradas — elas aparecerão aqui assim que sua consultora publicá-las.</p>`);
 } else {
+  const entries = Object.entries(LABELS);
   content.innerHTML = `
     <div class="grid md:grid-cols-2 gap-6">
-      ${Object.entries(LABELS).map(([key, label], i) => `
-        <div class="card reveal" style="animation-delay:${(i * 0.07).toFixed(2)}s;">
+      ${entries.map(([key, label], i) => `
+        <div class="card tilt-card reveal-scroll">
           <div class="flex items-center justify-between mb-3">
-            <p class="text-xs uppercase tracking-wider text-white/40">${label}</p>
+            ${stepEyebrow(i + 1, entries.length, label)}
             <button data-copy="${key}" class="text-xs text-white/40 hover:text-white">Copiar</button>
           </div>
           <p class="leading-relaxed">${pitches[key]}</p>
@@ -34,4 +35,6 @@ if (!pitches) {
       toast('Copiado para a área de transferência.');
     });
   });
+  initScrollReveal();
+  enableTilt();
 }

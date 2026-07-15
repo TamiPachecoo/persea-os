@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime, formatDate, renderPhaseTracker, toast } from '../shared/ui.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, formatDate, renderPhaseTracker, toast, stepEyebrow, initScrollReveal, enableTilt, animateCount } from '../shared/ui.js';
 
 const MEETING_STATUS_LABEL = {
   pending: ['Aguardando triagem', 'badge-locked'],
@@ -54,43 +54,48 @@ content.innerHTML = `
   <div class="reveal" style="animation-delay:.1s;">${renderPhaseTracker(phaseProgress)}</div>
 
   <div class="grid md:grid-cols-3 gap-6 mb-8">
-    <div class="reveal" style="animation-delay:.18s;">${card(`
-      <p class="text-sm text-white/50 mb-3">Progresso da Etapa — ${phaseProgress.phases[phaseProgress.currentIndex]}</p>
-      <p class="text-3xl font-serif mb-4">${journeyPct}%</p>
+    <div class="reveal-scroll tilt-card">${card(`
+      ${stepEyebrow(1, 6, 'Progresso da Etapa')}
+      <p class="text-xl font-serif mb-1" style="color:var(--muted); font-size:.95rem;">${phaseProgress.phases[phaseProgress.currentIndex]}</p>
+      <p class="text-3xl font-serif mb-4"><span id="journey-pct-counter">0</span>%</p>
       ${progressBar(journeyPct)}
     `)}</div>
-    <div class="reveal" style="animation-delay:.26s;">${card(`
-      <p class="text-sm text-white/50 mb-3">Etapa Atual</p>
+    <div class="reveal-scroll tilt-card">${card(`
+      ${stepEyebrow(2, 6, 'Etapa Atual')}
       <p class="text-xl font-serif mb-2">${phaseProgress.phases[phaseProgress.currentIndex]}</p>
       <p class="text-sm text-white/40">Passo ${completedSteps + 1} de ${journey.steps.length}</p>
     `)}</div>
-    <div class="reveal" style="animation-delay:.34s;">${card(`
-      <p class="text-sm text-white/50 mb-3">Próxima Reunião</p>
+    <div class="reveal-scroll tilt-card">${card(`
+      ${stepEyebrow(3, 6, 'Próxima Reunião')}
       <p class="text-lg font-medium mb-1">${journey.upcomingMeeting.title}</p>
       <p class="text-sm text-white/40">${formatDateTime(journey.upcomingMeeting.date)}</p>
     `)}</div>
   </div>
 
   <div class="grid md:grid-cols-2 gap-6">
-    <div class="reveal" style="animation-delay:.42s;">${card(`
-      <p class="text-sm text-white/50 mb-4">Tarefas Pendentes</p>
-      <div class="space-y-3">
+    <div class="reveal-scroll">${card(`
+      ${stepEyebrow(4, 6, 'Tarefas Pendentes')}
+      <div class="space-y-3 mt-3">
         ${outstanding.length ? outstanding.map(stepRow).join('') : '<p class="text-white/30 text-sm">Nada pendente no momento.</p>'}
       </div>
     `)}</div>
-    <div class="reveal" id="journey-detail" style="animation-delay:.5s;">${card(`
-      <p class="text-sm text-white/50 mb-4">Jornada Completa</p>
-      <p class="text-xs text-white/30 mb-3">Clique em qualquer etapa concluída para revisitá-la.</p>
+    <div class="reveal-scroll" id="journey-detail">${card(`
+      ${stepEyebrow(5, 6, 'Jornada Completa')}
+      <p class="text-xs text-white/30 mb-3 mt-3">Clique em qualquer etapa concluída para revisitá-la.</p>
       <div class="space-y-1">
         ${journey.steps.map(stepRow).join('')}
       </div>
     `)}</div>
   </div>
 
-  <div class="reveal mt-6" style="animation-delay:.58s;" id="meeting-request-card"></div>
+  <div class="reveal-scroll mt-6" id="meeting-request-card"></div>
 `;
 
 renderMeetingRequestCard();
+initScrollReveal();
+enableTilt();
+const counterEl = document.getElementById('journey-pct-counter');
+if (counterEl) animateCount(counterEl, journeyPct);
 
 document.querySelectorAll('[data-phase-index]').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -114,7 +119,7 @@ function renderMeetingRequestCard() {
 
   mount.innerHTML = card(`
     <div class="flex items-center justify-between mb-1">
-      <p class="text-sm text-white/50">Precisa tirar uma dúvida?</p>
+      ${stepEyebrow(6, 6, 'Precisa tirar uma dúvida?')}
       ${!showRequestForm ? `<button id="toggle-request" class="btn-ghost">Solicitar Reunião</button>` : ''}
     </div>
     ${showRequestForm ? `

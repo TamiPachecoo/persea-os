@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime, toast, showMoodPrompt } from '../shared/ui.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, toast, showMoodPrompt, stepEyebrow, animateCount } from '../shared/ui.js';
 
 function promptMoodIfNewlyCompleted(taskId, wasCompletedBefore) {
   const task = MockDB.getHomework(DEFAULT_CLIENT_ID).find((t) => t.id === taskId);
@@ -49,13 +49,14 @@ function render() {
     ${card(`
       <div class="flex items-center justify-between mb-3">
         <p class="text-sm text-white/50">Conclusão</p>
-        <p class="text-sm font-medium">${pct}%</p>
+        <p class="text-sm font-medium"><span id="hw-pct-counter">0</span>%</p>
       </div>
       ${progressBar(pct)}
     `, 'mb-6')}
     <div class="space-y-4">
       ${tasks.map((t, i) => `
         <div class="card reveal" style="animation-delay:${(i * 0.08).toFixed(2)}s;">
+          ${stepEyebrow(i + 1, tasks.length, 'Tarefa')}
           ${t.type === 'boolean' ? `
             <label class="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" data-toggle="${t.id}" ${t.status === 'completed' ? 'checked' : ''} class="w-5 h-5 rounded accent-[#e8c99b]" />
@@ -104,6 +105,9 @@ function render() {
       render();
     });
   });
+
+  const counterEl = document.getElementById('hw-pct-counter');
+  if (counterEl) animateCount(counterEl, pct, { duration: 700 });
 }
 
 render();
