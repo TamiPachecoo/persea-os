@@ -140,7 +140,7 @@ body{
 /* card */
 .card{
   background:var(--card); border:1px solid var(--line); border-radius:4px; padding:22px 24px;
-  position:relative; overflow:hidden;
+  position:relative; overflow:hidden; box-sizing:border-box; height:100%;
   transition:transform .35s cubic-bezier(.22,1,.36,1), box-shadow .35s ease, border-color .35s ease;
 }
 .card::before{
