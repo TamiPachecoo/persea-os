@@ -1,6 +1,6 @@
 // Minimal shared UI helpers — stand-in for agency-framework/ui/components/*.
 // Visual language matches the PERSEA brand deck: dark ground, terracotta/gold
-// accents, Cormorant Garamond display type over Manrope body type.
+// accents, Playfair Display headline type over Poppins body type.
 
 export function formatDate(iso) {
   return new Date(iso).toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });

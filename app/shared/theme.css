@@ -1,6 +1,6 @@
 /* PERSEA shared theme — mirrors the brand presentation deck:
-   near-black ground, terracotta/gold accents, Cormorant Garamond display
-   type over Manrope body type, film grain + ambient glow. */
+   near-black ground, terracotta/gold accents, Playfair Display headline
+   type over Poppins body type, film grain + ambient glow. */
 
 :root{
   --bg:#0c0a09;
@@ -18,12 +18,12 @@
 *{box-sizing:border-box;}
 html,body{background:var(--bg);}
 body{
-  font-family:'Manrope',sans-serif;
+  font-family:'Poppins',sans-serif;
   color:var(--cream);
   position:relative;
   -webkit-font-smoothing:antialiased;
 }
-.font-serif{ font-family:'Cormorant Garamond', serif; font-style:italic; font-weight:500; }
+.font-serif{ font-family:'Playfair Display', serif; font-style:italic; font-weight:500; }
 
 /* ambient glow wash */
 .ambient{
@@ -96,7 +96,7 @@ body{
   background:rgba(12,10,9,.86); backdrop-filter:blur(10px);
 }
 .brand-mark{
-  font-family:'Cormorant Garamond',serif; font-style:italic; font-weight:600;
+  font-family:'Playfair Display',serif; font-style:italic; font-weight:600;
   font-size:19px; letter-spacing:.04em; color:var(--cream);
 }
 .nav-link{
@@ -113,7 +113,7 @@ body{
 }
 
 .pg-title{
-  font-family:'Cormorant Garamond', serif; font-weight:500; font-style:italic;
+  font-family:'Playfair Display', serif; font-weight:500; font-style:italic;
   font-size:clamp(1.9rem, 3.2vw, 2.6rem); color:var(--cream); line-height:1.1;
 }
 
@@ -173,7 +173,7 @@ a.card:hover::before, button.card:hover::before, .card-interactive:hover::before
 /* inputs */
 .field{
   width:100%; background:transparent; border:1px solid var(--line); border-radius:3px;
-  padding:12px 14px; color:var(--cream); font-family:'Manrope',sans-serif; font-size:14px;
+  padding:12px 14px; color:var(--cream); font-family:'Poppins',sans-serif; font-size:14px;
   transition:border-color .2s;
 }
 .field:focus{ outline:none; border-color:var(--terracotta); }
@@ -235,7 +235,7 @@ a.bg-white, button.bg-white, .bg-white { background: var(--cream) !important; co
   content:''; position:absolute; top:0; left:0; width:2px; height:100%; background:var(--terracotta); opacity:.7;
 }
 .phase-tier-label{
-  font-family:'Cormorant Garamond',serif; font-style:italic; font-weight:600;
+  font-family:'Playfair Display',serif; font-style:italic; font-weight:600;
   font-size:15px; color:var(--gold);
 }
 .phase-tracker{ display:flex; justify-content:space-between; position:relative; margin-top:22px; }
