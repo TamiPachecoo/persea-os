@@ -2,6 +2,8 @@
 // Visual language matches the PERSEA brand deck: dark ground, terracotta/gold
 // accents, Playfair Display headline type over Poppins body type.
 
+import { MockDB, getActiveClientId, setActiveClientId } from './mock-db.js';
+
 export function formatDate(iso) {
   return new Date(iso).toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
 }
@@ -67,6 +69,26 @@ export function renderParticles(count = 16) {
   return html + '</div>';
 }
 
+function renderClientSwitcher() {
+  const activeId = getActiveClientId();
+  const clients = MockDB.listClients();
+  return `
+    <select id="client-switcher" class="field" style="width:auto; padding:6px 10px; font-size:12px;">
+      ${clients.map((c) => `<option value="${c.id}" ${c.id === activeId ? 'selected' : ''}>${c.fullName}</option>`).join('')}
+    </select>
+  `;
+}
+
+// Call once after inserting renderShell's HTML into the page — wires the
+// client-switcher <select> so picking a different client reloads the page
+// acting as them. Only relevant on client-role pages.
+export function initClientSwitcher() {
+  document.getElementById('client-switcher')?.addEventListener('change', (e) => {
+    setActiveClientId(e.target.value);
+    location.reload();
+  });
+}
+
 export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
   const nav = role === 'admin' ? ADMIN_NAV : CLIENT_NAV;
   const navHtml = nav.map(([href, label]) => `
@@ -85,6 +107,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
             <nav class="hidden md:flex items-center gap-1">${navHtml}</nav>
           </div>
           <div class="flex items-center gap-4">
+            ${role === 'client' ? renderClientSwitcher() : ''}
             <span class="text-[10px] uppercase tracking-[.2em]" style="color:var(--muted);">Visão ${role === 'admin' ? 'Admin' : 'Cliente'}</span>
             <a href="../index.html" class="btn-text">Trocar perfil</a>
           </div>

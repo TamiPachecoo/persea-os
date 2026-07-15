@@ -1,11 +1,13 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt, stepEyebrow, initScrollReveal, enableTilt } from '../shared/ui.js';
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt, stepEyebrow, initScrollReveal, enableTilt, initClientSwitcher } from '../shared/ui.js';
 
+const activeClientId = getActiveClientId();
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
+initClientSwitcher();
 
-const client = MockDB.getClient(DEFAULT_CLIENT_ID);
-const published = MockDB.getPublishedPlaybook(DEFAULT_CLIENT_ID);
-const book = MockDB.getBook(DEFAULT_CLIENT_ID);
+const client = MockDB.getClient(activeClientId);
+const published = MockDB.getPublishedPlaybook(activeClientId);
+const book = MockDB.getBook(activeClientId);
 const content = document.getElementById('app-content');
 
 const FORMATS = {
@@ -55,8 +57,8 @@ function openBook() {
 
 // --- Table of contents ---
 function renderExperienceCard() {
-  const exp = MockDB.getPlaybookExperience(DEFAULT_CLIENT_ID);
-  const quiz = MockDB.getQuiz(DEFAULT_CLIENT_ID);
+  const exp = MockDB.getPlaybookExperience(activeClientId);
+  const quiz = MockDB.getQuiz(activeClientId);
 
   if (playerFormat) {
     const f = FORMATS[playerFormat];
@@ -218,12 +220,12 @@ function finishPlayer() {
   clearInterval(playerTimer);
   const format = playerFormat;
   playerFormat = null;
-  MockDB.completePlaybookExperience(DEFAULT_CLIENT_ID, format);
+  MockDB.completePlaybookExperience(activeClientId, format);
   toast('Playbook concluído! Que tal um quiz rápido?');
   renderPage();
   showMoodPrompt({
     label: 'Como você se sentiu vivenciando seu playbook?',
-    onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'playbook_experience', mood),
+    onSelect: (mood) => MockDB.logMood(activeClientId, 'playbook_experience', mood),
   });
 }
 

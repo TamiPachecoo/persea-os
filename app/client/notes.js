@@ -1,9 +1,11 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card } from '../shared/ui.js';
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { renderShell, card, initClientSwitcher } from '../shared/ui.js';
 
+const activeClientId = getActiveClientId();
 document.body.innerHTML = renderShell({ role: 'client', active: 'notes.html', title: 'Suas Notas' });
+initClientSwitcher();
 
-const notes = MockDB.getNotes(DEFAULT_CLIENT_ID);
+const notes = MockDB.getNotes(activeClientId);
 const content = document.getElementById('app-content');
 
 content.innerHTML = card(`
@@ -24,7 +26,7 @@ field.addEventListener('input', () => {
   status.textContent = 'Salvando…';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    MockDB.saveNotes(DEFAULT_CLIENT_ID, field.value);
+    MockDB.saveNotes(activeClientId, field.value);
     status.textContent = 'Salvo.';
   }, 500);
 });

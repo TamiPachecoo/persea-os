@@ -1,9 +1,11 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, toast, stepEyebrow, initScrollReveal, enableTilt } from '../shared/ui.js';
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { renderShell, card, toast, stepEyebrow, initScrollReveal, enableTilt, initClientSwitcher } from '../shared/ui.js';
 
+const activeClientId = getActiveClientId();
 document.body.innerHTML = renderShell({ role: 'client', active: 'pitch.html', title: 'Seu Pitch' });
+initClientSwitcher();
 
-const pitches = MockDB.getPitches(DEFAULT_CLIENT_ID);
+const pitches = MockDB.getPitches(activeClientId);
 const content = document.getElementById('app-content');
 
 const LABELS = {

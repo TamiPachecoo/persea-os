@@ -1,17 +1,20 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime, toast, showMoodPrompt, stepEyebrow, animateCount } from '../shared/ui.js';
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, toast, showMoodPrompt, stepEyebrow, animateCount, initClientSwitcher } from '../shared/ui.js';
+
+const activeClientId = getActiveClientId();
 
 function promptMoodIfNewlyCompleted(taskId, wasCompletedBefore) {
-  const task = MockDB.getHomework(DEFAULT_CLIENT_ID).find((t) => t.id === taskId);
+  const task = MockDB.getHomework(activeClientId).find((t) => t.id === taskId);
   if (task && task.status === 'completed' && !wasCompletedBefore) {
     showMoodPrompt({
       label: 'Como você se sente com essa tarefa concluída?',
-      onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'homework_task', mood),
+      onSelect: (mood) => MockDB.logMood(activeClientId, 'homework_task', mood),
     });
   }
 }
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'homework.html', title: 'Tarefas' });
+initClientSwitcher();
 const content = document.getElementById('app-content');
 
 function renderMediaTask(t) {
@@ -42,8 +45,8 @@ function renderMediaTask(t) {
 }
 
 function render() {
-  const tasks = MockDB.getHomework(DEFAULT_CLIENT_ID);
-  const pct = MockDB.homeworkCompletionPct(DEFAULT_CLIENT_ID);
+  const tasks = MockDB.getHomework(activeClientId);
+  const pct = MockDB.homeworkCompletionPct(activeClientId);
 
   content.innerHTML = `
     ${card(`
@@ -74,7 +77,7 @@ function render() {
   content.querySelectorAll('[data-toggle]').forEach((el) => {
     el.addEventListener('change', () => {
       const wasCompleted = tasks.find((t) => t.id === el.dataset.toggle)?.status === 'completed';
-      MockDB.toggleHomework(DEFAULT_CLIENT_ID, el.dataset.toggle);
+      MockDB.toggleHomework(activeClientId, el.dataset.toggle);
       render();
       promptMoodIfNewlyCompleted(el.dataset.toggle, wasCompleted);
     });
@@ -82,7 +85,7 @@ function render() {
   content.querySelectorAll('[data-submit]').forEach((el) => {
     el.addEventListener('blur', () => {
       const wasCompleted = tasks.find((t) => t.id === el.dataset.submit)?.status === 'completed';
-      MockDB.submitHomeworkText(DEFAULT_CLIENT_ID, el.dataset.submit, el.value);
+      MockDB.submitHomeworkText(activeClientId, el.dataset.submit, el.value);
       render();
       promptMoodIfNewlyCompleted(el.dataset.submit, wasCompleted);
     });
@@ -92,7 +95,7 @@ function render() {
       const file = el.files[0];
       if (!file) return;
       const wasCompleted = tasks.find((t) => t.id === el.dataset.media)?.status === 'completed';
-      MockDB.addHomeworkMedia(DEFAULT_CLIENT_ID, el.dataset.media, file);
+      MockDB.addHomeworkMedia(activeClientId, el.dataset.media, file);
       toast('Gravação enviada!');
       render();
       promptMoodIfNewlyCompleted(el.dataset.media, wasCompleted);
@@ -101,7 +104,7 @@ function render() {
   content.querySelectorAll('[data-remove-media]').forEach((el) => {
     el.addEventListener('click', () => {
       const [taskId, subId] = el.dataset.removeMedia.split(':');
-      MockDB.removeHomeworkMedia(DEFAULT_CLIENT_ID, taskId, subId);
+      MockDB.removeHomeworkMedia(activeClientId, taskId, subId);
       render();
     });
   });

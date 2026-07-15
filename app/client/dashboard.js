@@ -1,5 +1,5 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, statusBadge, formatDateTime, formatDate, renderPhaseTracker, toast, stepEyebrow, initScrollReveal, enableTilt, animateCount } from '../shared/ui.js';
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { renderShell, card, progressBar, statusBadge, formatDateTime, formatDate, renderPhaseTracker, toast, stepEyebrow, initScrollReveal, enableTilt, animateCount, initClientSwitcher } from '../shared/ui.js';
 
 const MEETING_STATUS_LABEL = {
   pending: ['Aguardando triagem', 'badge-locked'],
@@ -8,13 +8,15 @@ const MEETING_STATUS_LABEL = {
 };
 
 let showRequestForm = false;
+const activeClientId = getActiveClientId();
 
 document.body.innerHTML = renderShell({ role: 'client', active: 'dashboard.html' });
+initClientSwitcher();
 
-const client = MockDB.getClient(DEFAULT_CLIENT_ID);
-const journey = MockDB.getJourney(DEFAULT_CLIENT_ID);
-const phaseProgress = MockDB.getPhaseProgress(DEFAULT_CLIENT_ID);
-const assessment = MockDB.getAssessment(DEFAULT_CLIENT_ID);
+const client = MockDB.getClient(activeClientId);
+const journey = MockDB.getJourney(activeClientId);
+const phaseProgress = MockDB.getPhaseProgress(activeClientId);
+const assessment = MockDB.getAssessment(activeClientId);
 const completedSteps = journey.steps.filter((s) => s.status === 'completed').length;
 const journeyPct = Math.round((completedSteps / journey.steps.length) * 100);
 const outstanding = journey.steps.filter((s) => s.status === 'available' || s.status === 'in_progress');
@@ -115,7 +117,7 @@ document.querySelectorAll('[data-phase-index]').forEach((btn) => {
 
 function renderMeetingRequestCard() {
   const mount = document.getElementById('meeting-request-card');
-  const requests = MockDB.getMeetingRequests(DEFAULT_CLIENT_ID);
+  const requests = MockDB.getMeetingRequests(activeClientId);
 
   mount.innerHTML = card(`
     <div class="flex items-center justify-between mb-1">
@@ -161,7 +163,7 @@ function renderMeetingRequestCard() {
   document.getElementById('send-request')?.addEventListener('click', () => {
     const text = document.getElementById('request-reason').value.trim();
     if (!text) { toast('Escreva um breve motivo antes de enviar.', { tone: 'error' }); return; }
-    MockDB.requestMeeting(DEFAULT_CLIENT_ID, text);
+    MockDB.requestMeeting(activeClientId, text);
     showRequestForm = false;
     toast('Solicitação enviada! Nay ou a assistente vão entrar em contato.');
     renderMeetingRequestCard();

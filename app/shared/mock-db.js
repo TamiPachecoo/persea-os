@@ -10,6 +10,18 @@
 const STORAGE_KEY = 'persea_mock_db_v7';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
+// Which client the "client" side of the prototype is currently acting as —
+// there's no real auth here, so this stands in for a logged-in session.
+// Separate localStorage key from the seeded DB so switching clients never
+// touches/resets their data.
+const ACTIVE_CLIENT_KEY = 'persea_active_client';
+export function getActiveClientId() {
+  return localStorage.getItem(ACTIVE_CLIENT_KEY) || DEFAULT_CLIENT_ID;
+}
+export function setActiveClientId(id) {
+  localStorage.setItem(ACTIVE_CLIENT_KEY, id);
+}
+
 // Mentoring program phases per tier — tenant-level config (persea/methodology/
 // in the real build), not per-client. A client's progress is just an index
 // into their tier's phase list.

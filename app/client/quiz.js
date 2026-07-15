@@ -1,10 +1,12 @@
-import { MockDB, DEFAULT_CLIENT_ID } from '../shared/mock-db.js';
-import { renderShell, card, progressBar, showMoodPrompt, enableTilt, animateCount } from '../shared/ui.js';
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { renderShell, card, progressBar, showMoodPrompt, enableTilt, animateCount, initClientSwitcher } from '../shared/ui.js';
 
+const activeClientId = getActiveClientId();
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Quiz Rápido' });
+initClientSwitcher();
 const content = document.getElementById('app-content');
 
-const questions = MockDB.buildQuizQuestions(DEFAULT_CLIENT_ID);
+const questions = MockDB.buildQuizQuestions(activeClientId);
 let step = 0;
 let score = 0;
 let answered = false;
@@ -62,7 +64,7 @@ function selectOption(q, i) {
 }
 
 function renderResult() {
-  MockDB.submitQuiz(DEFAULT_CLIENT_ID, score, questions.length);
+  MockDB.submitQuiz(activeClientId, score, questions.length);
   const msg = resultMessage(score, questions.length);
   content.innerHTML = card(`
     <p style="font-size:2.4rem;" class="mb-3">${msg.emoji}</p>
@@ -78,7 +80,7 @@ function renderResult() {
   if (scoreCounter) animateCount(scoreCounter, score, { duration: 900 });
   showMoodPrompt({
     label: 'Como você se sentiu fazendo o quiz?',
-    onSelect: (mood) => MockDB.logMood(DEFAULT_CLIENT_ID, 'quiz_completed', mood),
+    onSelect: (mood) => MockDB.logMood(activeClientId, 'quiz_completed', mood),
   });
 }
 
