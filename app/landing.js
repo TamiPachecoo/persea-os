@@ -6,10 +6,9 @@ enableTilt();
 
 const LEADS_KEY = 'persea_landing_leads';
 
-// TEMPORARY test destination — swap for Nay's real inbox once confirmed working.
 // FormSubmit requires a one-time click-to-confirm on the FIRST submission to a
 // new address before it will actually deliver anything after that.
-const FORMSUBMIT_ENDPOINT = 'https://formsubmit.co/ajax/pachecootami@gmail.com';
+const FORMSUBMIT_ENDPOINT = 'https://formsubmit.co/ajax/naymurta@gmail.com';
 
 function saveLead(lead) {
   const leads = JSON.parse(localStorage.getItem(LEADS_KEY) || '[]');
