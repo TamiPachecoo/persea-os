@@ -93,7 +93,7 @@ body{
    stays legible without a hard overlay box. */
 .cover-photo{
   position:fixed; inset:0; z-index:0; pointer-events:none;
-  background-size:cover; background-position:center 18%;
+  background-size:cover; background-position:center center;
   filter:grayscale(1) brightness(.4) contrast(1.08);
   animation:coverDrift 30s ease-in-out infinite alternate;
 }
