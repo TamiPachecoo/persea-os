@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Nay Murta | Mentoria PERSEA</title>
+<meta name="description" content="Mentoria PERSEA com Nay Murta: construa uma presença de valor elevado, coerente e magnética." />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css">
+<style>
+  html{ scroll-behavior:smooth; }
+  .lp-hero{
+    position:relative; min-height:92vh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:24px;
+    overflow:hidden;
+  }
+  .lp-hero-photo{
+    position:absolute; inset:0; z-index:0;
+    background-image:url('shared/assets/nay-cover.jpg');
+    background-size:cover; background-position:center center;
+    filter:grayscale(1) brightness(.4) contrast(1.08);
+    animation:coverDrift 30s ease-in-out infinite alternate;
+  }
+  .lp-hero-scrim{
+    position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(ellipse at center, transparent 30%, rgba(12,10,9,.6) 75%, rgba(12,10,9,.95) 100%),
+      linear-gradient(180deg, rgba(12,10,9,.35) 0%, rgba(12,10,9,.5) 50%, rgba(12,10,9,.95) 100%);
+  }
+  .lp-section{ max-width:880px; margin:0 auto; padding:90px 24px; position:relative; z-index:1; }
+  .lp-method-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:20px; margin-top:40px; }
+  @media(max-width:640px){ .lp-method-grid{ grid-template-columns:1fr; } }
+  .ig-link{
+    display:inline-flex; align-items:center; gap:8px; color:var(--gold); font-size:13px;
+    letter-spacing:.05em; text-decoration:none; border-bottom:1px solid transparent; transition:border-color .2s;
+  }
+  .ig-link:hover{ border-color:var(--gold); }
+</style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <div class="grain"></div>
+  <div id="particles-mount"></div>
+
+  <!-- Hero -->
+  <section class="lp-hero">
+    <div class="lp-hero-photo"></div>
+    <div class="lp-hero-scrim"></div>
+    <div class="relative reveal" style="z-index:1;">
+      <p class="eyebrow mb-4">Mentoria PERSEA</p>
+      <h1 class="font-serif mb-4" style="font-size:clamp(2.4rem,6vw,4.2rem); text-shadow:0 2px 30px rgba(0,0,0,.6);">Nay Murta</h1>
+      <p class="mb-8" style="color:var(--cream); font-size:clamp(1rem,2vw,1.2rem); max-width:520px; margin-left:auto; margin-right:auto; line-height:1.7;">
+        Porque ser admirável nunca é por acaso. É construção.
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-4">
+        <a href="#form" class="btn-primary" style="padding:13px 28px;">Quero Conhecer a Mentoria</a>
+        <a href="https://instagram.com/naymutra" target="_blank" rel="noopener" class="ig-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>
+          @naymutra
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section class="lp-section reveal-scroll">
+    <p class="eyebrow mb-4">Sobre a Nay</p>
+    <h2 class="pg-title mb-6">Estratégia de imagem para quem já é competente e agora quer ser visto assim.</h2>
+    <p style="color:var(--muted); line-height:1.9; font-size:1.05rem;">
+      Nay Murta é mentora de imagem e presença, fundadora da Mentoria PERSEA e da Fator N. Depois de anos trabalhando de perto com profissionais de alto nível, percebeu um padrão: a maior parte deles já entrega mais do que sua imagem comunica. A Nay existe para fechar essa lacuna, transformando competência real em presença magnética, com método, não com sorte.
+    </p>
+  </section>
+
+  <!-- PERSEA Method -->
+  <section class="lp-section reveal-scroll">
+    <p class="eyebrow mb-4">O Método</p>
+    <h2 class="pg-title mb-3">Método PERSEA</h2>
+    <p style="color:var(--muted); line-height:1.8; max-width:620px;">Uma jornada em quatro fases, construída para elevar sua percepção de valor de forma coerente, da essência à visibilidade.</p>
+    <div class="lp-method-grid">
+      <div class="card tilt-card">
+        <p class="eyebrow mb-2">01</p>
+        <p class="font-medium mb-2" style="font-size:1.1rem;">Identidade</p>
+        <p class="text-sm" style="color:var(--muted);">Descubra e defina a essência da sua marca pessoal.</p>
+      </div>
+      <div class="card tilt-card">
+        <p class="eyebrow mb-2">02</p>
+        <p class="font-medium mb-2" style="font-size:1.1rem;">Imagem</p>
+        <p class="text-sm" style="color:var(--muted);">Construa uma imagem que comunica sua verdadeira autoridade.</p>
+      </div>
+      <div class="card tilt-card">
+        <p class="eyebrow mb-2">03</p>
+        <p class="font-medium mb-2" style="font-size:1.1rem;">Comportamento</p>
+        <p class="text-sm" style="color:var(--muted);">Desenvolva presença, postura e comunicação magnética.</p>
+      </div>
+      <div class="card tilt-card">
+        <p class="eyebrow mb-2">04</p>
+        <p class="font-medium mb-2" style="font-size:1.1rem;">Visibilidade</p>
+        <p class="text-sm" style="color:var(--muted);">Leve sua marca ao mundo com consistência e impacto.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA form -->
+  <section class="lp-section reveal-scroll" id="form">
+    <div class="card" style="padding:40px 32px;">
+      <p class="eyebrow mb-3">Comece agora</p>
+      <h2 class="pg-title mb-3" style="font-size:1.9rem;">Quero saber mais sobre a Mentoria PERSEA</h2>
+      <p class="mb-8" style="color:var(--muted);">Deixe seu contato e a equipe da Nay retorna com os próximos passos.</p>
+
+      <form id="lead-form" class="space-y-4">
+        <div>
+          <label class="block text-xs mb-2" style="color:var(--muted);">Nome</label>
+          <input type="text" id="lead-name" class="field" placeholder="Seu nome" required />
+        </div>
+        <div>
+          <label class="block text-xs mb-2" style="color:var(--muted);">E-mail</label>
+          <input type="email" id="lead-email" class="field" placeholder="voce@email.com" required />
+        </div>
+        <div>
+          <label class="block text-xs mb-2" style="color:var(--muted);">WhatsApp</label>
+          <input type="tel" id="lead-whatsapp" class="field" placeholder="(00) 00000-0000" required />
+        </div>
+        <button type="submit" class="btn-primary w-full" style="padding:13px;">Enviar</button>
+      </form>
+
+      <div id="lead-success" class="hidden text-center py-6">
+        <p style="font-size:2rem;" class="mb-3">✨</p>
+        <p class="pg-title mb-2" style="font-size:1.4rem;">Recebemos seu contato!</p>
+        <p style="color:var(--muted);">A equipe da Nay vai falar com você em breve.</p>
+      </div>
+
+      <div class="mt-8 pt-6 text-center" style="border-top:1px solid var(--line);">
+        <p class="text-xs mb-3" style="color:var(--muted);">Prefere acompanhar por lá?</p>
+        <a href="https://instagram.com/naymutra" target="_blank" rel="noopener" class="ig-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>
+          Seguir @naymutra no Instagram
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-center pb-10" style="color:var(--muted); font-size:11px; letter-spacing:.1em;">
+    <p class="brand-mark" style="display:inline-block; margin-bottom:8px;">PERSEA</p>
+    <p>NAY MURTA · MENTORIA PERSEA</p>
+  </footer>
+
+  <script type="module" src="landing.js"></script>
+</body>
+</html>
