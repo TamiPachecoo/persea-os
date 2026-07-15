@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v6';
+const STORAGE_KEY = 'persea_mock_db_v7';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Mentoring program phases per tier — tenant-level config (persea/methodology/
@@ -135,6 +135,81 @@ const SEED = {
         { context: 'playbook_experience', mood: 5, at: '2026-07-06T19:31:00' },
         { context: 'quiz_completed', mood: 5, at: '2026-07-06T19:46:00' },
       ],
+      book: {
+        title: 'Guia Imagético',
+        subtitle: 'Mentoria PERSEA',
+        author: 'NAY MURTA | FATOR N',
+        coverImage: '../shared/assets/nay-cover.jpg',
+        epigraph: {
+          text: 'Porque ser admirável nunca é por acaso. É construção.',
+          cite: 'Nay Murta — Mentoria PERSEA',
+        },
+        chapters: [
+          {
+            key: 'registro',
+            number: 1,
+            title: 'Registro Imagético Diário',
+            eyebrow: 'Envio via WhatsApp',
+            paragraphs: [
+              'Para iniciarmos uma construção estratégica, funcional e inteligente, precisamos entender seu ponto de partida.',
+              'Durante 10 dias, registre suas produções (ou faça simulações) e, junto à foto, conte para onde ia, como se sentiu ao se olhar no espelho e se foi fácil ou difícil escolher a roupa.',
+              'Esse será o nosso raio-x inicial para criarmos juntas uma imagem que traduza sua essência e eleve sua percepção de valor.',
+            ],
+          },
+          {
+            key: 'sou-nunca-gostaria',
+            number: 2,
+            title: 'Sou, Nunca e Gostaria',
+            eyebrow: 'Envio via WhatsApp',
+            paragraphs: [
+              'Selecione e envie referências visuais que representem:',
+            ],
+            list: [
+              'Como eu sou e me visto hoje: escolha 5 imagens que traduzam a comunicação atual. Importante: olhe de fora, como se estivesse descrevendo outra pessoa. Não envie fotos suas.',
+              'Como eu gostaria de ser: escolha 5 imagens que representem a mudança que você deseja alcançar.',
+              'Como eu nunca seria: escolha 5 imagens que mostrem o que não tem nada a ver com você ou que jamais usaria.',
+            ],
+          },
+          {
+            key: 'estrutura-corporal',
+            number: 3,
+            title: 'Estrutura Corporal',
+            eyebrow: 'Nem tudo que gostamos nos veste bem',
+            paragraphs: [
+              'Envie fotos de frente, costas e perfis, em postura ereta, usando lingerie ou biquíni, para validação da sua morfologia corporal.',
+              'Peça para outra pessoa fazer o registro, com o celular na horizontal, na altura da linha do corpo, evitando ângulos inclinados (de cima para baixo ou de baixo para cima).',
+            ],
+          },
+          {
+            key: 'analise-facial',
+            number: 4,
+            title: 'Análise Facial',
+            eyebrow: 'Visagismo e coloração pessoal',
+            paragraphs: [
+              'A seguir, as orientações detalhadas para o envio das fotos do seu rosto, que serão utilizadas como base para o seu projeto visagista e para a análise de coloração pessoal.',
+              '4.1 — Visagismo: precisaremos de três fotos suas, todas feitas com a câmera traseira, em posição frontal, como uma foto 3x4 — cabelos soltos para frente dos ombros, cabelos soltos para trás dos ombros, e cabelos presos. As fotos devem ser novas, com boa distância da câmera, cabelo bem penteado e partido ao meio (de preferência), usando top ou blusa branca de alça/manga, encostada em uma parede clara.',
+              'Como tirar as fotos: esteja sem maquiagem e sem acessórios; iluminação natural, feita durante o dia, evitando luz direta do sol e sem flash; peça para outra pessoa tirar a foto com a câmera traseira, a 1,5m de distância; confira se as duas orelhas estão visíveis na foto de frente.',
+              '4.2 — Coloração Pessoal: a foto deve ser tirada bem de frente, com proximidade do rosto e colo totalmente à mostra, em ambiente iluminado naturalmente, numa janela sem entrada direta de sol, entre 11h e 14h, com o rosto completamente limpo, sem produto, maquiagem ou acessórios.',
+            ],
+            list: [
+              'Posicione-se de frente para a janela para que o rosto receba iluminação uniforme.',
+              'Não fique de lado para a janela — isso deixa um lado do rosto iluminado e o outro sombreado.',
+              'Não deixe a janela ao fundo — isso cria sombras no rosto.',
+              'Posicione o celular na altura do pescoço, evitando deixá-lo muito acima ou abaixo da cabeça.',
+            ],
+          },
+          {
+            key: 'complementares',
+            number: 5,
+            title: 'Informações Complementares',
+            eyebrow: 'Mapeamento facial',
+            paragraphs: [
+              'Um formulário exclusivo para o seu mapeamento facial estará disponível na plataforma assim que sua consultora liberar esta etapa.',
+            ],
+          },
+        ],
+        backMatter: { studio: 'PERSEA', handle: '@naymutra', email: 'naymurta@fatorn.com.br' },
+      },
     },
 
     // --- Client 2: Júlia — just starting out, nothing analyzed yet ---
@@ -485,6 +560,9 @@ export const MockDB = {
   getPublishedPlaybook(id = DEFAULT_CLIENT_ID) {
     const c = client(load(), id);
     return c.playbook.versions.find((v) => v.status === 'published') || null;
+  },
+  getBook(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).book || null;
   },
 
   // --- Assessment ---
