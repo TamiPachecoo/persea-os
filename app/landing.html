@@ -23,6 +23,16 @@
     filter:grayscale(1) brightness(.4) contrast(1.08);
     animation:coverDrift 30s ease-in-out infinite alternate;
   }
+  /* the desktop crop is landscape; on a narrow/tall viewport "cover" keeps
+     only a thin vertical sliver of it, which can miss her face entirely.
+     Swap to a dedicated portrait crop instead of fighting the math. */
+  @media(max-width:640px){
+    .lp-hero{ min-height:78vh; }
+    .lp-hero-photo{
+      background-image:url('shared/assets/nay-cover-portrait.jpg');
+      background-position:center 22%;
+    }
+  }
   .lp-hero-scrim{
     position:absolute; inset:0; z-index:0;
     background:
