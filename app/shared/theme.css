@@ -88,6 +88,26 @@ body{
   transition:transform .25s cubic-bezier(.22,1,.36,1);
 }
 
+/* cover photo — full-bleed editorial portrait treatment, as seen on the
+   brand's own PDF guide covers: desaturated, darkened, vignetted so text
+   stays legible without a hard overlay box. */
+.cover-photo{
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-size:cover; background-position:center 18%;
+  filter:grayscale(1) brightness(.4) contrast(1.08);
+  animation:coverDrift 30s ease-in-out infinite alternate;
+}
+@keyframes coverDrift{
+  0%{ transform:scale(1.02) translate(0,0); }
+  100%{ transform:scale(1.07) translate(-1%,-1%); }
+}
+.cover-scrim{
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse at center, transparent 35%, rgba(12,10,9,.55) 78%, rgba(12,10,9,.92) 100%),
+    linear-gradient(180deg, rgba(12,10,9,.35) 0%, rgba(12,10,9,.55) 55%, rgba(12,10,9,.88) 100%);
+}
+
 /* app chrome */
 .app-shell{ position:relative; z-index:1; min-height:100vh; }
 .app-header{

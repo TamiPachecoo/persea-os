@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="shared/theme.css">
 </head>
 <body class="min-h-screen flex items-center justify-center">
+  <div class="cover-photo" style="background-image:url('shared/assets/nay-cover.jpg');"></div>
+  <div class="cover-scrim"></div>
   <div class="ambient"></div>
   <div class="grain"></div>
   <div id="particles-mount"></div>
@@ -24,6 +26,7 @@
     </div>
     <button id="reset-btn" class="btn-text mt-8 underline">Redefinir dados de exemplo</button>
   </div>
+  <p class="fixed left-6 bottom-6 text-xs" style="z-index:1; color:var(--muted); letter-spacing:.05em;">NAY MURTA &nbsp;|&nbsp; MENTORIA PERSEA</p>
   <script type="module">
     import { MockDB } from './shared/mock-db.js';
     import { renderParticles } from './shared/ui.js';
