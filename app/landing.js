@@ -32,6 +32,11 @@ form.addEventListener('submit', async (e) => {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Enviando…';
 
+  // Always keep a local copy first — FormSubmit can reject (e.g. destination
+  // not activated yet) while still returning HTTP 200, so this is the only
+  // guaranteed record if the remote send silently fails.
+  saveLead({ name, email, whatsapp });
+
   try {
     const res = await fetch(FORMSUBMIT_ENDPOINT, {
       method: 'POST',
@@ -43,14 +48,18 @@ form.addEventListener('submit', async (e) => {
         _subject: 'Novo contato — Landing Page PERSEA',
       }),
     });
-    if (!res.ok) throw new Error('FormSubmit request failed');
+    const data = await res.json().catch(() => ({}));
+    // FormSubmit returns HTTP 200 even when it rejects the submission (e.g.
+    // destination email not yet activated) — the real result is in the body.
+    if (!res.ok || data.success === false || data.success === 'false') {
+      throw new Error(data.message || 'FormSubmit request failed');
+    }
 
-    saveLead({ name, email, whatsapp });
     form.classList.add('hidden');
     document.getElementById('lead-success').classList.remove('hidden');
     toast('Contato enviado com sucesso!');
   } catch (err) {
-    toast('Não foi possível enviar agora. Tente novamente em instantes.', { tone: 'error' });
+    toast('Não foi possível enviar agora. Tente novamente em instantes ou fale direto pelo Instagram.', { tone: 'error' });
     submitBtn.disabled = false;
     submitBtn.textContent = 'Enviar';
   }
