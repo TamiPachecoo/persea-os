@@ -1,4 +1,4 @@
-import { MockDB, TIER_PHASES, MOOD_SCALE } from '../shared/mock-db.js';
+import { MockDB, TIER_PHASES, MOOD_SCALE, ONBOARDING_STAGE_LABEL } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, formatDateTime, formatDate, toast } from '../shared/ui.js';
 
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
@@ -45,6 +45,22 @@ function renderRequestsCard() {
         `).join('')}
       </div>
     ` : '<p class="text-sm" style="color:var(--muted);">Nenhuma solicitação em aberto.</p>'}
+  `, 'mb-8');
+}
+
+function renderOnboardingSummaryCard() {
+  const s = MockDB.getOnboardingSummary();
+  if (!s.stillOnboarding && !s.readyForPhase1) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Onboarding de Clientes</p>
+      <span class="text-xs" style="color:var(--muted);">${s.stillOnboarding} em andamento</span>
+    </div>
+    <div class="grid sm:grid-cols-3 gap-4 text-sm">
+      <div><p class="text-2xl font-serif">${s.awaitingContractPrep}</p><p class="text-white/40 text-xs mt-1">Aguardando Contrato</p></div>
+      <div><p class="text-2xl font-serif">${s.awaitingSignature}</p><p class="text-white/40 text-xs mt-1">Aguardando Assinatura</p></div>
+      <div><p class="text-2xl font-serif">${s.readyForPhase1}</p><p class="text-white/40 text-xs mt-1">Prontas para a Fase 1</p></div>
+    </div>
   `, 'mb-8');
 }
 
@@ -114,24 +130,30 @@ function render() {
       `)}
     </div>
 
+    ${renderOnboardingSummaryCard()}
     ${renderRequestsCard()}
     ${renderMoodCard()}
 
     ${card(`
       <p class="text-sm text-white/50 mb-4">Clientes</p>
       <div class="divide-y" style="border-color:var(--line);">
-        ${clients.map((c) => `
+        ${clients.map((c) => {
+          const metaLine = c.status === 'onboarding'
+            ? `Onboarding: ${ONBOARDING_STAGE_LABEL[c.onboardingStage]}`
+            : `${TIER_LABEL[c.tier] || c.tier} · Fase: ${TIER_PHASES[c.tier][c.phaseIndex]}`;
+          return `
           <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
             <div>
               <p class="font-medium">${c.fullName}</p>
-              <p class="text-xs text-white/30">${c.email} · ${TIER_LABEL[c.tier] || c.tier} · Fase: ${TIER_PHASES[c.tier][c.phaseIndex]}</p>
+              <p class="text-xs text-white/30">${c.email} · ${metaLine}</p>
             </div>
             <div class="flex items-center gap-4">
-              <span class="text-xs text-white/40">Jornada ${c.journeyPct}% · Tarefas ${c.homeworkPct}%</span>
+              ${c.status === 'onboarding' ? '' : `<span class="text-xs text-white/40">Jornada ${c.journeyPct}% · Tarefas ${c.homeworkPct}%</span>`}
               ${statusBadge(c.status)}
             </div>
           </a>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     `)}
   `;

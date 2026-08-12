@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v7';
+const STORAGE_KEY = 'persea_mock_db_v8';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -30,15 +30,64 @@ export const TIER_PHASES = {
   essential: ['Identidade', 'Imagem', 'Visibilidade'],
 };
 
+// Client onboarding — precedes Phase 1, per docs/PERSEA_METHODOLOGY.md §2.
+// Conceptual contract-status vocabulary (§2.2), not final — see that doc for
+// the full workflow this drives (client info -> contract -> signature ->
+// WhatsApp milestone -> resources unlock -> Phase 1).
+export const ONBOARDING_STAGES = [
+  'info_pending', 'info_received', 'contract_prepared',
+  'sent_for_signature', 'awaiting_signature', 'signed', 'completed',
+];
+export const ONBOARDING_STAGE_LABEL = {
+  info_pending: 'Informações Pendentes',
+  info_received: 'Informações Recebidas',
+  contract_prepared: 'Contrato Preparado',
+  sent_for_signature: 'Enviado para Assinatura',
+  awaiting_signature: 'Aguardando Assinatura',
+  signed: 'Assinado',
+  completed: 'Contrato Concluído',
+};
+
+// Contract template selection — two independent axes confirmed from real
+// PERSEA contracts (docs/PERSEA_METHODOLOGY.md §2.2): duration/tier here,
+// party type (PF/PJ) captured per-client below. Values are tenant pricing,
+// not client data — persea/config/tenant.json territory in the real build.
+export const CONTRACT_DURATIONS = ['semestral', 'anual'];
+export const CONTRACT_DURATION_LABEL = { semestral: 'Semestral', anual: 'Anual' };
+export const CONTRACT_DURATION_VALUE = { semestral: 18000, anual: 32000 };
+
+export const WHATSAPP_STATUSES = ['not_added', 'pending', 'added'];
+export const WHATSAPP_STATUS_LABEL = {
+  not_added: 'Não Adicionada',
+  pending: 'Pendente',
+  added: 'Adicionada',
+};
+
 const SEED = {
   tenant: {
     name: 'PERSEA',
     brandColor: '#b8863a',
   },
+  // Classes/resources — generic library per docs/02-database-schema.md's
+  // `resources` table (link/file/video), unlocked once onboarding completes.
+  // Tenant-level content, not per-client.
+  resources: [
+    { id: 'r1', title: 'Boas-vindas à Mentoria PERSEA', icon: '🎬', typeLabel: 'Vídeo', url: 'https://example.com/aula-boas-vindas' },
+    { id: 'r2', title: 'Guia de Primeiros Passos', icon: '📄', typeLabel: 'Documento', url: 'https://example.com/guia-primeiros-passos.pdf' },
+    { id: 'r3', title: 'N Time Class — Turma Atual', icon: '🔗', typeLabel: 'Link', url: 'https://example.com/n-time-class' },
+  ],
   clients: {
     // --- Client 1: Marina — farthest along, playbook published, pitches ready ---
     'client-1': {
       profile: { id: 'client-1', fullName: 'Marina Alves', email: 'marina@example.com', status: 'active', tier: 'premium', phaseIndex: 1 },
+      onboarding: {
+        clientInfo: {
+          submitted: true, fullName: 'Marina Alves', partyType: 'PF', cpf: '123.456.789-00', cnpj: null, companyName: null,
+          address: 'Rua Exemplo, 100, Savassi, Belo Horizonte/MG', email: 'marina@example.com', whatsapp: '(31) 90000-0001',
+        },
+        contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-1-assinado.pdf' },
+        whatsappGroup: { status: 'added' },
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -227,6 +276,14 @@ const SEED = {
     // --- Client 2: Júlia — just starting out, nothing analyzed yet ---
     'client-2': {
       profile: { id: 'client-2', fullName: 'Júlia Ferreira', email: 'julia@example.com', status: 'active', tier: 'essential', phaseIndex: 0 },
+      onboarding: {
+        clientInfo: {
+          submitted: true, fullName: 'Júlia Ferreira', partyType: 'PF', cpf: '234.567.890-11', cnpj: null, companyName: null,
+          address: 'Av. Exemplo, 200, Centro, Sete Lagoas/MG', email: 'julia@example.com', whatsapp: '(31) 90000-0002',
+        },
+        contract: { duration: 'semestral', status: 'completed', value: 18000, signedFileName: 'contrato-client-2-assinado.pdf' },
+        whatsappGroup: { status: 'added' },
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -292,6 +349,14 @@ const SEED = {
     // --- Client 3: Renata — mid-journey, playbook drafted but not published ---
     'client-3': {
       profile: { id: 'client-3', fullName: 'Renata Costa', email: 'renata@example.com', status: 'active', tier: 'premium', phaseIndex: 0 },
+      onboarding: {
+        clientInfo: {
+          submitted: true, fullName: 'Renata Costa', partyType: 'PJ', cpf: '345.678.901-22', cnpj: '12.345.678/0001-90', companyName: 'Renata Costa Consultoria',
+          address: 'Rua Exemplo, 300, Lourdes, Belo Horizonte/MG', email: 'renata@example.com', whatsapp: '(31) 90000-0003',
+        },
+        contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-3-assinado.pdf' },
+        whatsappGroup: { status: 'added' },
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -386,6 +451,177 @@ const SEED = {
         { context: 'homework_task', mood: 3, at: '2026-07-03T09:00:00' },
       ],
     },
+
+    // --- Clients 4-6: onboarding-stage — Phase 1 not started yet, demonstrate
+    // the pre-mentorship workflow from docs/PERSEA_METHODOLOGY.md §2. ---
+    'client-4': {
+      profile: { id: 'client-4', fullName: 'Bianca Souza', email: 'bianca@example.com', status: 'onboarding', tier: 'essential', phaseIndex: 0 },
+      onboarding: {
+        clientInfo: {
+          submitted: true, fullName: 'Bianca Souza', partyType: 'PF', cpf: '456.789.012-33', cnpj: null, companyName: null,
+          address: 'Rua Exemplo, 400, Centro, Contagem/MG', email: 'bianca@example.com', whatsapp: '(31) 90000-0004',
+        },
+        contract: { duration: null, status: 'info_received', value: null, signedFileName: null },
+        whatsappGroup: { status: 'not_added' },
+      },
+      journey: {
+        programName: 'Identidade',
+        steps: [
+          { key: 'questionnaire', title: 'Questionário de Identidade', status: 'locked' },
+          { key: 'meeting_1', title: 'Reunião 1', status: 'locked' },
+          { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
+          { key: 'assessment', title: 'Teste de Arquétipo', status: 'locked' },
+          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
+          { key: 'homework', title: 'Tarefas', status: 'locked' },
+        ],
+        upcomingMeeting: { title: 'Reunião 1 — a agendar após onboarding', date: '2026-08-25T10:00:00' },
+      },
+      questionnaire: {
+        title: 'Questionário de Identidade',
+        questions: [
+          { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
+          { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
+          { id: 'q3', text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', type: 'long_text', answer: '' },
+          { id: 'q4', text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', type: 'scale', answer: '' },
+        ],
+        status: 'in_progress',
+      },
+      questionnaireAnalysis: {
+        version: 0, generatedAt: null, executiveSummary: 'Ainda não gerada — disponível após o envio do questionário.',
+        strengths: [], goals: [], painPoints: [], opportunities: [], suggestedQuestions: [], businessMaturity: '—',
+      },
+      meeting: { title: 'Reunião 1', transcriptUploaded: false, status: 'scheduled' },
+      transcriptAnalysis: null,
+      playbook: { versions: [] },
+      assessment: { title: 'Teste de Arquétipo', description: 'Uma breve avaliação externa para identificar seu arquétipo de marca dominante.', externalUrl: 'https://example.com/archetype-test', status: 'not_started' },
+      pitches: null,
+      homework: [
+        { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
+        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
+        { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
+      ],
+      activity: [
+        { type: 'onboarding_info_submitted', text: 'Informações de cadastro enviadas para o contrato', at: '2026-08-10T09:00:00' },
+      ],
+      playbookExperience: { format: null, completedAt: null },
+      quiz: { score: null, total: null, completedAt: null },
+      meetingRequests: [],
+      notes: '',
+      moodLog: [],
+    },
+
+    'client-5': {
+      profile: { id: 'client-5', fullName: 'Camila Rocha', email: 'camila@example.com', status: 'onboarding', tier: 'essential', phaseIndex: 0 },
+      onboarding: {
+        clientInfo: {
+          submitted: true, fullName: 'Camila Rocha', partyType: 'PF', cpf: '567.890.123-44', cnpj: null, companyName: null,
+          address: 'Rua Exemplo, 500, Centro, Betim/MG', email: 'camila@example.com', whatsapp: '(31) 90000-0005',
+        },
+        contract: { duration: 'semestral', status: 'awaiting_signature', value: 18000, signedFileName: null },
+        whatsappGroup: { status: 'pending' },
+      },
+      journey: {
+        programName: 'Identidade',
+        steps: [
+          { key: 'questionnaire', title: 'Questionário de Identidade', status: 'locked' },
+          { key: 'meeting_1', title: 'Reunião 1', status: 'locked' },
+          { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
+          { key: 'assessment', title: 'Teste de Arquétipo', status: 'locked' },
+          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
+          { key: 'homework', title: 'Tarefas', status: 'locked' },
+        ],
+        upcomingMeeting: { title: 'Reunião 1 — a agendar após onboarding', date: '2026-08-28T10:00:00' },
+      },
+      questionnaire: {
+        title: 'Questionário de Identidade',
+        questions: [
+          { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
+          { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
+          { id: 'q3', text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', type: 'long_text', answer: '' },
+          { id: 'q4', text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', type: 'scale', answer: '' },
+        ],
+        status: 'in_progress',
+      },
+      questionnaireAnalysis: {
+        version: 0, generatedAt: null, executiveSummary: 'Ainda não gerada — disponível após o envio do questionário.',
+        strengths: [], goals: [], painPoints: [], opportunities: [], suggestedQuestions: [], businessMaturity: '—',
+      },
+      meeting: { title: 'Reunião 1', transcriptUploaded: false, status: 'scheduled' },
+      transcriptAnalysis: null,
+      playbook: { versions: [] },
+      assessment: { title: 'Teste de Arquétipo', description: 'Uma breve avaliação externa para identificar seu arquétipo de marca dominante.', externalUrl: 'https://example.com/archetype-test', status: 'not_started' },
+      pitches: null,
+      homework: [
+        { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
+        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
+        { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
+      ],
+      activity: [
+        { type: 'onboarding_info_submitted', text: 'Informações de cadastro enviadas para o contrato', at: '2026-08-05T09:00:00' },
+      ],
+      playbookExperience: { format: null, completedAt: null },
+      quiz: { score: null, total: null, completedAt: null },
+      meetingRequests: [],
+      notes: '',
+      moodLog: [],
+    },
+
+    'client-6': {
+      profile: { id: 'client-6', fullName: 'Débora Lima', email: 'debora@example.com', status: 'onboarding', tier: 'premium', phaseIndex: 0 },
+      onboarding: {
+        clientInfo: {
+          submitted: true, fullName: 'Débora Lima', partyType: 'PJ', cpf: '678.901.234-55', cnpj: '23.456.789/0001-01', companyName: 'Débora Lima Imagem',
+          address: 'Rua Exemplo, 600, Buritis, Belo Horizonte/MG', email: 'debora@example.com', whatsapp: '(31) 90000-0006',
+        },
+        contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-6-assinado.pdf' },
+        whatsappGroup: { status: 'added' },
+      },
+      journey: {
+        programName: 'Identidade',
+        steps: [
+          { key: 'questionnaire', title: 'Questionário de Identidade', status: 'locked' },
+          { key: 'meeting_1', title: 'Reunião 1', status: 'locked' },
+          { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
+          { key: 'assessment', title: 'Teste de Arquétipo', status: 'locked' },
+          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
+          { key: 'homework', title: 'Tarefas', status: 'locked' },
+        ],
+        upcomingMeeting: { title: 'Reunião 1 — a agendar', date: '2026-08-19T10:00:00' },
+      },
+      questionnaire: {
+        title: 'Questionário de Identidade',
+        questions: [
+          { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
+          { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
+          { id: 'q3', text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', type: 'long_text', answer: '' },
+          { id: 'q4', text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', type: 'scale', answer: '' },
+        ],
+        status: 'in_progress',
+      },
+      questionnaireAnalysis: {
+        version: 0, generatedAt: null, executiveSummary: 'Ainda não gerada — disponível após o envio do questionário.',
+        strengths: [], goals: [], painPoints: [], opportunities: [], suggestedQuestions: [], businessMaturity: '—',
+      },
+      meeting: { title: 'Reunião 1', transcriptUploaded: false, status: 'scheduled' },
+      transcriptAnalysis: null,
+      playbook: { versions: [] },
+      assessment: { title: 'Teste de Arquétipo', description: 'Uma breve avaliação externa para identificar seu arquétipo de marca dominante.', externalUrl: 'https://example.com/archetype-test', status: 'not_started' },
+      pitches: null,
+      homework: [
+        { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
+        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
+        { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
+      ],
+      activity: [
+        { type: 'whatsapp_status_changed', text: 'Adicionada ao grupo de WhatsApp', at: '2026-08-11T09:00:00' },
+        { type: 'signed_contract_uploaded', text: 'Contrato assinado enviado para o perfil da cliente', at: '2026-08-10T09:00:00' },
+      ],
+      playbookExperience: { format: null, completedAt: null },
+      quiz: { score: null, total: null, completedAt: null },
+      meetingRequests: [],
+      notes: '',
+      moodLog: [],
+    },
   },
 };
 
@@ -433,7 +669,7 @@ export const MockDB = {
       const completedSteps = c.journey.steps.filter((s) => s.status === 'completed').length;
       const journeyPct = Math.round((completedSteps / c.journey.steps.length) * 100);
       const homeworkPct = Math.round((c.homework.filter((t) => t.status === 'completed').length / c.homework.length) * 100);
-      return { ...c.profile, journeyPct, homeworkPct };
+      return { ...c.profile, journeyPct, homeworkPct, onboardingStage: c.onboarding.contract.status, whatsappStatus: c.onboarding.whatsappGroup.status };
     });
   },
   getClient(id = DEFAULT_CLIENT_ID) {
@@ -769,6 +1005,69 @@ export const MockDB = {
     const db = load();
     const all = Object.values(db.clients).flatMap((c) => c.moodLog);
     return moodStatsFor(all);
+  },
+
+  // --- Onboarding (pre-Phase-1) — docs/PERSEA_METHODOLOGY.md §2 ---
+  getOnboarding(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).onboarding;
+  },
+  saveClientInfo(id, info) {
+    const db = load();
+    const c = client(db, id);
+    c.onboarding.clientInfo = { ...c.onboarding.clientInfo, ...info, submitted: true };
+    if (c.onboarding.contract.status === 'info_pending') c.onboarding.contract.status = 'info_received';
+    save(db);
+    this.logActivity(id, 'onboarding_info_submitted', 'Informações de cadastro enviadas para o contrato');
+  },
+  setContractDuration(id, duration) {
+    const db = load();
+    const c = client(db, id);
+    c.onboarding.contract.duration = duration || null;
+    c.onboarding.contract.value = duration ? CONTRACT_DURATION_VALUE[duration] : null;
+    save(db);
+  },
+  advanceContractStatus(id, status) {
+    const db = load();
+    client(db, id).onboarding.contract.status = status;
+    save(db);
+    this.logActivity(id, 'contract_status_changed', `Status do contrato: ${ONBOARDING_STAGE_LABEL[status]}`);
+  },
+  async uploadSignedContract(id, fileName) {
+    await delay(800);
+    const db = load();
+    const c = client(db, id);
+    c.onboarding.contract.signedFileName = fileName;
+    c.onboarding.contract.status = 'completed';
+    save(db);
+    this.logActivity(id, 'signed_contract_uploaded', 'Contrato assinado enviado para o perfil da cliente');
+  },
+  setWhatsappStatus(id, status) {
+    const db = load();
+    client(db, id).onboarding.whatsappGroup.status = status;
+    save(db);
+    this.logActivity(id, 'whatsapp_status_changed', `Status do grupo de WhatsApp: ${WHATSAPP_STATUS_LABEL[status]}`);
+  },
+  getOnboardingSummary() {
+    const db = load();
+    const clients = Object.values(db.clients);
+    const summary = { total: clients.length, stillOnboarding: 0, awaitingContractPrep: 0, awaitingSignature: 0, readyForPhase1: 0 };
+    clients.forEach((c) => {
+      const o = c.onboarding;
+      if (o.contract.status !== 'completed') {
+        summary.stillOnboarding++;
+        if (['info_pending', 'info_received'].includes(o.contract.status)) summary.awaitingContractPrep++;
+        if (['sent_for_signature', 'awaiting_signature'].includes(o.contract.status)) summary.awaitingSignature++;
+      } else {
+        const journeyStarted = c.journey.steps.some((s) => s.status !== 'locked');
+        if (o.whatsappGroup.status === 'added' && !journeyStarted) summary.readyForPhase1++;
+      }
+    });
+    return summary;
+  },
+
+  // --- Resources / classes (generic library, unlocked post-onboarding) ---
+  getResources() {
+    return load().resources;
   },
 };
 

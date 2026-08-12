@@ -46,8 +46,22 @@ function stepRow(s) {
   return `<div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">${inner}</div>`;
 }
 
+const onboarding = MockDB.getOnboarding(activeClientId);
+const onboardingIncomplete = onboarding.whatsappGroup.status !== 'added';
+
 const content = document.getElementById('app-content');
 content.innerHTML = `
+  ${onboardingIncomplete ? `
+    <div class="mb-8 reveal">${card(`
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <p class="text-sm text-white/50 mb-1">Finalize seu onboarding</p>
+          <p class="text-xs text-white/30">Complete as etapas de cadastro, contrato e comunidade antes de iniciar a Fase 1.</p>
+        </div>
+        <a href="onboarding.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Continuar Onboarding</a>
+      </div>
+    `)}</div>
+  ` : ''}
   <div class="mb-10 reveal" style="animation-delay:.02s;">
     <p class="text-white/40 text-sm mb-1">Bem-vinda de volta,</p>
     <h1 class="text-3xl font-serif">${client.fullName}</h1>

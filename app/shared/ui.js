@@ -36,6 +36,7 @@ export function statusBadge(status) {
     locked: ['Bloqueado', 'badge-locked'],
     not_started: ['Não Iniciado', 'badge-locked'],
     pending: ['Pendente', 'badge-locked'],
+    onboarding: ['Onboarding', 'badge-progress'],
   };
   const [label, cls] = map[status] || [status, 'badge-locked'];
   return `<span class="badge ${cls}">${label}</span>`;
@@ -43,6 +44,7 @@ export function statusBadge(status) {
 
 const CLIENT_NAV = [
   ['dashboard.html', 'Painel'],
+  ['onboarding.html', 'Onboarding'],
   ['questionnaire.html', 'Questionário'],
   ['playbook.html', 'Playbook'],
   ['pitch.html', 'Pitch'],

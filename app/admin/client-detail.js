@@ -1,7 +1,14 @@
-import { MockDB, DEFAULT_CLIENT_ID, MOOD_SCALE } from '../shared/mock-db.js';
+import { MockDB, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker } from '../shared/ui.js';
 
 const MOOD_EMOJI = Object.fromEntries(MOOD_SCALE.map((m) => [m.value, m.emoji]));
+const CONTRACT_STATUS_CLASS = {
+  info_pending: 'badge-locked', info_received: 'badge-progress', contract_prepared: 'badge-progress',
+  sent_for_signature: 'badge-progress', awaiting_signature: 'badge-progress', signed: 'badge-progress', completed: 'badge-completed',
+};
+const WHATSAPP_STATUS_CLASS = { not_added: 'badge-locked', pending: 'badge-progress', added: 'badge-completed' };
+const onboardingBadge = (status) => `<span class="badge ${CONTRACT_STATUS_CLASS[status] || 'badge-locked'}">${ONBOARDING_STAGE_LABEL[status] || status}</span>`;
+const whatsappBadge = (status) => `<span class="badge ${WHATSAPP_STATUS_CLASS[status] || 'badge-locked'}">${WHATSAPP_STATUS_LABEL[status] || status}</span>`;
 
 document.body.innerHTML = renderShell({ role: 'admin', active: 'client-detail.html' });
 
@@ -10,6 +17,7 @@ const client = MockDB.getClient(clientId);
 const phaseProgress = MockDB.getPhaseProgress(clientId);
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 const TABS = [
+  ['onboarding', 'Onboarding'],
   ['questionnaire', 'Questionário'],
   ['meeting', 'Reunião e Transcrição'],
   ['playbook', 'Editor de Playbook'],
@@ -20,7 +28,7 @@ const TABS = [
   ['activity', 'Atividade'],
 ];
 
-let activeTab = 'questionnaire';
+let activeTab = 'onboarding';
 const content = document.getElementById('app-content');
 
 function shell(inner) {
@@ -42,6 +50,76 @@ function shell(inner) {
       `).join('')}
     </div>
     <div id="tab-content">${inner}</div>
+  `;
+}
+
+function renderOnboardingTab() {
+  const o = MockDB.getOnboarding(clientId);
+  const info = o.clientInfo;
+  const c = o.contract;
+  const isPJ = info.partyType === 'PJ';
+
+  return `
+    ${card(`
+      <p class="text-sm text-white/50 mb-4">Informações Enviadas pela Cliente</p>
+      ${info.submitted ? `
+        <div class="grid sm:grid-cols-2 gap-4 text-sm">
+          <div><p class="text-white/40 text-xs mb-1">Nome Completo</p><p>${info.fullName}</p></div>
+          <div><p class="text-white/40 text-xs mb-1">Tipo</p><p>${isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'}</p></div>
+          <div><p class="text-white/40 text-xs mb-1">${isPJ ? 'CNPJ' : 'CPF'}</p><p>${isPJ ? info.cnpj : info.cpf}</p></div>
+          ${isPJ ? `<div><p class="text-white/40 text-xs mb-1">Empresa</p><p>${info.companyName || '—'}</p></div>` : ''}
+          <div><p class="text-white/40 text-xs mb-1">Endereço</p><p>${info.address}</p></div>
+          <div><p class="text-white/40 text-xs mb-1">Email</p><p>${info.email}</p></div>
+          <div><p class="text-white/40 text-xs mb-1">WhatsApp</p><p>${info.whatsapp}</p></div>
+        </div>
+      ` : '<p class="text-sm" style="color:var(--muted);">A cliente ainda não enviou suas informações.</p>'}
+    `, 'mb-6')}
+
+    ${card(`
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-white/50">Contrato</p>
+        ${onboardingBadge(c.status)}
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4 text-sm mb-4">
+        <div>
+          <p class="text-white/40 text-xs mb-1">Modelo de Contrato</p>
+          <select id="contract-duration" class="field text-sm">
+            <option value="">Não definido</option>
+            ${CONTRACT_DURATIONS.map((d) => `<option value="${d}" ${c.duration === d ? 'selected' : ''}>${CONTRACT_DURATION_LABEL[d]} · R$ ${CONTRACT_DURATION_VALUE[d].toLocaleString('pt-BR')}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <p class="text-white/40 text-xs mb-1">Avançar Status</p>
+          <div class="flex gap-2">
+            <select id="contract-status" class="field text-sm">
+              ${ONBOARDING_STAGES.map((s) => `<option value="${s}" ${c.status === s ? 'selected' : ''}>${ONBOARDING_STAGE_LABEL[s]}</option>`).join('')}
+            </select>
+            <button id="update-contract-status" class="btn-ghost">Atualizar</button>
+          </div>
+        </div>
+      </div>
+      <p class="text-xs text-white/30 mb-4">Assinatura acontece em uma plataforma externa — este protótipo apenas rastreia o status, sem integração real.</p>
+      <div class="flex items-center gap-3">
+        <button id="upload-signed-contract" class="btn-ghost" ${!['signed', 'completed'].includes(c.status) ? 'disabled' : ''}>
+          ${c.signedFileName ? 'Reenviar Contrato Assinado' : 'Simular Upload do Contrato Assinado'}
+        </button>
+        ${c.signedFileName ? `<span class="text-xs" style="color:var(--muted);">${c.signedFileName}</span>` : ''}
+      </div>
+    `, 'mb-6')}
+
+    ${card(`
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-white/50">Grupo de WhatsApp</p>
+        ${whatsappBadge(o.whatsappGroup.status)}
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="whatsapp-status" class="field text-sm">
+          ${WHATSAPP_STATUSES.map((s) => `<option value="${s}" ${o.whatsappGroup.status === s ? 'selected' : ''}>${WHATSAPP_STATUS_LABEL[s]}</option>`).join('')}
+        </select>
+        <button id="update-whatsapp-status" class="btn-ghost">Atualizar</button>
+      </div>
+      <p class="text-xs text-white/30 mt-3">Aulas e materiais iniciais são liberados para a cliente assim que este status estiver "Adicionada".</p>
+    `)}
   `;
 }
 
@@ -287,6 +365,7 @@ function renderActivityTab() {
 }
 
 const RENDERERS = {
+  onboarding: renderOnboardingTab,
   questionnaire: renderQuestionnaireTab,
   meeting: renderMeetingTab,
   playbook: renderPlaybookTab,
@@ -299,6 +378,30 @@ const RENDERERS = {
 
 function wireTabEvents() {
   const tc = document.getElementById('tab-content');
+
+  tc.querySelector('#contract-duration')?.addEventListener('change', (e) => {
+    MockDB.setContractDuration(clientId, e.target.value);
+    toast('Modelo de contrato atualizado.');
+    render();
+  });
+  tc.querySelector('#update-contract-status')?.addEventListener('click', () => {
+    const status = tc.querySelector('#contract-status').value;
+    MockDB.advanceContractStatus(clientId, status);
+    toast('Status do contrato atualizado.');
+    render();
+  });
+  tc.querySelector('#upload-signed-contract')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Enviando…';
+    await MockDB.uploadSignedContract(clientId, `contrato-${clientId}-assinado.pdf`);
+    toast('Contrato assinado enviado — visível no perfil da cliente.');
+    render();
+  });
+  tc.querySelector('#update-whatsapp-status')?.addEventListener('click', () => {
+    const status = tc.querySelector('#whatsapp-status').value;
+    MockDB.setWhatsappStatus(clientId, status);
+    toast('Status do grupo de WhatsApp atualizado.');
+    render();
+  });
 
   tc.querySelector('#regen-qa')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando…';
