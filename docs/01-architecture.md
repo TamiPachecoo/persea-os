@@ -11,6 +11,8 @@ Two codebases, conceptually:
 
 Nothing tenant-specific is hardcoded in framework code. If it can be configured, it lives in `persea/` as data (JSON/YAML/DB rows), not in framework logic.
 
+**The client lifecycle does not begin at Phase 1.** It begins the moment a lead becomes a client: **Lead → Client → Onboarding → Mentorship Access → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Ongoing Support.** See §9 below for how the onboarding stage maps onto the engines in §3, and [`PERSEA_METHODOLOGY.md`](PERSEA_METHODOLOGY.md) for the full onboarding workflow. (Note: this document's own title, "Phase 1 / MVP," refers to a *delivery milestone* of the software build — an unrelated overload of "Phase 1" from the Identity methodology phase referenced throughout the rest of this doc and in §9.)
+
 ## 2. High-Level System Diagram
 
 ```
@@ -99,3 +101,38 @@ This separation means adding "Consultant #2" later = new folder under a `tenants
 - New consulting phases (beyond "Identity") = new rows in `programs`/`phases`/`steps`, not new tables or new code paths — the Journey Engine is phase-agnostic.
 - New tenants = new `persea/`-like config folder + new `tenant_id`, RLS already isolates data.
 - New AI outputs = new prompt template + new `generation_type`, reusing the same Edge Function and versioning table.
+
+## 9. Client Onboarding Workflow — Engine Mapping (Pre-Mentorship)
+
+Onboarding precedes Phase 1 (see the addendum to §1 above). The full narrative workflow — client-information fields, the conceptual contract-status vocabulary, the external-signature sequence, WhatsApp milestone tracking, and classes/resources — lives in [`PERSEA_METHODOLOGY.md`](PERSEA_METHODOLOGY.md). This section only maps those six onboarding steps onto the engines already described in §3, per the same "extend, don't invent" principle already stated above: nothing here is a new engine.
+
+### 9.1 Step → Engine Mapping
+
+| Onboarding Step | Extends Engine(s) | What "extending" would mean |
+|---|---|---|
+| 1. Client Information Collection | CRM Engine | New fields on `clients` (party type PF/PJ, CPF/CNPJ, company name, address, phone/WhatsApp) — exact fields not finalized. This is regulated PII flowing through the CRM Engine; RLS/tenant isolation (§6) applies to it like any other client data. |
+| 2. Contract Preparation | Document Engine + CRM Engine | A future thin specialization (e.g. `contract-engine/`), the same shape as `playbook-engine/`: template + editable fields + version/status tracking. Status surfaced on the client record. |
+| 3. External Contract Signature | Document Engine (status field only) | No signing logic — just a status value moving through the conceptual vocabulary in `PERSEA_METHODOLOGY.md` §2.2. See the non-integration callout in §9.3. |
+| 4. Signed Contract Access | Document Engine | Admin-uploaded file on the client record, client-readable — the same client-visibility pattern already used for published Playbooks. |
+| 5. WhatsApp Community/Group | CRM Engine (milestone flag) + Notifications | Not a new engine — a flag/milestone on the client record. See the non-integration callout in §9.3. |
+| 6. Online Classes/Initial Resources | Resources engine (+ Journey Engine, if formalized as a phase) | The existing `resources` table already has a nullable `step_id` ("can be general" per its schema comment) — a plausible home without deciding hosting location. |
+
+### 9.2 Onboarding as a Journey Engine Program/Phase
+
+The cleanest mechanism for formalizing "Onboarding" — whenever it's actually built — is to model it as a `program` (or phase) with an `order_index` before "Identity" in `programs`, reusing `program_phases`/`journey_steps`/`client_journey_progress`/`client_step_status` exactly as they already exist. §8 above already licenses this: *"New consulting phases (beyond 'Identity') = new rows in `programs`/`phases`/`steps`, not new tables or new code paths."* That sentence already covers Onboarding as a phase — no new engine is required.
+
+The client-facing progression bar described in `PERSEA_METHODOLOGY.md` §3 would naturally be driven by the Experience Engine concept in `10-platform-architecture-review.md` §9 (`unlock_condition`s, milestones, reminders) once that's built — not being built now.
+
+### 9.3 Non-Integration Callouts
+
+Following the same idiom already used in §5 for transcript upload ("architecture leaves a clean slot for swapping in an auto-transcription provider later"):
+
+- **No e-signature platform integration now** — leaves a clean slot for a future signature-provider API to write into the same contract-status field later.
+- **No WhatsApp API integration now** — leaves a clean slot for a future WhatsApp Business API/bot to set the group-membership flag automatically later.
+- **No LMS/classes-hosting decision now** — the generic Resources engine (`link`/`file`/`video` types) leaves room for classes to live inside Persea OS or externally without committing yet.
+
+### 9.4 Follow-Up Passes Required (Not Done This Pass)
+
+- `docs/05-user-flows.md` needs a new or amended flow for the concrete onboarding steps. Note that its existing "Flow 1 — Client Onboarding" currently means account activation only (invite → password → dashboard) and will need renaming or reconciling against this broader usage.
+- `docs/02-database-schema.md` needs concrete field/table additions (client legal fields, a contract-status enum, a WhatsApp-milestone flag) once the open questions in `PERSEA_METHODOLOGY.md` §5 are resolved.
+- See [`REDESIGN_NOTES.md`](REDESIGN_NOTES.md) (2026-08-12 entry) for the full audit trail behind this section.
