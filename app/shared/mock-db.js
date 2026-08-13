@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v9';
+const STORAGE_KEY = 'persea_mock_db_v10';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -104,10 +104,12 @@ const SEED = {
   // Persea OS — see docs note). Tenant-level library, organized by learning
   // track; `generalAudience: true` resources show to every client, others
   // surface only via an explicit assignment (resourceAssignments below).
-  // hublaUrl values are clearly-marked placeholders — never invent a real
-  // Hubla URL; Nay fills these in for real via the admin Content screen.
+  // r1's hublaUrl is a real class link the client supplied directly, kept
+  // as a working demo; the rest stay clearly-marked placeholders — never
+  // invent a real Hubla URL. Nay fills these in for real via the admin
+  // Content screen.
   resources: [
-    { id: 'r1', title: 'Boas-vindas à Mentoria PERSEA', description: 'Vídeo de abertura explicando como funciona a jornada PERSEA.', track: 'posicionamento', phaseKey: null, duration: '8 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-boas-vindas', recommendation: null, generalAudience: true },
+    { id: 'r1', title: 'Boas-vindas à Mentoria PERSEA', description: 'Vídeo de abertura explicando como funciona a jornada PERSEA.', track: 'posicionamento', phaseKey: null, duration: '8 min', hublaUrl: 'https://app.hub.la/m/8GhxpUirbFpF6c1tRrrC/s/5hh0gSean9Hf', recommendation: null, generalAudience: true },
     { id: 'r2', title: 'Guia de Primeiros Passos', description: 'Documento de apoio para organizar as primeiras semanas de mentoria.', track: 'posicionamento', phaseKey: 'Identidade', duration: null, hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-primeiros-passos', recommendation: null, generalAudience: true },
     { id: 'r3', title: 'N Time Class — Tendências de Imagem', description: 'Aula mensal ao vivo sobre o universo de imagem e marca pessoal.', track: 'posicionamento', phaseKey: 'Imagem', duration: '45 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-n-time-class', recommendation: null, generalAudience: true },
     { id: 'r4', title: 'Como Criar Conteúdo Sem Perder Autenticidade', description: 'Aula sobre alinhar a produção de conteúdo à sua Voz da Marca.', track: 'conteudo_autenticidade', phaseKey: 'Imagem', duration: '32 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-conteudo-autentico', recommendation: null, generalAudience: true },
@@ -155,11 +157,12 @@ const SEED = {
         contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-1-assinado.pdf' },
         whatsappGroup: { status: 'added' },
       },
-      // Direção da Marca — pinterestUrl deliberately left null in seed data
-      // even for Persea's most advanced client: never invent a real Pinterest
-      // board URL. Nay fills this in for real via the admin Brand Direction tab.
+      // Direção da Marca — pinterestUrl below is a real board the client
+      // supplied directly (not invented here) so the embed/fallback path
+      // could be demonstrated with real data. Nay edits it via the admin
+      // Brand Direction tab like any other client's.
       brandDirection: {
-        pinterestUrl: null,
+        pinterestUrl: 'https://pin.it/6z9TO1emf',
         positioningSummary: 'Estrategista de precisão para especialistas que já entregam alto nível, mas ainda soam genéricos em público.',
         keywords: ['Precisa', 'Calorosa', 'Autoridade silenciosa', 'Sem enrolação'],
         tone: 'Direto, confiante, frases curtas — nunca informal demais nem excessivamente formal.',
