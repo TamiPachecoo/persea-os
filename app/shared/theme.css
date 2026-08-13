@@ -228,6 +228,37 @@ a.card:hover::before, button.card:hover::before, .card-interactive:hover::before
 }
 .mood-emoji-row button:hover{ transform:scale(1.25); background:rgba(220,199,168,.1); }
 
+/* modal — detail/edit dialog */
+.modal-backdrop{
+  position:fixed; inset:0; z-index:90; background:rgba(12,10,9,.72); backdrop-filter:blur(3px);
+  display:flex; align-items:center; justify-content:center; padding:24px;
+  opacity:0; transition:opacity .2s ease;
+}
+.modal-backdrop.open{ opacity:1; }
+.modal-panel{
+  background:var(--card); border:1px solid var(--line); border-radius:6px;
+  width:100%; max-width:560px; max-height:88vh; overflow-y:auto;
+  box-shadow:0 30px 70px -20px rgba(0,0,0,.7);
+  transform:translateY(10px) scale(.98); transition:transform .25s cubic-bezier(.22,1,.36,1);
+}
+.modal-backdrop.open .modal-panel{ transform:translateY(0) scale(1); }
+.modal-head{
+  position:sticky; top:0; z-index:1; background:var(--card);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 22px; border-bottom:1px solid var(--line);
+}
+.modal-title{ font-family:'Playfair Display',serif; font-style:italic; font-weight:600; font-size:17px; color:var(--cream); }
+.modal-close{
+  background:none; border:none; color:var(--muted); font-size:20px; line-height:1; cursor:pointer; padding:4px;
+  transition:color .2s;
+}
+.modal-close:hover{ color:var(--cream); }
+.modal-body{ padding:22px; }
+@media(max-width:640px){
+  .modal-backdrop{ padding:0; align-items:flex-end; }
+  .modal-panel{ max-width:none; max-height:92vh; border-radius:12px 12px 0 0; }
+}
+
 /* divider */
 .divider{ width:40px; height:1px; background:var(--terracotta); }
 

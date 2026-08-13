@@ -1,5 +1,5 @@
 import { MockDB, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl } from '../shared/ui.js';
 
 const MOOD_EMOJI = Object.fromEntries(MOOD_SCALE.map((m) => [m.value, m.emoji]));
 const CONTRACT_STATUS_CLASS = {
@@ -18,6 +18,7 @@ const phaseProgress = MockDB.getPhaseProgress(clientId);
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 const TABS = [
   ['onboarding', 'Onboarding'],
+  ['brand-direction', 'Direção da Marca'],
   ['questionnaire', 'Questionário'],
   ['meeting', 'Reunião e Transcrição'],
   ['playbook', 'Editor de Playbook'],
@@ -121,6 +122,55 @@ function renderOnboardingTab() {
       <p class="text-xs text-white/30 mt-3">Aulas e materiais iniciais são liberados para a cliente assim que este status estiver "Adicionada".</p>
     `)}
   `;
+}
+
+function renderBrandDirectionTab() {
+  const bd = MockDB.getBrandDirection(clientId);
+  return card(`
+    <form id="brand-direction-form" class="space-y-4">
+      <div>
+        <label class="text-xs text-white/40 block mb-1">URL do Mural no Pinterest</label>
+        <input name="pinterestUrl" class="field" value="${bd.pinterestUrl || ''}" placeholder="https://www.pinterest.com/..." />
+        ${bd.pinterestUrl && !isValidHttpUrl(bd.pinterestUrl) ? '<p class="text-xs mt-1" style="color:var(--error);">O link salvo não parece válido.</p>' : ''}
+      </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Resumo do Posicionamento</label>
+        <textarea name="positioningSummary" rows="3" class="field">${bd.positioningSummary || ''}</textarea>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Palavras-Chave / Atributos <span class="text-white/20">(uma por linha)</span></label>
+          <textarea name="keywords" rows="4" class="field">${(bd.keywords || []).join('\n')}</textarea>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Tom de Comunicação</label>
+          <textarea name="tone" rows="4" class="field">${bd.tone || ''}</textarea>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Referências Visuais e de Conteúdo <span class="text-white/20">(uma por linha)</span></label>
+        <textarea name="references" rows="3" class="field">${(bd.references || []).join('\n')}</textarea>
+      </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Orientações e Observações da Nay</label>
+        <textarea name="guidance" rows="3" class="field">${bd.guidance || ''}</textarea>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">O que pertence a esta marca <span class="text-white/20">(uma por linha)</span></label>
+          <textarea name="belongs" rows="4" class="field">${(bd.belongs || []).join('\n')}</textarea>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">O que não pertence a esta marca <span class="text-white/20">(uma por linha)</span></label>
+          <textarea name="doesntBelong" rows="4" class="field">${(bd.doesntBelong || []).join('\n')}</textarea>
+        </div>
+      </div>
+      <div class="flex items-center justify-between pt-1">
+        <p class="text-xs text-white/20">${bd.updatedAt ? `Atualizado em ${formatDate(bd.updatedAt)}` : 'Ainda não preenchido — a cliente vê um estado "em breve" até aqui ser salvo.'}</p>
+        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar</button>
+      </div>
+    </form>
+  `);
 }
 
 function renderQuestionnaireTab() {
@@ -366,6 +416,7 @@ function renderActivityTab() {
 
 const RENDERERS = {
   onboarding: renderOnboardingTab,
+  'brand-direction': renderBrandDirectionTab,
   questionnaire: renderQuestionnaireTab,
   meeting: renderMeetingTab,
   playbook: renderPlaybookTab,
@@ -400,6 +451,24 @@ function wireTabEvents() {
     const status = tc.querySelector('#whatsapp-status').value;
     MockDB.setWhatsappStatus(clientId, status);
     toast('Status do grupo de WhatsApp atualizado.');
+    render();
+  });
+
+  tc.querySelector('#brand-direction-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const splitLines = (v) => (v || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    MockDB.saveBrandDirection(clientId, {
+      pinterestUrl: (fd.get('pinterestUrl') || '').trim() || null,
+      positioningSummary: fd.get('positioningSummary'),
+      keywords: splitLines(fd.get('keywords')),
+      tone: fd.get('tone'),
+      references: splitLines(fd.get('references')),
+      guidance: fd.get('guidance'),
+      belongs: splitLines(fd.get('belongs')),
+      doesntBelong: splitLines(fd.get('doesntBelong')),
+    });
+    toast('Direção da Marca atualizada.');
     render();
   });
 

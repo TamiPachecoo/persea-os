@@ -49,6 +49,27 @@ function stepRow(s) {
 const onboarding = MockDB.getOnboarding(activeClientId);
 const onboardingIncomplete = onboarding.whatsappGroup.status !== 'added';
 
+function renderRecommendedCard() {
+  const assignments = MockDB.getAssignmentsForClient(activeClientId).filter((a) => !a.completed).slice(0, 2);
+  if (!assignments.length) return '';
+  return `
+    <div class="reveal-scroll mt-6">${card(`
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-white/50">Recomendado para você</p>
+        <a href="content.html" class="btn-text">Ver Central de Conteúdos</a>
+      </div>
+      <div class="space-y-1">
+        ${assignments.map((a) => `
+          <a href="content.html" class="flex items-center justify-between py-2 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-2 px-2 rounded transition-colors">
+            <span class="text-sm">${a.resource.title}</span>
+            <span class="text-xs text-white/30">${a.resource.duration || ''}</span>
+          </a>
+        `).join('')}
+      </div>
+    `)}</div>
+  `;
+}
+
 const content = document.getElementById('app-content');
 content.innerHTML = `
   ${onboardingIncomplete ? `
@@ -103,6 +124,8 @@ content.innerHTML = `
       </div>
     `)}</div>
   </div>
+
+  ${renderRecommendedCard()}
 
   <div class="reveal-scroll mt-6" id="meeting-request-card"></div>
 `;

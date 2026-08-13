@@ -42,9 +42,17 @@ export function statusBadge(status) {
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
+// Labels mostly keep the existing, already-established Portuguese terms
+// (Painel/Clientes/Questionário/...) rather than the more generic ones
+// suggested for this pass (Início/Mentoradas/Dashboard) — renaming a term
+// that's already used consistently across every screen would cost more
+// clarity than it buys. Only genuinely new destinations (Direção da Marca,
+// Conteúdos e Aulas / Conteúdos) were added.
 const CLIENT_NAV = [
   ['dashboard.html', 'Painel'],
   ['onboarding.html', 'Onboarding'],
+  ['brand-direction.html', 'Direção da Marca'],
+  ['content.html', 'Conteúdos e Aulas'],
   ['questionnaire.html', 'Questionário'],
   ['playbook.html', 'Playbook'],
   ['pitch.html', 'Pitch'],
@@ -56,6 +64,7 @@ const CLIENT_NAV = [
 const ADMIN_NAV = [
   ['dashboard.html', 'Painel'],
   ['client-detail.html', 'Clientes'],
+  ['content.html', 'Conteúdos'],
 ];
 
 export function renderParticles(count = 16) {
@@ -130,6 +139,61 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
 
 export function card(innerHtml, extraClass = '') {
   return `<div class="card ${extraClass}">${innerHtml}</div>`;
+}
+
+// --- Modal — detail/edit dialog (agenda items, resources, etc.) ---
+// One at a time; caller supplies the body HTML and wires its own listeners
+// against the returned `.el` after the modal is in the DOM.
+export function openModal({ title = '', bodyHtml = '', onClose } = {}) {
+  closeModal();
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.id = 'active-modal';
+  backdrop.innerHTML = `
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-label="${title}">
+      <div class="modal-head">
+        <p class="modal-title">${title}</p>
+        <button type="button" class="modal-close" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="modal-body">${bodyHtml}</div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => backdrop.classList.add('open'));
+
+  function escHandler(e) { if (e.key === 'Escape') close(); }
+  function close() {
+    backdrop.classList.remove('open');
+    document.removeEventListener('keydown', escHandler);
+    setTimeout(() => backdrop.remove(), 200);
+    if (onClose) onClose();
+  }
+  document.addEventListener('keydown', escHandler);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('.modal-close').addEventListener('click', close);
+
+  return { el: backdrop.querySelector('.modal-body'), close };
+}
+export function closeModal() {
+  document.getElementById('active-modal')?.remove();
+}
+
+// --- External-link safety ---
+// Used before treating any admin-entered URL (Pinterest board, Hubla class
+// link, online-meeting link) as clickable/embeddable.
+export function isValidHttpUrl(value) {
+  if (!value) return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+// href+target+rel attribute string for a validated external link, or ''
+// (renders as a disabled-looking, non-navigating element) when invalid.
+export function externalLinkAttrs(url) {
+  return isValidHttpUrl(url) ? `href="${url}" target="_blank" rel="noopener noreferrer"` : '';
 }
 
 export function progressBar(pct) {

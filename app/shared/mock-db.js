@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v8';
+const STORAGE_KEY = 'persea_mock_db_v9';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -63,18 +63,85 @@ export const WHATSAPP_STATUS_LABEL = {
   added: 'Adicionada',
 };
 
+// Weekly agenda — Nay's operational calendar. Tenant-level (not per-client):
+// group meetings, classes, and admin tasks aren't tied to a single student.
+// Extends, rather than replaces, the existing per-client `journey.upcomingMeeting`
+// field (kept in sync by hand in seed data for this pass — see the note above
+// `getAgendaItems()` for why a full merge is left to a later pass).
+export const AGENDA_TYPES = ['class', 'individual_meeting', 'group_meeting', 'online_event', 'admin_task', 'deadline'];
+export const AGENDA_TYPE_LABEL = {
+  class: 'Aula',
+  individual_meeting: 'Reunião Individual',
+  group_meeting: 'Reunião em Grupo',
+  online_event: 'Evento Online',
+  admin_task: 'Tarefa Administrativa',
+  deadline: 'Prazo / Follow-up',
+};
+export const AGENDA_STATUSES = ['upcoming', 'completed', 'rescheduled', 'cancelled'];
+export const AGENDA_STATUS_LABEL = {
+  upcoming: 'Agendado',
+  completed: 'Concluído',
+  rescheduled: 'Remarcado',
+  cancelled: 'Cancelado',
+};
+
+// Content Center — learning tracks are a fixed taxonomy (tenant config,
+// persea/methodology/ territory in the real build), not per-client data.
+export const CONTENT_TRACKS = ['posicionamento', 'conteudo_autenticidade', 'comunicacao', 'vendas'];
+export const CONTENT_TRACK_LABEL = {
+  posicionamento: 'Posicionamento',
+  conteudo_autenticidade: 'Conteúdo & Autenticidade',
+  comunicacao: 'Comunicação',
+  vendas: 'Vendas',
+};
+
 const SEED = {
   tenant: {
     name: 'PERSEA',
     brandColor: '#b8863a',
   },
-  // Classes/resources — generic library per docs/02-database-schema.md's
-  // `resources` table (link/file/video), unlocked once onboarding completes.
-  // Tenant-level content, not per-client.
+  // Content Center — classes/resources, hosted on Hubla (not migrated into
+  // Persea OS — see docs note). Tenant-level library, organized by learning
+  // track; `generalAudience: true` resources show to every client, others
+  // surface only via an explicit assignment (resourceAssignments below).
+  // hublaUrl values are clearly-marked placeholders — never invent a real
+  // Hubla URL; Nay fills these in for real via the admin Content screen.
   resources: [
-    { id: 'r1', title: 'Boas-vindas à Mentoria PERSEA', icon: '🎬', typeLabel: 'Vídeo', url: 'https://example.com/aula-boas-vindas' },
-    { id: 'r2', title: 'Guia de Primeiros Passos', icon: '📄', typeLabel: 'Documento', url: 'https://example.com/guia-primeiros-passos.pdf' },
-    { id: 'r3', title: 'N Time Class — Turma Atual', icon: '🔗', typeLabel: 'Link', url: 'https://example.com/n-time-class' },
+    { id: 'r1', title: 'Boas-vindas à Mentoria PERSEA', description: 'Vídeo de abertura explicando como funciona a jornada PERSEA.', track: 'posicionamento', phaseKey: null, duration: '8 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-boas-vindas', recommendation: null, generalAudience: true },
+    { id: 'r2', title: 'Guia de Primeiros Passos', description: 'Documento de apoio para organizar as primeiras semanas de mentoria.', track: 'posicionamento', phaseKey: 'Identidade', duration: null, hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-primeiros-passos', recommendation: null, generalAudience: true },
+    { id: 'r3', title: 'N Time Class — Tendências de Imagem', description: 'Aula mensal ao vivo sobre o universo de imagem e marca pessoal.', track: 'posicionamento', phaseKey: 'Imagem', duration: '45 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-n-time-class', recommendation: null, generalAudience: true },
+    { id: 'r4', title: 'Como Criar Conteúdo Sem Perder Autenticidade', description: 'Aula sobre alinhar a produção de conteúdo à sua Voz da Marca.', track: 'conteudo_autenticidade', phaseKey: 'Imagem', duration: '32 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-conteudo-autentico', recommendation: null, generalAudience: true },
+    { id: 'r5', title: 'Bastidores: Do Rascunho ao Post', description: 'Estudo de caso real de produção de conteúdo, do zero até publicar.', track: 'conteudo_autenticidade', phaseKey: null, duration: '20 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-bastidores', recommendation: null, generalAudience: false },
+    { id: 'r6', title: 'Comunicação Não-Violenta Aplicada a Vendas', description: 'Aula sobre comunicação clara e segura em conversas comerciais.', track: 'comunicacao', phaseKey: 'Comportamento', duration: '38 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-comunicacao-nvc', recommendation: null, generalAudience: true },
+    { id: 'r7', title: 'Sua Voz em Público: Podcasts e Lives', description: 'Preparação prática para aparições ao vivo com confiança.', track: 'comunicacao', phaseKey: 'Visibilidade', duration: '27 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-voz-publico', recommendation: null, generalAudience: false },
+    { id: 'r8', title: 'Precificação com Confiança', description: 'Como comunicar valor e sustentar preços com segurança.', track: 'vendas', phaseKey: 'Visibilidade', duration: '41 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-precificacao', recommendation: null, generalAudience: true },
+    { id: 'r9', title: 'Do Diagnóstico à Proposta', description: 'Estrutura de proposta comercial baseada em diagnóstico, não em improviso.', track: 'vendas', phaseKey: null, duration: '35 min', hublaUrl: 'https://pay.hubla.com.br/PLACEHOLDER-proposta', recommendation: null, generalAudience: false },
+  ],
+  // Per-student recommendations layered on top of the general library above —
+  // same resource can be both generally available and separately assigned
+  // (with its own reason/deadline) to a specific client.
+  resourceAssignments: [
+    { id: 'ra1', resourceId: 'r5', studentId: 'client-1', reason: 'Você já publica bastante — este case ajuda a manter a autenticidade enquanto acelera o ritmo.', deadline: '2026-08-24', relatedPhaseOrMeeting: 'Reunião 2 — Aprofundamento de Posicionamento', assignedAt: '2026-08-10T09:00:00', completed: false },
+    { id: 'ra2', resourceId: 'r7', studentId: 'client-3', reason: 'Sua próxima etapa envolve aparecer mais — essa aula prepara você para isso com segurança.', deadline: '2026-08-27', relatedPhaseOrMeeting: null, assignedAt: '2026-08-09T09:00:00', completed: false },
+  ],
+  // Weekly agenda seed — spans a few days before/after "today" in this
+  // prototype's timeline so Hoje/Próximos dias/Esta semana/Pendências all
+  // have real examples. Individual-meeting entries mirror the matching
+  // client's journey.upcomingMeeting (see the duplication note above
+  // getAgendaItems()).
+  agendaItems: [
+    { id: 'ag1', type: 'admin_task', title: 'Preparar contrato da Bianca Souza', date: '2026-08-13T11:00:00', status: 'upcoming', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Preparar contrato a partir das informações recebidas', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-08-10T09:00:00', updatedAt: '2026-08-10T09:00:00' },
+    { id: 'ag2', type: 'deadline', title: 'Responder solicitação da Marina', date: '2026-08-13T17:00:00', status: 'upcoming', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Dúvida sobre como aplicar a Voz da Marca nas redes', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-07-09T10:00:00', updatedAt: '2026-07-09T10:00:00' },
+    { id: 'ag3', type: 'class', title: 'N Time Class — Tendências de Imagem 2026', date: '2026-08-13T20:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: 'N Time Class', topic: 'Aula mensal ao vivo sobre tendências de imagem', prepNotes: 'Revisar slides da aula anterior.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-ntime', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
+    { id: 'ag4', type: 'group_meeting', title: 'Q&A Mensal — Turma Geral', date: '2026-08-14T19:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: 'Q&A Mensal PERSEA', topic: 'Perguntas e respostas ao vivo com todas as mentoradas', prepNotes: 'Revisar dúvidas enviadas durante a semana.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-qna', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
+    { id: 'ag5', type: 'admin_task', title: 'Fechar contrato da Camila Rocha', date: '2026-08-14T09:00:00', status: 'upcoming', relatedStudentId: 'client-5', relatedGroupLabel: null, topic: 'Confirmar assinatura do contrato Semestral', prepNotes: '', generalNotes: 'Contrato já está na plataforma externa, aguardando confirmação.', onlineLink: '', followUpNotes: '', createdAt: '2026-08-05T09:00:00', updatedAt: '2026-08-05T09:00:00' },
+    { id: 'ag6', type: 'individual_meeting', title: 'Reunião 1 — Levantamento Inicial', date: '2026-08-15T10:00:00', status: 'upcoming', relatedStudentId: 'client-2', relatedGroupLabel: null, topic: 'Levantamento inicial de objetivos e contexto', prepNotes: 'Revisar respostas do questionário antes da reunião.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-julia', followUpNotes: '', createdAt: '2026-07-11T09:00:00', updatedAt: '2026-07-11T09:00:00' },
+    { id: 'ag7', type: 'online_event', title: 'Live Instagram — Bastidores da Mentoria', date: '2026-08-16T18:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: null, topic: 'Conteúdo institucional para redes sociais', prepNotes: 'Definir roteiro da live.', generalNotes: '', onlineLink: 'https://instagram.com/naymurta', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
+    { id: 'ag8', type: 'individual_meeting', title: 'Reunião 2 — Revisão de Playbook', date: '2026-08-17T13:30:00', status: 'upcoming', relatedStudentId: 'client-3', relatedGroupLabel: null, topic: 'Revisão do rascunho do Playbook v1', prepNotes: 'Levar comentários sobre o posicionamento como estrategista.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-renata', followUpNotes: '', createdAt: '2026-07-02T09:00:00', updatedAt: '2026-07-02T09:00:00' },
+    { id: 'ag9', type: 'individual_meeting', title: 'Reunião 2 — Aprofundamento de Posicionamento', date: '2026-08-19T15:00:00', status: 'upcoming', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Aprofundar o posicionamento de marca', prepNotes: 'Preparar exemplos de conteúdo alinhado à Voz da Marca.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-marina', followUpNotes: '', createdAt: '2026-07-09T09:00:00', updatedAt: '2026-07-09T09:00:00' },
+    { id: 'ag10', type: 'deadline', title: 'Revisar Playbook em rascunho da Renata', date: '2026-08-12T00:00:00', status: 'upcoming', relatedStudentId: 'client-3', relatedGroupLabel: null, topic: 'Revisão final antes de publicar', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-07-02T10:00:00', updatedAt: '2026-07-02T10:00:00' },
+    { id: 'ag11', type: 'admin_task', title: 'Follow-up — Bianca sem grupo de WhatsApp', date: '2026-08-11T00:00:00', status: 'upcoming', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Adicionar ao grupo após conclusão do onboarding', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-08-10T09:00:00', updatedAt: '2026-08-10T09:00:00' },
+    { id: 'ag12', type: 'individual_meeting', title: 'Diagnóstico Inicial', date: '2026-08-05T10:00:00', status: 'completed', relatedStudentId: 'client-6', relatedGroupLabel: null, topic: 'Diagnóstico inicial pré-onboarding', prepNotes: '', generalNotes: 'Reunião realizada, cliente segue para assinatura de contrato.', onlineLink: '', followUpNotes: 'Nenhum follow-up necessário.', createdAt: '2026-08-05T11:00:00', updatedAt: '2026-08-05T11:00:00' },
   ],
   clients: {
     // --- Client 1: Marina — farthest along, playbook published, pitches ready ---
@@ -88,6 +155,20 @@ const SEED = {
         contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-1-assinado.pdf' },
         whatsappGroup: { status: 'added' },
       },
+      // Direção da Marca — pinterestUrl deliberately left null in seed data
+      // even for Persea's most advanced client: never invent a real Pinterest
+      // board URL. Nay fills this in for real via the admin Brand Direction tab.
+      brandDirection: {
+        pinterestUrl: null,
+        positioningSummary: 'Estrategista de precisão para especialistas que já entregam alto nível, mas ainda soam genéricos em público.',
+        keywords: ['Precisa', 'Calorosa', 'Autoridade silenciosa', 'Sem enrolação'],
+        tone: 'Direto, confiante, frases curtas — nunca informal demais nem excessivamente formal.',
+        references: ['Editoriais de moda em tons terrosos', 'Fotografia com luz natural, pouco contraste'],
+        guidance: 'Evitar linguagem motivacional genérica — Marina conquista pela precisão, não pelo entusiasmo.',
+        belongs: ['Tons terrosos e neutros', 'Frases curtas e diretas', 'Bastidores reais do trabalho com clientes'],
+        doesntBelong: ['Frases de efeito genéricas', 'Cores vibrantes/neon', 'Conteúdo puramente motivacional sem substância'],
+        updatedAt: '2026-08-01T10:00:00',
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -98,7 +179,7 @@ const SEED = {
           { key: 'pitch', title: 'Gerador de Pitch', status: 'completed' },
           { key: 'homework', title: 'Tarefas', status: 'in_progress' },
         ],
-        upcomingMeeting: { title: 'Reunião 2 — Aprofundamento de Posicionamento', date: '2026-07-22T15:00:00' },
+        upcomingMeeting: { title: 'Reunião 2 — Aprofundamento de Posicionamento', date: '2026-08-19T15:00:00' },
       },
       questionnaire: {
         title: 'Questionário de Identidade',
@@ -284,6 +365,10 @@ const SEED = {
         contract: { duration: 'semestral', status: 'completed', value: 18000, signedFileName: 'contrato-client-2-assinado.pdf' },
         whatsappGroup: { status: 'added' },
       },
+      brandDirection: {
+        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -294,7 +379,7 @@ const SEED = {
           { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
           { key: 'homework', title: 'Tarefas', status: 'locked' },
         ],
-        upcomingMeeting: { title: 'Reunião 1 — Levantamento Inicial', date: '2026-07-18T10:00:00' },
+        upcomingMeeting: { title: 'Reunião 1 — Levantamento Inicial', date: '2026-08-15T10:00:00' },
       },
       questionnaire: {
         title: 'Questionário de Identidade',
@@ -357,6 +442,10 @@ const SEED = {
         contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-3-assinado.pdf' },
         whatsappGroup: { status: 'added' },
       },
+      brandDirection: {
+        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -367,7 +456,7 @@ const SEED = {
           { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
           { key: 'homework', title: 'Tarefas', status: 'in_progress' },
         ],
-        upcomingMeeting: { title: 'Reunião 2 — Revisão de Playbook', date: '2026-07-20T13:30:00' },
+        upcomingMeeting: { title: 'Reunião 2 — Revisão de Playbook', date: '2026-08-17T13:30:00' },
       },
       questionnaire: {
         title: 'Questionário de Identidade',
@@ -464,6 +553,10 @@ const SEED = {
         contract: { duration: null, status: 'info_received', value: null, signedFileName: null },
         whatsappGroup: { status: 'not_added' },
       },
+      brandDirection: {
+        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -520,6 +613,10 @@ const SEED = {
         contract: { duration: 'semestral', status: 'awaiting_signature', value: 18000, signedFileName: null },
         whatsappGroup: { status: 'pending' },
       },
+      brandDirection: {
+        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
+      },
       journey: {
         programName: 'Identidade',
         steps: [
@@ -575,6 +672,10 @@ const SEED = {
         },
         contract: { duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-6-assinado.pdf' },
         whatsappGroup: { status: 'added' },
+      },
+      brandDirection: {
+        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
       },
       journey: {
         programName: 'Identidade',
@@ -1065,9 +1166,149 @@ export const MockDB = {
     return summary;
   },
 
-  // --- Resources / classes (generic library, unlocked post-onboarding) ---
+  // --- Weekly Agenda (Nay's operational calendar) ---
+  // NOTE: `journey.upcomingMeeting` (read directly by client/admin dashboard
+  // "next meeting" cards) is intentionally left alone here, not derived from
+  // agendaItems — several existing screens read it directly and changing
+  // that is out of scope for this pass. The two are kept in sync by hand in
+  // seed data. A later pass should make journey.upcomingMeeting a computed
+  // read from agendaItems so there's one source of truth.
+  getAgendaItems() {
+    return load().agendaItems;
+  },
+  getAgendaItem(id) {
+    return load().agendaItems.find((a) => a.id === id) || null;
+  },
+  createAgendaItem(data) {
+    const db = load();
+    const now = new Date().toISOString();
+    const item = {
+      id: `ag${Date.now()}`, type: 'admin_task', title: '', date: now, status: 'upcoming',
+      relatedStudentId: null, relatedGroupLabel: null, topic: '', prepNotes: '', generalNotes: '',
+      onlineLink: '', followUpNotes: '', createdAt: now, updatedAt: now, ...data,
+    };
+    db.agendaItems.push(item);
+    save(db);
+    return item;
+  },
+  updateAgendaItem(id, patch) {
+    const db = load();
+    const item = db.agendaItems.find((a) => a.id === id);
+    if (!item) return null;
+    Object.assign(item, patch, { updatedAt: new Date().toISOString() });
+    save(db);
+    return item;
+  },
+  // Buckets the live (status: 'upcoming') agenda into Hoje / Próximos dias
+  // (days 1-3) / Esta semana (days 4-7) / Pendências (any unresolved item
+  // whose date has already passed). Completed/rescheduled/cancelled items
+  // are excluded from the live view but stay in getAgendaItems() for history.
+  getAgendaBuckets() {
+    const items = load().agendaItems;
+    const now = new Date();
+    const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const d1 = new Date(d0); d1.setDate(d1.getDate() + 1);
+    const d4 = new Date(d0); d4.setDate(d4.getDate() + 4);
+    const d8 = new Date(d0); d8.setDate(d8.getDate() + 8);
+    const buckets = { hoje: [], proximosDias: [], estaSemana: [], pendencias: [] };
+    items.forEach((it) => {
+      if (it.status !== 'upcoming') return;
+      const when = new Date(it.date);
+      if (when < d0) { buckets.pendencias.push(it); return; }
+      if (when < d1) buckets.hoje.push(it);
+      else if (when < d4) buckets.proximosDias.push(it);
+      else if (when < d8) buckets.estaSemana.push(it);
+    });
+    Object.values(buckets).forEach((arr) => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
+    return buckets;
+  },
+  getAgendaItemsForClient(clientId) {
+    return load().agendaItems
+      .filter((a) => a.relatedStudentId === clientId)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  },
+
+  // --- Direção da Marca (Brand Direction) ---
+  getBrandDirection(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).brandDirection;
+  },
+  saveBrandDirection(id, patch) {
+    const db = load();
+    const c = client(db, id);
+    c.brandDirection = { ...c.brandDirection, ...patch, updatedAt: new Date().toISOString() };
+    save(db);
+    this.logActivity(id, 'brand_direction_updated', 'Direção da Marca atualizada');
+    return c.brandDirection;
+  },
+
+  // --- Content Center (Hubla-hosted classes, organized by learning track) ---
+  // Hubla continues hosting the classes themselves — Persea OS only stores
+  // metadata + the Hubla URL to open in a new tab. Nothing here embeds or
+  // proxies Hubla video content.
   getResources() {
     return load().resources;
+  },
+  getResource(id) {
+    return load().resources.find((r) => r.id === id) || null;
+  },
+  saveResource(data) {
+    const db = load();
+    if (data.id) {
+      const existing = db.resources.find((r) => r.id === data.id);
+      if (existing) { Object.assign(existing, data, { updatedAt: new Date().toISOString() }); save(db); return existing; }
+    }
+    const now = new Date().toISOString();
+    const resource = {
+      id: `r${Date.now()}`, title: '', description: '', track: CONTENT_TRACKS[0], phaseKey: null,
+      duration: null, hublaUrl: '', recommendation: null, generalAudience: true, createdAt: now, updatedAt: now, ...data,
+    };
+    db.resources.push(resource);
+    save(db);
+    return resource;
+  },
+  getGeneralResources() {
+    return load().resources.filter((r) => r.generalAudience);
+  },
+  getResourcesByTrack() {
+    const resources = load().resources;
+    const byTrack = {};
+    CONTENT_TRACKS.forEach((t) => { byTrack[t] = []; });
+    resources.forEach((r) => { (byTrack[r.track] || (byTrack[r.track] = [])).push(r); });
+    return byTrack;
+  },
+  getAssignmentsForClient(clientId) {
+    const db = load();
+    return db.resourceAssignments
+      .filter((a) => a.studentId === clientId)
+      .map((a) => ({ ...a, resource: db.resources.find((r) => r.id === a.resourceId) || null }))
+      .filter((a) => a.resource);
+  },
+  getAllAssignments() {
+    const db = load();
+    return db.resourceAssignments.map((a) => ({
+      ...a,
+      resource: db.resources.find((r) => r.id === a.resourceId) || null,
+      clientName: db.clients[a.studentId] ? db.clients[a.studentId].profile.fullName : a.studentId,
+    }));
+  },
+  assignResourceToClient(resourceId, clientId, { reason = '', deadline = null, relatedPhaseOrMeeting = null } = {}) {
+    const db = load();
+    const assignment = {
+      id: `ra${Date.now()}`, resourceId, studentId: clientId, reason, deadline, relatedPhaseOrMeeting,
+      assignedAt: new Date().toISOString(), completed: false,
+    };
+    db.resourceAssignments.push(assignment);
+    save(db);
+    const title = db.resources.find((r) => r.id === resourceId);
+    this.logActivity(clientId, 'resource_assigned', `Novo conteúdo recomendado: ${title ? title.title : ''}`);
+    return assignment;
+  },
+  toggleAssignmentCompletion(assignmentId) {
+    const db = load();
+    const a = db.resourceAssignments.find((a) => a.id === assignmentId);
+    if (a) a.completed = !a.completed;
+    save(db);
+    return a;
   },
 };
 
