@@ -54,41 +54,41 @@ function boardErrorState(url, reason) {
   `;
 }
 
-// Builds the embed off-screen first, so nothing broken or blank is ever
-// visible — only once Pinterest's script has actually replaced the <a>
-// with a real <iframe> does it get moved into the visible board area.
-// Falls back to a polished card (never a dead/empty iframe) if the board
-// is private, invalid, removed, or Pinterest just doesn't respond in time.
+// Mounts the real embed target in normal document flow from the start —
+// Pinterest's widget appears to skip/never-render elements that are
+// positioned off-screen (an earlier version parked it at left:-9999px to
+// avoid a flash of raw markup, which likely reads to Pinterest's own
+// lazy-load/visibility check as "not visible" and never renders). A
+// loading overlay sits on top instead, covering the unprocessed <a> until
+// Pinterest replaces it with a real <iframe> — same "never show anything
+// broken" guarantee, without hiding the target from Pinterest itself.
+// Falls back to a polished card if the board is private, invalid, removed,
+// or Pinterest doesn't respond in time.
 function mountBoard(container, url) {
-  container.innerHTML = boardLoadingState();
-
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:absolute; left:-9999px; top:0; width:900px;';
-  probe.innerHTML = `<a data-pin-do="embedBoard" data-pin-board-width="900" data-pin-scale-height="420" data-pin-scale-width="100" href="${url}"></a>`;
-  document.body.appendChild(probe);
+  container.innerHTML = `
+    <div class="pin-embed-wrap" id="pin-embed-target">
+      <a data-pin-do="embedBoard" data-pin-board-width="900" data-pin-scale-height="420" data-pin-scale-width="100" href="${url}"></a>
+    </div>
+    <div class="board-loading-overlay" id="board-loading-overlay">${boardLoadingState()}</div>
+  `;
+  const target = document.getElementById('pin-embed-target');
 
   const script = document.createElement('script');
   script.async = true;
-  script.defer = true;
   script.src = 'https://assets.pinterest.com/js/pinit.js';
   script.onerror = () => {
-    probe.remove();
     container.innerHTML = boardErrorState(url, 'Não conseguimos carregar o Pinterest no momento. Tente novamente mais tarde.');
   };
   document.body.appendChild(script);
 
   setTimeout(() => {
-    const iframe = probe.querySelector('iframe');
-    if (iframe) {
-      probe.removeAttribute('style');
-      probe.className = 'pin-embed-wrap';
-      container.innerHTML = '';
-      container.appendChild(probe);
+    if (target.querySelector('iframe')) {
+      document.getElementById('board-loading-overlay')?.remove();
     } else {
-      probe.remove();
+      console.warn('[Persea] Pinterest board did not render within the timeout — showing fallback.', url);
       container.innerHTML = boardErrorState(url, 'O board pode estar privado, ter sido removido, ou o Pinterest não respondeu a tempo. Verifique se ele está configurado como público.');
     }
-  }, 3500);
+  }, 5000);
 }
 
 function renderWorkspace() {

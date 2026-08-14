@@ -238,14 +238,21 @@ a.card:hover::before, button.card:hover::before, .card-interactive:hover::before
   text-align:center; gap:14px; padding:24px;
 }
 .board-skeleton{
-  position:absolute; inset:24px; border-radius:6px;
+  position:absolute; inset:0; border-radius:6px;
   background:linear-gradient(100deg, var(--bg2) 30%, rgba(184,134,58,.10) 50%, var(--bg2) 70%);
   background-size:200% 100%; animation:boardShimmer 1.8s ease-in-out infinite;
 }
 @keyframes boardShimmer{ 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
 @media(prefers-reduced-motion: reduce){ .board-skeleton{ animation:none; } }
-.pin-embed-wrap{ width:100%; }
+.pin-embed-wrap{ width:100%; min-height:372px; }
 .pin-embed-wrap iframe{ max-width:100%; border-radius:6px; }
+/* Sits on top of .pin-embed-wrap (a real, visible, in-flow sibling —
+   deliberately NOT display:none/off-screen, so Pinterest's own widget
+   still treats the target as visible) until a real embed appears. */
+.board-loading-overlay{
+  position:absolute; inset:0; border-radius:8px; overflow:hidden;
+  background:var(--card);
+}
 
 /* modal — detail/edit dialog */
 .modal-backdrop{
