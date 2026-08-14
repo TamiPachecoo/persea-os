@@ -73,19 +73,29 @@ function mountBoard(container, url) {
   `;
   const target = document.getElementById('pin-embed-target');
 
+  console.log('[Persea] Mounting Pinterest embed for', url);
   const script = document.createElement('script');
   script.async = true;
   script.src = 'https://assets.pinterest.com/js/pinit.js';
-  script.onerror = () => {
+  script.onload = () => {
+    console.log('[Persea] pinit.js loaded. window.PinUtils present:', typeof window.PinUtils !== 'undefined');
+  };
+  script.onerror = (e) => {
+    console.error('[Persea] pinit.js failed to load — likely blocked by an ad-blocker/privacy extension, or a network/CSP issue. See the Network tab for the actual request status.', e);
     container.innerHTML = boardErrorState(url, 'Não conseguimos carregar o Pinterest no momento. Tente novamente mais tarde.');
   };
   document.body.appendChild(script);
 
   setTimeout(() => {
     if (target.querySelector('iframe')) {
+      console.log('[Persea] Pinterest board rendered successfully.');
       document.getElementById('board-loading-overlay')?.remove();
     } else {
-      console.warn('[Persea] Pinterest board did not render within the timeout — showing fallback.', url);
+      console.warn('[Persea] Pinterest board did not render within the timeout — showing fallback.', {
+        url,
+        pinUtilsLoaded: typeof window.PinUtils !== 'undefined',
+        targetStillRaw: target.innerHTML.includes('data-pin-do'),
+      });
       container.innerHTML = boardErrorState(url, 'O board pode estar privado, ter sido removido, ou o Pinterest não respondeu a tempo. Verifique se ele está configurado como público.');
     }
   }, 5000);
