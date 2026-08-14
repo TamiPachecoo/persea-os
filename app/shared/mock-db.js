@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v11';
+const STORAGE_KEY = 'persea_mock_db_v12';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -162,7 +162,7 @@ const SEED = {
       // could be demonstrated with real data. Nay edits it via the admin
       // Brand Direction tab like any other client's.
       brandDirection: {
-        pinterestUrl: 'https://pin.it/6z9TO1emf',
+        pinterestUrl: 'https://www.pinterest.com/pachecootami/tatech-saas/',
         moodBoardIntro: 'Este mural reúne as referências visuais que guiam sua marca — cores, composições e sensações que suas fotos, posts e vídeos devem evocar. Volte aqui sempre que estiver planejando um conteúdo novo ou em dúvida se algo "combina" com você.',
         positioningSummary: 'Estrategista de precisão para especialistas que já entregam alto nível, mas ainda soam genéricos em público.',
         keywords: ['Precisa', 'Calorosa', 'Autoridade silenciosa', 'Sem enrolação'],
