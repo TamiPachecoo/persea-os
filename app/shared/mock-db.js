@@ -7,7 +7,7 @@
 // docs/02-database-schema.md) so the admin side can hold several clients at
 // once, each progressing through the journey independently.
 
-const STORAGE_KEY = 'persea_mock_db_v10';
+const STORAGE_KEY = 'persea_mock_db_v11';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -163,6 +163,7 @@ const SEED = {
       // Brand Direction tab like any other client's.
       brandDirection: {
         pinterestUrl: 'https://pin.it/6z9TO1emf',
+        moodBoardIntro: 'Este mural reúne as referências visuais que guiam sua marca — cores, composições e sensações que suas fotos, posts e vídeos devem evocar. Volte aqui sempre que estiver planejando um conteúdo novo ou em dúvida se algo "combina" com você.',
         positioningSummary: 'Estrategista de precisão para especialistas que já entregam alto nível, mas ainda soam genéricos em público.',
         keywords: ['Precisa', 'Calorosa', 'Autoridade silenciosa', 'Sem enrolação'],
         tone: 'Direto, confiante, frases curtas — nunca informal demais nem excessivamente formal.',
@@ -172,6 +173,12 @@ const SEED = {
         doesntBelong: ['Frases de efeito genéricas', 'Cores vibrantes/neon', 'Conteúdo puramente motivacional sem substância'],
         updatedAt: '2026-08-01T10:00:00',
       },
+      // "Minhas Ideias" — client's own notes inspired by the mood board.
+      // Deliberately a separate top-level field with its own get/save
+      // methods (not nested in brandDirection) so the write path is
+      // structurally client-only, mirroring the existing private `notes`
+      // pattern rather than sharing brandDirection's admin-only save method.
+      brandIdeas: '',
       journey: {
         programName: 'Identidade',
         steps: [
@@ -369,9 +376,10 @@ const SEED = {
         whatsappGroup: { status: 'added' },
       },
       brandDirection: {
-        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
         guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
       },
+      brandIdeas: '',
       journey: {
         programName: 'Identidade',
         steps: [
@@ -446,9 +454,10 @@ const SEED = {
         whatsappGroup: { status: 'added' },
       },
       brandDirection: {
-        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
         guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
       },
+      brandIdeas: '',
       journey: {
         programName: 'Identidade',
         steps: [
@@ -557,9 +566,10 @@ const SEED = {
         whatsappGroup: { status: 'not_added' },
       },
       brandDirection: {
-        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
         guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
       },
+      brandIdeas: '',
       journey: {
         programName: 'Identidade',
         steps: [
@@ -617,9 +627,10 @@ const SEED = {
         whatsappGroup: { status: 'pending' },
       },
       brandDirection: {
-        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
         guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
       },
+      brandIdeas: '',
       journey: {
         programName: 'Identidade',
         steps: [
@@ -677,9 +688,10 @@ const SEED = {
         whatsappGroup: { status: 'added' },
       },
       brandDirection: {
-        pinterestUrl: null, positioningSummary: '', keywords: [], tone: '', references: [],
+        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
         guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
       },
+      brandIdeas: '',
       journey: {
         programName: 'Identidade',
         steps: [
@@ -1242,6 +1254,16 @@ export const MockDB = {
     save(db);
     this.logActivity(id, 'brand_direction_updated', 'Direção da Marca atualizada');
     return c.brandDirection;
+  },
+  // "Minhas Ideias" — separate from saveBrandDirection on purpose: this is
+  // the only Brand Direction write path a client screen should ever call.
+  getBrandIdeas(id = DEFAULT_CLIENT_ID) {
+    return client(load(), id).brandIdeas;
+  },
+  saveBrandIdeas(id, text) {
+    const db = load();
+    client(db, id).brandIdeas = text;
+    save(db);
   },
 
   // --- Content Center (Hubla-hosted classes, organized by learning track) ---

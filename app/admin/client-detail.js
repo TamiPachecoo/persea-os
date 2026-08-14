@@ -132,6 +132,11 @@ function renderBrandDirectionTab() {
         <label class="text-xs text-white/40 block mb-1">URL do Mural no Pinterest</label>
         <input name="pinterestUrl" class="field" value="${bd.pinterestUrl || ''}" placeholder="https://www.pinterest.com/..." />
         ${bd.pinterestUrl && !isValidHttpUrl(bd.pinterestUrl) ? '<p class="text-xs mt-1" style="color:var(--error);">O link salvo não parece válido.</p>' : ''}
+        <p class="text-xs text-white/20 mt-1">O board precisa ser público para aparecer embutido na página da cliente; do contrário, ela vê um card alternativo.</p>
+      </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Mensagem sobre o Mural <span class="text-white/20">(explica à cliente como usar as referências)</span></label>
+        <textarea name="moodBoardIntro" rows="2" class="field">${bd.moodBoardIntro || ''}</textarea>
       </div>
       <div>
         <label class="text-xs text-white/40 block mb-1">Resumo do Posicionamento</label>
@@ -460,6 +465,7 @@ function wireTabEvents() {
     const splitLines = (v) => (v || '').split('\n').map((s) => s.trim()).filter(Boolean);
     MockDB.saveBrandDirection(clientId, {
       pinterestUrl: (fd.get('pinterestUrl') || '').trim() || null,
+      moodBoardIntro: fd.get('moodBoardIntro'),
       positioningSummary: fd.get('positioningSummary'),
       keywords: splitLines(fd.get('keywords')),
       tone: fd.get('tone'),

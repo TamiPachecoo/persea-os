@@ -228,6 +228,25 @@ a.card:hover::before, button.card:hover::before, .card-interactive:hover::before
 }
 .mood-emoji-row button:hover{ transform:scale(1.25); background:rgba(220,199,168,.1); }
 
+/* mood board workspace — large embed area with loading/empty/error states */
+.board-area{
+  background:var(--card); border:1px solid var(--line); border-radius:8px;
+  min-height:420px; padding:24px; position:relative; overflow:hidden;
+}
+.board-state{
+  min-height:372px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; gap:14px; padding:24px;
+}
+.board-skeleton{
+  position:absolute; inset:24px; border-radius:6px;
+  background:linear-gradient(100deg, var(--bg2) 30%, rgba(184,134,58,.10) 50%, var(--bg2) 70%);
+  background-size:200% 100%; animation:boardShimmer 1.8s ease-in-out infinite;
+}
+@keyframes boardShimmer{ 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+@media(prefers-reduced-motion: reduce){ .board-skeleton{ animation:none; } }
+.pin-embed-wrap{ width:100%; }
+.pin-embed-wrap iframe{ max-width:100%; border-radius:6px; }
+
 /* modal — detail/edit dialog */
 .modal-backdrop{
   position:fixed; inset:0; z-index:90; background:rgba(12,10,9,.72); backdrop-filter:blur(3px);

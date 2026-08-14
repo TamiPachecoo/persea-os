@@ -44,6 +44,7 @@ brand_directions (
   tenant_id uuid references tenants(id),
   client_id uuid references clients(id) unique,   -- one row per client
   pinterest_url text,
+  mood_board_intro text,                           -- Nay's message explaining how the board should guide the client
   positioning_summary text,
   keywords text[],
   tone text,
@@ -54,8 +55,20 @@ brand_directions (
   updated_by uuid references profiles(id),
   updated_at timestamptz
 )
+
+-- Deliberately its OWN table, not a column on brand_directions — this is
+-- the one field on this page a client may write, and keeping it in a
+-- separate table with its own RLS UPDATE policy makes that a schema-level
+-- guarantee, not just an application-layer convention.
+brand_ideas (
+  id uuid pk,
+  tenant_id uuid references tenants(id),
+  client_id uuid references clients(id) unique,   -- one row per client
+  content text,
+  updated_at timestamptz
+)
 ```
-One row per client (`client_id unique`), matching how `mock-db.js` nests `brandDirection` directly on each client record. Array columns (`keywords`, `references`, `belongs`, `doesnt_belong`) map 1:1 to the prototype's newline-separated textarea inputs — the UI layer splits/joins, the schema stores the array directly rather than a delimited string.
+One row per client (`client_id unique`) for both tables, matching how `mock-db.js` nests `brandDirection`/`brandIdeas` directly on each client record. Array columns (`keywords`, `references`, `belongs`, `doesnt_belong`) map 1:1 to the prototype's newline-separated textarea inputs — the UI layer splits/joins, the schema stores the array directly rather than a delimited string.
 
 ```sql
 -- Content Center (Feature 3) ------------------------------------------------
@@ -96,7 +109,7 @@ resource_assignments (
 ## Auth roles (existing `profiles.role`, no new roles needed)
 
 - **admin / team_member** — full read/write on all four tables, scoped to `tenant_id` (same pattern as every other table in `02-database-schema.md`).
-- **client** — read-only on `agenda_items` where `related_student_id = auth.uid()`'s client row *or* `related_student_id is null` (group/class/institutional items are visible to every client in the tenant, per Feature 1's "Group meetings" and "Online events" types); read-only on their own `brand_directions` row; read on `content_resources` where `general_audience = true` **or** a matching `resource_assignments` row exists for them; on `resource_assignments`, read their own rows and **update only the `completed` column** of their own rows — nothing else.
+- **client** — read-only on `agenda_items` where `related_student_id = auth.uid()`'s client row *or* `related_student_id is null` (group/class/institutional items are visible to every client in the tenant, per Feature 1's "Group meetings" and "Online events" types); read-only on their own `brand_directions` row; full read/write on their own `brand_ideas` row ("Minhas Ideias" — the one part of the Brand Direction page a client edits); read on `content_resources` where `general_audience = true` **or** a matching `resource_assignments` row exists for them; on `resource_assignments`, read their own rows and **update only the `completed` column** of their own rows — nothing else.
 
 ## RLS policies
 
@@ -124,6 +137,22 @@ create policy tenant_admin_all on brand_directions
 create policy client_own_brand_direction on brand_directions
   for select
   using (client_id in (select id from clients where profile_id = auth.uid()));
+
+-- brand_ideas — the only client-writable table on this page
+create policy tenant_admin_all on brand_ideas
+  using (tenant_id = (select tenant_id from profiles where id = auth.uid())
+         and (select role from profiles where id = auth.uid()) in ('admin','team_member'));
+
+create policy client_own_ideas on brand_ideas
+  for select using (client_id in (select id from clients where profile_id = auth.uid()));
+
+create policy client_write_own_ideas on brand_ideas
+  for insert with check (client_id in (select id from clients where profile_id = auth.uid()));
+
+create policy client_update_own_ideas on brand_ideas
+  for update
+  using (client_id in (select id from clients where profile_id = auth.uid()))
+  with check (client_id in (select id from clients where profile_id = auth.uid()));
 
 -- content_resources
 create policy tenant_admin_all on content_resources
