@@ -2,7 +2,7 @@ import { MockDB, getActiveClientId } from '../shared/mock-db.js';
 import { renderShell, card, toast, showMoodPrompt, stepEyebrow, initScrollReveal, initClientSwitcher } from '../shared/ui.js';
 
 const activeClientId = getActiveClientId();
-document.body.innerHTML = renderShell({ role: 'client', active: 'questionnaire.html', title: 'Questionário de Identidade' });
+document.body.innerHTML = renderShell({ role: 'client', active: 'questionnaire.html', title: 'Extração de Marca' });
 initClientSwitcher();
 
 const q = MockDB.getQuestionnaire(activeClientId);

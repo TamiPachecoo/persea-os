@@ -1,83 +1,81 @@
-// Conteúdos e Aulas — Hubla continues hosting the classes themselves; this
-// screen only organizes metadata + links a student can open. No video is
-// migrated, uploaded, duplicated, or embedded here.
-import { MockDB, getActiveClientId, CONTENT_TRACKS, CONTENT_TRACK_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl, toast, formatDate } from '../shared/ui.js';
+// Conteúdos — premium visual gateway to Hubla, NOT a replacement for it.
+// Hubla stays responsible for lessons/videos/progress/completion; this page
+// only helps a client find the right topic and hands her off in a new tab.
+// Deliberately shows no locked/unlocked state, no progress bar, no
+// completion %, no "next lesson", no watched status — Persea OS has no way
+// of knowing what happened inside Hubla, and the UI must not imply it does.
+import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import {
+  renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl,
+  contentCardInner, lockedStateCard,
+} from '../shared/ui.js';
 
 const activeClientId = getActiveClientId();
-document.body.innerHTML = renderShell({ role: 'client', active: 'content.html', title: 'Conteúdos e Aulas' });
+document.body.innerHTML = renderShell({ role: 'client', active: 'content.html', title: 'Conteúdos' });
 initClientSwitcher();
 
 const content = document.getElementById('app-content');
 
-function hublaButton(url) {
+function heroCta(url) {
   return isValidHttpUrl(url)
-    ? `<a ${externalLinkAttrs(url)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Assistir aula na Hubla</a>`
-    : `<button type="button" class="btn-ghost" disabled title="Link ainda não configurado pela sua consultora">Aula em breve</button>`;
+    ? `<a ${externalLinkAttrs(url)} class="btn-primary inline-block">Abrir todos os conteúdos na Hubla</a>`
+    : `<button type="button" class="btn-ghost" disabled title="Link geral ainda não configurado">Abrir todos os conteúdos na Hubla</button>`;
 }
 
-function resourceCard(r, assignment) {
-  return card(`
-    <p class="text-sm text-white/50 mb-1">${CONTENT_TRACK_LABEL[r.track]}${r.phaseKey ? ` · ${r.phaseKey}` : ''}</p>
-    <p class="font-medium mb-2">${r.title}</p>
-    ${r.description ? `<p class="text-sm text-white/40 mb-3">${r.description}</p>` : ''}
-    ${assignment ? `
-      <div class="mb-3 p-3 rounded" style="background:rgba(184,134,58,.08); border:1px solid var(--line);">
-        <p class="text-xs" style="color:var(--gold);">Recomendado para você</p>
-        ${assignment.reason ? `<p class="text-xs text-white/50 mt-1">${assignment.reason}</p>` : ''}
-        ${assignment.deadline ? `<p class="text-xs text-white/30 mt-1">Prazo: ${formatDate(assignment.deadline)}</p>` : ''}
-        <label class="flex items-center gap-2 mt-2 text-xs text-white/50" style="cursor:pointer;">
-          <input type="checkbox" data-toggle-assignment="${assignment.id}" ${assignment.completed ? 'checked' : ''} />
-          Marcar como concluída
-        </label>
+function categoryCard(cat) {
+  const linkOk = isValidHttpUrl(cat.hublaUrl);
+  const label = `Acessar ${cat.title} na Hubla${linkOk ? ' (abre em nova aba)' : ''}`;
+  return linkOk
+    ? `<a ${externalLinkAttrs(cat.hublaUrl)} class="content-card" aria-label="${label}">${contentCardInner(cat)}</a>`
+    : `<div class="content-card content-card-disabled" role="group" aria-label="${cat.title} — link em breve">${contentCardInner(cat)}</div>`;
+}
+
+// Recommendations Nay has attached to this client's own resources/tasks —
+// a separate Persea workflow layered on top of the gateway above (see
+// admin/content.js), not a Hubla-lesson tracker. Kept as a plain link-out,
+// with no completion checkbox here — that belongs to Tarefas, not this page.
+function recommendedSection() {
+  const assignments = MockDB.getAssignmentsForClient(activeClientId).filter((a) => !a.completed);
+  if (!assignments.length) return '';
+  return `
+    <div class="mb-10">
+      <p class="text-sm text-white/50 mb-4">Recomendado para você</p>
+      <div class="grid md:grid-cols-2 gap-4">
+        ${assignments.map((a) => card(`
+          <p class="font-medium text-sm mb-1">${a.resource.title}</p>
+          ${a.reason ? `<p class="text-xs text-white/40 mb-3">${a.reason}</p>` : ''}
+          ${isValidHttpUrl(a.resource.hublaUrl)
+            ? `<a ${externalLinkAttrs(a.resource.hublaUrl)} class="btn-ghost inline-block" style="padding:8px 14px; font-size:12px;">Abrir na Hubla ↗</a>`
+            : '<span class="text-xs text-white/30">Link em breve</span>'}
+        `)).join('')}
       </div>
-    ` : ''}
-    <div class="flex items-center gap-3 flex-wrap">
-      ${hublaButton(r.hublaUrl)}
-      ${r.duration ? `<span class="text-xs text-white/30">${r.duration}</span>` : ''}
     </div>
-  `);
+  `;
 }
 
 function render() {
-  const assignments = MockDB.getAssignmentsForClient(activeClientId);
-  const byTrack = MockDB.getResourcesByTrack();
-  const anyGeneral = CONTENT_TRACKS.some((t) => (byTrack[t] || []).some((r) => r.generalAudience));
+  if (MockDB.needsOnboardingCompletion(activeClientId)) {
+    content.innerHTML = lockedStateCard('Conteúdos');
+    return;
+  }
+
+  const categories = MockDB.getContentCategories();
+  const tenant = MockDB.getTenant();
 
   content.innerHTML = `
-    <div class="mb-8">
+    <div class="mb-10">
       <p class="text-white/40 text-sm mb-1">Central de Conteúdos</p>
-      <h1 class="text-3xl font-serif">Conteúdos e Aulas</h1>
-      <p class="text-sm text-white/40 mt-2">As aulas ficam hospedadas na Hubla — clique para assistir em uma nova aba.</p>
+      <h1 class="text-3xl font-serif">Conteúdos da Metodologia PERSEA</h1>
+      <p class="text-sm text-white/40 mt-2 mb-5 max-w-xl">Acesse suas aulas e materiais disponíveis na Hubla.</p>
+      ${heroCta(tenant.hublaAllContentUrl)}
     </div>
 
-    ${assignments.length ? `
-      <div class="mb-10">
-        <p class="text-sm text-white/50 mb-4">Recomendado para você</p>
-        <div class="grid md:grid-cols-2 gap-5">
-          ${assignments.map((a) => resourceCard(a.resource, a)).join('')}
-        </div>
-      </div>
-    ` : ''}
+    ${recommendedSection()}
 
-    ${anyGeneral ? CONTENT_TRACKS.map((t) => {
-      const items = (byTrack[t] || []).filter((r) => r.generalAudience);
-      if (!items.length) return '';
-      return `
-        <div class="mb-10">
-          <p class="text-sm text-white/50 mb-4">${CONTENT_TRACK_LABEL[t]}</p>
-          <div class="grid md:grid-cols-2 gap-5">${items.map((r) => resourceCard(r, null)).join('')}</div>
-        </div>
-      `;
-    }).join('') : (assignments.length ? '' : card('<p class="text-sm text-white/30">Ainda não há conteúdos disponíveis — volte em breve.</p>'))}
+    ${categories.length ? `
+      <div class="content-grid">${categories.map(categoryCard).join('')}</div>
+    ` : card('<p class="text-sm text-white/30">Ainda não há conteúdos disponíveis — volte em breve.</p>')}
   `;
-
-  content.querySelectorAll('[data-toggle-assignment]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      MockDB.toggleAssignmentCompletion(cb.dataset.toggleAssignment);
-      toast(cb.checked ? 'Marcado como concluída.' : 'Marcado como pendente.');
-    });
-  });
 }
 
 render();

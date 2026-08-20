@@ -1,9 +1,18 @@
-import { MockDB, TIER_PHASES, MOOD_SCALE, ONBOARDING_STAGE_LABEL, AGENDA_TYPES, AGENDA_TYPE_LABEL, AGENDA_STATUSES, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, formatDateTime, formatDate, toast, openModal } from '../shared/ui.js';
+import { MockDB, TIER_PHASES, MOOD_SCALE, ONBOARDING_STAGE_LABEL, AGENDA_TYPE_LABEL, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, LEAD_STAGE_LABEL, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL } from '../shared/mock-db.js';
+import { renderShell, card, statusBadge, formatDateTime, formatDate, toast } from '../shared/ui.js';
+
+const VALUE_OVERVIEW_ROWS = [
+  ['awaitingClientAnswers', 'Aguardando respostas das clientes'],
+  ['submittedAwaitingAnalysis', 'Enviadas, aguardando análise'],
+  ['inAnalysis', 'Em análise'],
+  ['clarificationsRequired', 'Com pontos a esclarecer'],
+  ['readyToPublish', 'Recomendações prontas para publicar'],
+  ['publishedNeedingReview', 'Publicadas, revisão vencida'],
+];
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', group_meeting: '👥',
-  online_event: '🌐', admin_task: '🗂️', deadline: '⏰',
+  online_event: '🌐', admin_task: '🗂️', deadline: '⏰', photo_review: '📸',
 };
 
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
@@ -12,145 +21,151 @@ const REQUEST_STATUS_LABEL = {
   assigned: ['Agendada', 'badge-progress'],
   done: ['Concluída', 'badge-completed'],
 };
-const ASSIGNEE_LABEL = { nay: 'Nay', assistant: 'Assistente' };
+const LEAD_STAGE_CLASS = {
+  novo: 'badge-locked', engajado: 'badge-progress', em_conversa: 'badge-progress',
+  proposta_enviada: 'badge-progress', convertido: 'badge-completed', perdido: 'badge-locked',
+};
 
 document.body.innerHTML = renderShell({ role: 'admin', active: 'dashboard.html', title: 'Painel Admin' });
 const content = document.getElementById('app-content');
 
-const AGENDA_BUCKETS = [
-  ['hoje', 'Hoje'],
-  ['proximosDias', 'Próximos Dias'],
-  ['estaSemana', 'Esta Semana'],
-  ['pendencias', 'Pendências'],
-];
-
-function agendaItemRow(it) {
+function agendaItemLink(it) {
   const who = it.relatedStudentId ? (MockDB.getClient(it.relatedStudentId)?.fullName || '') : (it.relatedGroupLabel || '');
   return `
-    <button type="button" data-agenda-item="${it.id}" class="w-full text-left py-2.5 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
-      <p class="text-xs" style="color:var(--terracotta);">${AGENDA_TYPE_ICON[it.type] || ''} ${AGENDA_TYPE_LABEL[it.type]}</p>
+    <a href="agenda.html?item=${it.id}" class="block py-2.5 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs" style="color:var(--terracotta);">${AGENDA_TYPE_ICON[it.type] || ''} ${AGENDA_TYPE_LABEL[it.type]}</p>
+        ${it.assignedTo ? `<span class="badge badge-progress" style="font-size:9px;">${it.assignedTo === 'assistant' && it.assistantPersona ? ASSISTANT_PERSONA_LABEL[it.assistantPersona] : ASSIGNEE_LABEL[it.assignedTo]}</span>` : ''}
+      </div>
       <p class="text-sm font-medium mt-0.5">${it.title}</p>
       <p class="text-xs mt-0.5 text-white/30">${who ? who + ' · ' : ''}${formatDateTime(it.date)}</p>
-    </button>
+    </a>
   `;
 }
 
-// Keeps the dashboard card itself compact (title/type/who/when only, per the
-// spec) — everything else (topic, notes, link, status) lives in the modal
-// opened by clicking a row.
-function renderAgendaSection() {
+// Compact snapshot only — today's items plus a count of what's further out.
+// Full visualization (every bucket, filters, history, create/edit) lives on
+// its own Agenda page now; Painel just needs "what's happening today" and a
+// way in.
+function renderAgendaSnapshot() {
   const buckets = MockDB.getAgendaBuckets();
+  const upcomingCount = buckets.proximosDias.length + buckets.estaSemana.length + buckets.maisAdiante.length;
   return card(`
     <div class="flex items-center justify-between mb-5">
-      <p class="text-sm text-white/50">Agenda da Semana</p>
-      <button id="new-agenda-item" class="btn-ghost">+ Novo Item</button>
+      <p class="text-sm text-white/50">Agenda de Hoje</p>
+      <a href="agenda.html" class="btn-text">Ver agenda completa &rarr;</a>
     </div>
-    <div class="grid md:grid-cols-4 gap-6">
-      ${AGENDA_BUCKETS.map(([key, label]) => `
-        <div>
-          <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.12em;">${label} <span style="opacity:.6;">(${buckets[key].length})</span></p>
+    ${buckets.hoje.length ? buckets.hoje.map(agendaItemLink).join('') : '<p class="text-xs text-white/20">Nada agendado para hoje.</p>'}
+    <p class="text-xs mt-4" style="color:var(--muted);">
+      ${upcomingCount} próximo${upcomingCount === 1 ? '' : 's'} nos próximos dias${buckets.pendencias.length ? ` · ${buckets.pendencias.length} pendência${buckets.pendencias.length === 1 ? '' : 's'}` : ''}
+    </p>
+  `, 'mb-8');
+}
+
+// Only renders when there's something to see — this is meant to be an
+// exception signal ("a delay requiring Nay's attention"), not a routine
+// status card she has to scan past every time the queue is healthy.
+function renderAssistantExceptionsCard() {
+  const overdue = MockDB.getOverdueAssistantTasks();
+  if (!overdue.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm" style="color:var(--terracotta);">⚠ Tarefas da Assistente em Atraso</p>
+      <span class="text-xs" style="color:var(--muted);">${overdue.length} pendência${overdue.length === 1 ? '' : 's'}</span>
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">
+      ${overdue.map((it) => `
+        <a href="agenda.html?item=${it.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
           <div>
-            ${buckets[key].length ? buckets[key].map(agendaItemRow).join('') : '<p class="text-xs text-white/20">Nada por aqui.</p>'}
+            <p class="text-sm">${it.title}</p>
+            <p class="text-xs mt-0.5 text-white/30">${it.clientName ? it.clientName + ' · ' : ''}era para ${formatDateTime(it.date)}</p>
           </div>
+          <span class="badge badge-locked" style="font-size:9px;">${it.assistantPersona ? ASSISTANT_PERSONA_LABEL[it.assistantPersona] : 'Assistente'}</span>
+        </a>
+      `).join('')}
+    </div>
+  `, 'mb-8');
+}
+
+function renderLeadsSnapshotCard() {
+  const s = MockDB.getLeadsSummary();
+  const active = MockDB.getLeads()
+    .filter((l) => ['em_conversa', 'proposta_enviada'].includes(l.stage))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Leads</p>
+      <a href="leads.html" class="btn-text">Ver todos os leads &rarr;</a>
+    </div>
+    <div class="grid sm:grid-cols-4 gap-4 text-sm mb-4">
+      <div><p class="text-2xl font-serif">${s.total}</p><p class="text-white/40 text-xs mt-1">Total</p></div>
+      <div><p class="text-2xl font-serif">${s.inGroup}</p><p class="text-white/40 text-xs mt-1">No Grupo VIP</p></div>
+      <div><p class="text-2xl font-serif">${s.converted}</p><p class="text-white/40 text-xs mt-1">Convertidos</p></div>
+      <div><p class="text-2xl font-serif">${s.conversionRatePct}%</p><p class="text-white/40 text-xs mt-1">Taxa de Conversão</p></div>
+    </div>
+    ${active.length ? `
+      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.12em;">Em Andamento</p>
+      <div class="divide-y" style="border-color:var(--line);">
+        ${active.slice(0, 5).map((l) => `
+          <a href="lead-detail.html?id=${l.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
+            <span class="text-sm">${l.fullName}</span>
+            <span class="badge ${LEAD_STAGE_CLASS[l.stage] || 'badge-locked'}">${LEAD_STAGE_LABEL[l.stage]}</span>
+          </a>
+        `).join('')}
+      </div>
+    ` : '<p class="text-sm" style="color:var(--muted);">Nenhum lead em conversa avançada no momento.</p>'}
+  `, 'mb-8');
+}
+
+// Concise and exception-focused, per design: only rows with something to
+// act on show up — a healthy queue with everything at zero renders nothing.
+function renderValueAnalysisOverviewCard() {
+  const o = MockDB.getOwnerValueAnalysisOverview();
+  const rows = VALUE_OVERVIEW_ROWS.filter(([key]) => o[key] > 0);
+  if (!rows.length) return '';
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Leitura Estratégica de Valor</p>
+    <div class="grid sm:grid-cols-2 gap-3">
+      ${rows.map(([key, label]) => `
+        <div class="flex items-center justify-between py-1.5 border-b border-white/5">
+          <span class="text-sm">${label}</span>
+          <span class="badge ${key === 'readyToPublish' ? 'badge-completed' : 'badge-progress'}">${o[key]}</span>
         </div>
       `).join('')}
     </div>
   `, 'mb-8');
 }
 
-function openAgendaModal(itemId) {
-  const item = itemId ? MockDB.getAgendaItem(itemId) : null;
-  const isNew = !item;
-  const data = item || {
-    type: 'admin_task', title: '', date: new Date().toISOString(), status: 'upcoming',
-    relatedStudentId: null, relatedGroupLabel: '', topic: '', prepNotes: '',
-    generalNotes: '', onlineLink: '', followUpNotes: '',
-  };
-  const clients = MockDB.listClients();
-
-  const { el, close } = openModal({
-    title: isNew ? 'Novo Item da Agenda' : 'Editar Item da Agenda',
-    bodyHtml: `
-      <form id="agenda-form" class="space-y-4">
-        <div class="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label class="text-xs text-white/40 block mb-1">Título</label>
-            <input name="title" class="field" value="${data.title}" required />
-          </div>
-          <div>
-            <label class="text-xs text-white/40 block mb-1">Tipo</label>
-            <select name="type" class="field">
-              ${AGENDA_TYPES.map((t) => `<option value="${t}" ${data.type === t ? 'selected' : ''}>${AGENDA_TYPE_LABEL[t]}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        <div class="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label class="text-xs text-white/40 block mb-1">Data e Hora</label>
-            <input name="date" type="datetime-local" class="field" value="${(data.date || '').slice(0, 16)}" required />
-          </div>
-          <div>
-            <label class="text-xs text-white/40 block mb-1">Status</label>
-            <select name="status" class="field">
-              ${AGENDA_STATUSES.map((s) => `<option value="${s}" ${data.status === s ? 'selected' : ''}>${AGENDA_STATUS_LABEL[s]}</option>`).join('')}
-            </select>
+// Every Premium-preview activity (Business, or Direção da Marca for
+// Ascensão de Imagem) can generate one of these — not just Business, so
+// this stays separate from the Leitura Estratégica de Valor card above.
+function renderUpgradeInterestCard() {
+  const interests = MockDB.getPremiumUpgradeInterests().filter((i) => ['novo', 'em_conversa'].includes(i.status));
+  if (!interests.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Interesse em Upgrade</p>
+      <span class="text-xs" style="color:var(--muted);">${interests.length} em aberto</span>
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">
+      ${interests.map((i) => `
+        <div class="py-3">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p class="text-sm font-medium">${i.clientName}</p>
+              <p class="text-xs text-white/30 mt-0.5">${i.currentProgramName} · via ${i.activityTitle} · ${formatDate(i.createdAt)}${i.currentPhase ? ` · ${i.currentPhase}` : ''}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <a href="clients.html" class="btn-text">Contatar</a>
+              <select data-interest-status="${i.id}" class="field text-xs" style="max-width:150px;">
+                ${UPGRADE_INTEREST_STATUSES.map((s) => `<option value="${s}" ${i.status === s ? 'selected' : ''}>${UPGRADE_INTEREST_STATUS_LABEL[s]}</option>`).join('')}
+              </select>
+            </div>
           </div>
         </div>
-        <div class="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label class="text-xs text-white/40 block mb-1">Cliente Relacionada</label>
-            <select name="relatedStudentId" class="field">
-              <option value="">— Nenhuma —</option>
-              ${clients.map((c) => `<option value="${c.id}" ${data.relatedStudentId === c.id ? 'selected' : ''}>${c.fullName}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-white/40 block mb-1">Grupo / Turma</label>
-            <input name="relatedGroupLabel" class="field" value="${data.relatedGroupLabel || ''}" placeholder="Ex.: Q&amp;A Mensal" />
-          </div>
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Tópico</label>
-          <input name="topic" class="field" value="${data.topic || ''}" />
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online</label>
-          <input name="onlineLink" class="field" value="${data.onlineLink || ''}" placeholder="https://..." />
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Notas de Preparação</label>
-          <textarea name="prepNotes" rows="2" class="field">${data.prepNotes || ''}</textarea>
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Notas Gerais</label>
-          <textarea name="generalNotes" rows="2" class="field">${data.generalNotes || ''}</textarea>
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Notas de Follow-up</label>
-          <textarea name="followUpNotes" rows="2" class="field">${data.followUpNotes || ''}</textarea>
-        </div>
-        <div class="flex justify-end pt-2">
-          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${isNew ? 'Criar Item' : 'Salvar Alterações'}</button>
-        </div>
-      </form>
-    `,
-  });
-
-  el.querySelector('#agenda-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = {
-      title: fd.get('title'), type: fd.get('type'), date: fd.get('date'), status: fd.get('status'),
-      relatedStudentId: fd.get('relatedStudentId') || null, relatedGroupLabel: fd.get('relatedGroupLabel') || null,
-      topic: fd.get('topic'), onlineLink: fd.get('onlineLink'), prepNotes: fd.get('prepNotes'),
-      generalNotes: fd.get('generalNotes'), followUpNotes: fd.get('followUpNotes'),
-    };
-    if (isNew) MockDB.createAgendaItem(payload);
-    else MockDB.updateAgendaItem(item.id, payload);
-    close();
-    toast(isNew ? 'Item adicionado à agenda.' : 'Alterações salvas.');
-    render();
-  });
+      `).join('')}
+    </div>
+  `, 'mb-8');
 }
 
 function renderRequestsCard() {
@@ -186,6 +201,71 @@ function renderRequestsCard() {
         `).join('')}
       </div>
     ` : '<p class="text-sm" style="color:var(--muted);">Nenhuma solicitação em aberto.</p>'}
+  `, 'mb-8');
+}
+
+const brl = (n) => `R$ ${Math.round(n).toLocaleString('pt-BR')}`;
+
+// The single most urgent thing that can block a whole client relationship
+// from moving forward, so it sits at the very top of the dashboard —
+// surfaced identically here, on Clientes, on the client's own detail page,
+// and in the assistant's checklist (see getClientsAwaitingInfo).
+function renderAwaitingInfoCard() {
+  const clients = MockDB.getClientsAwaitingInfo();
+  if (!clients.length) return '';
+  return `
+    <div class="mb-8" style="border-left:3px solid var(--terracotta); border-radius:4px;">${card(`
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm" style="color:var(--terracotta);">⚠ Aguardando Informações da Cliente</p>
+        <span class="text-xs" style="color:var(--muted);">${clients.length}</span>
+      </div>
+      <div class="divide-y" style="border-color:var(--line);">
+        ${clients.map((c) => `
+          <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+            <div>
+              <p class="font-medium text-sm">${c.fullName}</p>
+              <p class="text-xs text-white/30">${c.email}</p>
+            </div>
+            <span class="text-xs" style="color:var(--terracotta);">Contrato não pode ser preparado ainda</span>
+          </a>
+        `).join('')}
+      </div>
+    `)}</div>
+  `;
+}
+
+// Motivational proof-of-impact numbers, per Nay's explicit request — real
+// numbers derived from data that already exists (payments, leads,
+// programHistory, priceHistory), never invented. See getSuccessMetrics.
+function renderSuccessMetricsCard() {
+  const m = MockDB.getSuccessMetrics();
+  const topPricing = m.pricingImpact.entries[0];
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Impacto do Seu Trabalho</p>
+    <p class="text-xs text-white/20 mb-5">Números reais, calculados a partir dos dados do sistema.</p>
+    <div class="grid sm:grid-cols-4 gap-4 text-sm mb-5">
+      <div>
+        <p class="text-2xl font-serif" style="color:var(--gold);">${m.revenueGrowth.growthPct !== null ? `${m.revenueGrowth.growthPct >= 0 ? '+' : ''}${m.revenueGrowth.growthPct}%` : '—'}</p>
+        <p class="text-white/40 text-xs mt-1">Crescimento de receita</p>
+      </div>
+      <div>
+        <p class="text-2xl font-serif" style="color:var(--gold);">${m.leadConversion.conversionRatePct}%</p>
+        <p class="text-white/40 text-xs mt-1">Taxa de conversão de leads</p>
+      </div>
+      <div>
+        <p class="text-2xl font-serif" style="color:var(--gold);">${m.upsells.count}</p>
+        <p class="text-white/40 text-xs mt-1">Upsells em clientes atuais</p>
+      </div>
+      <div>
+        <p class="text-2xl font-serif" style="color:var(--gold);">${m.pricingImpact.avgMultiplier ? `${m.pricingImpact.avgMultiplier.toFixed(2)}x` : '—'}</p>
+        <p class="text-white/40 text-xs mt-1">Preço médio recomendado vs. anterior</p>
+      </div>
+    </div>
+    ${topPricing ? `
+      <p class="text-sm" style="border-top:1px solid var(--line); padding-top:16px;">
+        <strong>${topPricing.clientName}</strong> agora cobra <strong style="color:var(--gold);">${topPricing.multiplier.toFixed(2)}x mais</strong> por "${topPricing.offerName}" — de ${brl(topPricing.previousPrice)} para ${brl(topPricing.newPrice)}${topPricing.monthlyLift ? `, um ganho estimado de ${brl(topPricing.monthlyLift)}/mês para ela` : ''}.
+      </p>
+    ` : ''}
   `, 'mb-8');
 }
 
@@ -240,46 +320,24 @@ function renderMoodCard() {
 function render() {
   const clients = MockDB.listClients();
 
-  const needsAttention = clients.filter((c) => {
-    const pb = MockDB.getPlaybook(c.id);
-    const latest = pb.versions[pb.versions.length - 1];
-    return latest && latest.status === 'draft';
-  });
-
-  const nextMeeting = clients
-    .map((c) => ({ client: c, meeting: MockDB.getJourney(c.id).upcomingMeeting }))
-    .sort((a, b) => new Date(a.meeting.date) - new Date(b.meeting.date))[0];
-
-  const pendingRequests = MockDB.listAllMeetingRequests().filter((r) => r.status === 'pending');
-
   content.innerHTML = `
-    <div class="grid md:grid-cols-3 gap-6 mb-8">
-      ${card(`
-        <p class="text-sm text-white/50 mb-2">Clientes</p>
-        <p class="text-3xl font-serif mb-1">${clients.length}</p>
-        <p class="text-xs text-white/30">${clients.filter((c) => c.status === 'active').length} ativos</p>
-      `)}
-      ${card(`
-        <p class="text-sm text-white/50 mb-2">Próxima Reunião</p>
-        <p class="text-lg font-medium">${nextMeeting.meeting.title}</p>
-        <p class="text-xs text-white/30 mt-1">${formatDateTime(nextMeeting.meeting.date)} · ${nextMeeting.client.fullName}</p>
-      `)}
-      ${card(`
-        <p class="text-sm text-white/50 mb-2">Requer Atenção</p>
-        <p class="text-lg font-medium">${needsAttention.length + pendingRequests.length} pendência${needsAttention.length + pendingRequests.length === 1 ? '' : 's'}</p>
-        <p class="text-xs text-white/30 mt-1">${needsAttention.length} playbook(s) em rascunho · ${pendingRequests.length} solicitação(ões) de reunião</p>
-      `)}
-    </div>
-
-    ${renderAgendaSection()}
+    ${renderAwaitingInfoCard()}
+    ${renderSuccessMetricsCard()}
+    ${renderAgendaSnapshot()}
+    ${renderAssistantExceptionsCard()}
+    ${renderLeadsSnapshotCard()}
+    ${renderValueAnalysisOverviewCard()}
+    ${renderUpgradeInterestCard()}
     ${renderOnboardingSummaryCard()}
     ${renderRequestsCard()}
-    ${renderMoodCard()}
 
     ${card(`
-      <p class="text-sm text-white/50 mb-4">Clientes</p>
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-white/50">Clientes Recentes</p>
+        <a href="clients.html" class="btn-text">Ver todos os clientes &rarr;</a>
+      </div>
       <div class="divide-y" style="border-color:var(--line);">
-        ${clients.map((c) => {
+        ${clients.slice(0, 5).map((c) => {
           const metaLine = c.status === 'onboarding'
             ? `Onboarding: ${ONBOARDING_STAGE_LABEL[c.onboardingStage]}`
             : `${TIER_LABEL[c.tier] || c.tier} · Fase: ${TIER_PHASES[c.tier][c.phaseIndex]}`;
@@ -298,11 +356,16 @@ function render() {
         }).join('')}
       </div>
     `)}
+
+    ${renderMoodCard()}
   `;
 
-  content.querySelector('#new-agenda-item')?.addEventListener('click', () => openAgendaModal(null));
-  content.querySelectorAll('[data-agenda-item]').forEach((btn) => {
-    btn.addEventListener('click', () => openAgendaModal(btn.dataset.agendaItem));
+  content.querySelectorAll('[data-interest-status]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      MockDB.setUpgradeInterestStatus(sel.dataset.interestStatus, sel.value);
+      toast('Status do interesse atualizado.');
+      render();
+    });
   });
   content.querySelectorAll('[data-assign]').forEach((btn) => {
     btn.addEventListener('click', () => {

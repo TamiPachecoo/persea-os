@@ -120,6 +120,30 @@ function renderContractCard(o) {
   `, 'mb-6');
 }
 
+// Shown as soon as the contract is done — Extração de Marca and Teste de
+// Arquétipos don't need the rest of onboarding (WhatsApp, resources) to
+// start, so she's prompted straight into them instead of waiting idle.
+function renderNextStepCard(o) {
+  if (o.contract.status !== 'completed') return '';
+  const q = MockDB.getQuestionnaire(activeClientId);
+  const archetypeQuiz = MockDB.getClientArchetypeQuiz(activeClientId);
+  const archetypeAttempt = archetypeQuiz.attempts[archetypeQuiz.attempts.length - 1];
+  const qDone = q.status === 'submitted';
+  const aStatus = !archetypeAttempt ? 'not_started' : archetypeAttempt.status;
+  const aDone = aStatus === 'completed';
+  if (qDone && aDone) return '';
+  const archetypeLabel = aDone ? 'Ver meu resultado' : aStatus === 'in_progress' ? 'Continuar teste' : 'Iniciar teste';
+  return card(`
+    <p class="text-sm mb-1" style="color:var(--gold);">Contrato concluído ✓</p>
+    <p class="text-lg font-serif mb-2">Próximo passo</p>
+    <p class="text-sm text-white/50 mb-4 max-w-xl">Enquanto o restante do seu onboarding é finalizado, você já pode começar a Extração de Marca e o Teste de Arquétipos.</p>
+    <div class="flex flex-wrap gap-3">
+      <a href="questionnaire.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${qDone ? 'Ver Extração de Marca' : 'Iniciar Extração de Marca'}</a>
+      <a href="${aDone ? 'arquetipos-resultado.html' : 'arquetipos.html'}" class="btn-ghost">${archetypeLabel}</a>
+    </div>
+  `, 'mb-6');
+}
+
 function renderWhatsappCard(o) {
   const w = o.whatsappGroup;
   const badgeClass = w.status === 'added' ? 'badge-completed' : w.status === 'pending' ? 'badge-progress' : 'badge-locked';
@@ -161,8 +185,9 @@ function render() {
       <p class="text-sm text-white/40 mt-2">Antes de começar a Fase 1 da mentoria, vamos concluir seu cadastro.</p>
     </div>
     ${renderStepper(o)}
-    ${renderInfoForm(o)}
+    <div ${!o.clientInfo.submitted ? 'style="border-left:3px solid var(--terracotta); border-radius:4px;"' : ''}>${renderInfoForm(o)}</div>
     ${renderContractCard(o)}
+    ${renderNextStepCard(o)}
     ${renderWhatsappCard(o)}
     ${renderResourcesCard(unlocked)}
   `;

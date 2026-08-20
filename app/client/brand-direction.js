@@ -10,7 +10,7 @@
 // construction: saveBrandIdeas() only ever touches the brandIdeas field —
 // there is no client-callable path into saveBrandDirection().
 import { MockDB, getActiveClientId } from '../shared/mock-db.js';
-import { renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl } from '../shared/ui.js';
+import { renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl, boardEmptyState, mountPinterestBoard } from '../shared/ui.js';
 
 const activeClientId = getActiveClientId();
 document.body.innerHTML = renderShell({ role: 'client', active: 'brand-direction.html', title: 'Direção da Marca' });
@@ -25,81 +25,6 @@ const hasAnyContent = Boolean(
   (bd.keywords || []).length || (bd.references || []).length ||
   (bd.belongs || []).length || (bd.doesntBelong || []).length
 );
-
-// --- Board area states (loading / empty / error), rendered as HTML strings
-// so each state fully replaces the last — never a half-updated DOM. ---
-function boardEmptyState() {
-  return `
-    <div class="board-state">
-      <p class="font-serif" style="font-size:1.3rem;">O mural ainda não foi adicionado</p>
-      <p class="text-xs text-white/40 max-w-sm">Assim que sua consultora adicionar o board do Pinterest, ele aparece bem aqui — no centro do seu espaço de inspiração.</p>
-    </div>
-  `;
-}
-function boardLoadingState() {
-  return `
-    <div class="board-skeleton"></div>
-    <div class="board-state" style="position:relative;">
-      <p class="text-xs text-white/30">Carregando mural…</p>
-    </div>
-  `;
-}
-function boardErrorState(url, reason) {
-  return `
-    <div class="board-state">
-      <p class="font-serif" style="font-size:1.3rem;">Não foi possível exibir o mural aqui</p>
-      <p class="text-xs text-white/40 max-w-sm">${reason}</p>
-      <a ${externalLinkAttrs(url)} class="btn-primary" style="padding:11px 22px;font-size:13px;">Abrir no Pinterest</a>
-    </div>
-  `;
-}
-
-// Mounts the real embed target in normal document flow from the start —
-// Pinterest's widget appears to skip/never-render elements that are
-// positioned off-screen (an earlier version parked it at left:-9999px to
-// avoid a flash of raw markup, which likely reads to Pinterest's own
-// lazy-load/visibility check as "not visible" and never renders). A
-// loading overlay sits on top instead, covering the unprocessed <a> until
-// Pinterest replaces it with a real <iframe> — same "never show anything
-// broken" guarantee, without hiding the target from Pinterest itself.
-// Falls back to a polished card if the board is private, invalid, removed,
-// or Pinterest doesn't respond in time.
-function mountBoard(container, url) {
-  container.innerHTML = `
-    <div class="pin-embed-wrap" id="pin-embed-target">
-      <a data-pin-do="embedBoard" data-pin-board-width="900" data-pin-scale-height="420" data-pin-scale-width="100" href="${url}"></a>
-    </div>
-    <div class="board-loading-overlay" id="board-loading-overlay">${boardLoadingState()}</div>
-  `;
-  const target = document.getElementById('pin-embed-target');
-
-  console.log('[Persea] Mounting Pinterest embed for', url);
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = 'https://assets.pinterest.com/js/pinit.js';
-  script.onload = () => {
-    console.log('[Persea] pinit.js loaded. window.PinUtils present:', typeof window.PinUtils !== 'undefined');
-  };
-  script.onerror = (e) => {
-    console.error('[Persea] pinit.js failed to load — likely blocked by an ad-blocker/privacy extension, or a network/CSP issue. See the Network tab for the actual request status.', e);
-    container.innerHTML = boardErrorState(url, 'Não conseguimos carregar o Pinterest no momento. Tente novamente mais tarde.');
-  };
-  document.body.appendChild(script);
-
-  setTimeout(() => {
-    if (target.querySelector('iframe')) {
-      console.log('[Persea] Pinterest board rendered successfully.');
-      document.getElementById('board-loading-overlay')?.remove();
-    } else {
-      console.warn('[Persea] Pinterest board did not render within the timeout — showing fallback.', {
-        url,
-        pinUtilsLoaded: typeof window.PinUtils !== 'undefined',
-        targetStillRaw: target.innerHTML.includes('data-pin-do'),
-      });
-      container.innerHTML = boardErrorState(url, 'O board pode estar privado, ter sido removido, ou o Pinterest não respondeu a tempo. Verifique se ele está configurado como público.');
-    }
-  }, 5000);
-}
 
 function renderWorkspace() {
   const linkOk = bd.pinterestUrl && isValidHttpUrl(bd.pinterestUrl);
@@ -186,7 +111,7 @@ if (!hasAnyContent) {
   `;
 
   if (bd.pinterestUrl && isValidHttpUrl(bd.pinterestUrl)) {
-    mountBoard(document.getElementById('board-area'), bd.pinterestUrl);
+    mountPinterestBoard(document.getElementById('board-area'), bd.pinterestUrl);
   }
 
   const ideasField = document.getElementById('brand-ideas-field');
