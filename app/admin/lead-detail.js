@@ -1,8 +1,15 @@
 // Lead detail — single lead's profile, contact/interaction log, and the
-// "Converter em Cliente" hand-off into the real onboarding pipeline.
+// Nova Persea post-sale onboarding flow: Condições Comerciais -> Cadastro ->
+// Contrato -> Ativar Cliente. All of it lives ON this lead record until
+// activation actually creates a client row (see MockDB.activateLead) — no
+// OS access exists before that. The original "Converter em Cliente" quick
+// path is preserved further down (existing functionality, still available
+// for edge cases), just no longer the primary action.
 import {
   MockDB, LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL,
   VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL, PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL,
+  PROGRAM_DEFS, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL,
+  LEAD_ONBOARDING_STATUS_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
 import { renderShell, card, toast, formatDate, formatDateTime, openModal, renderSocialLinks } from '../shared/ui.js';
 
@@ -15,8 +22,12 @@ const STAGE_CLASS = {
   proposta_enviada: 'badge-progress', convertido: 'badge-completed', perdido: 'badge-locked',
 };
 const stageBadge = (stage) => `<span class="badge ${STAGE_CLASS[stage] || 'badge-locked'}">${LEAD_STAGE_LABEL[stage] || stage}</span>`;
+const brl = (n) => (n || n === 0) ? `R$ ${Number(n).toLocaleString('pt-BR')}` : '—';
 
 function renderHeader(lead) {
+  const pipelineBadge = lead.onboardingStatus
+    ? `<span class="badge ${LEAD_ONBOARDING_STATUS_BADGE_CLASS[lead.onboardingStatus] || 'badge-locked'}">${MockDB.getLeadPipelineLabel(lead)}</span>`
+    : stageBadge(lead.stage);
   return `
     <a href="leads.html" class="btn-text mb-4 inline-block">&larr; Todos os leads</a>
     <div class="mb-6 flex items-start justify-between flex-wrap gap-3">
@@ -24,32 +35,166 @@ function renderHeader(lead) {
         <h1 class="text-2xl font-serif">${lead.fullName || '(sem nome)'}</h1>
         <p class="text-white/40 text-sm">${lead.email || 'sem email'} · ${lead.phone || 'sem telefone'}</p>
       </div>
-      ${stageBadge(lead.stage)}
+      ${pipelineBadge}
     </div>
     ${card(renderSocialLinks(lead.socialLinks, { emptyText: 'Nenhuma rede social cadastrada ainda — adicione abaixo.' }), 'mb-6')}
   `;
 }
 
-function renderConvertCard(lead) {
-  if (lead.stage === 'convertido' && lead.convertedToClientId) {
+// --- 1. Condições Comerciais — Nay/team enter what was agreed on the call.
+// The client never sees or edits this from her registration form. ---------
+function renderCommercialCard(lead) {
+  const ct = lead.commercialTerms || {};
+  return card(`
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm text-white/50">Condições Comerciais</p>
+      ${lead.onboardingStatus ? `<span class="text-xs" style="color:var(--gold);">Venda fechada${ct.saleAgreedAt ? ` em ${formatDate(ct.saleAgreedAt)}` : ''}</span>` : ''}
+    </div>
+    <p class="text-xs text-white/20 mb-4">Preenchido por quem fechou a venda — a cliente não escolhe nem edita essas condições no formulário dela.</p>
+    <form id="commercial-form" class="space-y-4">
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Programa Acordado</label>
+          <select name="program" class="field text-sm" required>
+            <option value="">Selecione</option>
+            ${PROGRAM_DEFS.map((p) => `<option value="${p.slug}" ${lead.program === p.slug ? 'selected' : ''}>${p.name}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Forma de Pagamento</label>
+          <select name="paymentMethod" class="field text-sm" required>
+            <option value="">Selecione</option>
+            ${PAYMENT_METHODS.map((m) => `<option value="${m}" ${ct.paymentMethod === m ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Valor Total Acordado</label>
+          <input name="agreedAmount" type="number" min="0" step="0.01" class="field text-sm" value="${ct.agreedAmount ?? ''}" required />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Número de Parcelas</label>
+          <input name="installments" type="number" min="1" class="field text-sm" value="${ct.installments ?? 1}" required />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Primeiro Vencimento</label>
+          <input name="firstDueDate" type="date" class="field text-sm" value="${ct.firstDueDate || ''}" required />
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Notas Comerciais / Condição Negociada</label>
+        <textarea name="commercialNotes" rows="2" class="field text-sm">${ct.commercialNotes || ''}</textarea>
+      </div>
+      <div class="flex justify-end">
+        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${lead.onboardingStatus ? 'Atualizar Condições' : 'Registrar Venda Fechada'}</button>
+      </div>
+    </form>
+  `, 'mb-6');
+}
+
+// --- 2. Cadastro — secure registration link + what she submitted. --------
+function registrationSummary(info) {
+  if (!info || !info.submitted) return '<p class="text-sm" style="color:var(--muted);">Ainda não preenchido.</p>';
+  const rows = [
+    ['Nome completo', info.fullName], ['Nome social', info.socialName], ['Nascimento', info.birthDate && formatDate(info.birthDate)],
+    ['CPF', info.cpf], ['RG', info.rg], ['Profissão', info.profession], ['Nacionalidade', info.nationality], ['Estado civil', info.maritalStatus],
+    ['Email', info.email], ['WhatsApp', info.whatsapp],
+    ['Endereço', [info.street && `${info.street}, ${info.number || 's/n'}`, info.complement, info.neighborhood, info.city && info.state && `${info.city} - ${info.state}`, info.cep].filter(Boolean).join(' · ')],
+  ].filter(([, v]) => v);
+  return `<div class="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">${rows.map(([l, v]) => `<div><p class="text-xs text-white/30">${l}</p><p>${v}</p></div>`).join('')}</div>`;
+}
+function renderRegistrationCard(lead) {
+  if (!lead.onboardingStatus) return '';
+  const link = lead.registrationToken ? `${location.origin}${location.pathname.replace('admin/lead-detail.html', 'client/registration.html')}?token=${lead.registrationToken}` : null;
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Cadastro</p>
+    <p class="text-xs text-white/20 mb-4">Formulário simples e seguro — não expõe o painel normal da cliente, só o cadastro necessário para preparar o contrato.</p>
+    ${!lead.registrationToken ? `
+      <button id="generate-link" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Gerar link de cadastro</button>
+    ` : `
+      <div class="flex items-center gap-2 mb-3">
+        <input readonly class="field text-sm" style="flex:1;" value="${link}" onclick="this.select()" />
+        <button id="copy-link" class="btn-ghost">Copiar</button>
+      </div>
+      <div class="flex items-center gap-3 mb-4">
+        ${!lead.registrationSentAt ? '<button id="mark-sent" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar formulário de cadastro</button>' : `<span class="text-xs" style="color:var(--gold);">Enviado em ${formatDateTime(lead.registrationSentAt)}</span>`}
+      </div>
+      <div class="pt-4" style="border-top:1px solid var(--line);">
+        <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">${lead.registrationCompletedAt ? `Cadastro recebido em ${formatDate(lead.registrationCompletedAt)}` : 'Aguardando preenchimento'}</p>
+        ${registrationSummary(lead.registrationInfo)}
+      </div>
+    `}
+  `, 'mb-6');
+}
+
+// --- 3. Contrato — reuses the exact same ONBOARDING_STAGES clients use. --
+function renderContractCard(lead) {
+  if (!lead.registrationCompletedAt) return '';
+  const status = lead.contractStatus || 'info_pending';
+  return card(`
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm text-white/50">Contrato</p>
+      ${lead.onboardingStatus === 'registration_completed' || (lead.onboardingStatus === 'in_contract' && status === 'info_received') ? '<span class="text-xs" style="color:var(--gold);">Contrato pronto para preparação</span>' : ''}
+    </div>
+    <div class="flex items-center gap-2 mb-3">
+      <select id="contract-status" class="field text-sm">
+        ${ONBOARDING_STAGES.map((s) => `<option value="${s}" ${status === s ? 'selected' : ''}>${ONBOARDING_STAGE_LABEL[s]}</option>`).join('')}
+      </select>
+      <button id="update-contract-status" class="btn-ghost">Atualizar</button>
+    </div>
+    ${status === 'completed'
+      ? `<p class="text-xs" style="color:var(--gold);">Arquivado: ${lead.signedFileName || 'contrato-assinado.pdf'}</p>`
+      : `<button id="upload-signed-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Fazer upload do contrato autenticado</button>`}
+    <p class="text-xs text-white/30 mt-3">Assinatura acontece na plataforma externa de assinatura — o upload aqui é o que libera a ativação.</p>
+  `, 'mb-6');
+}
+
+// --- 4. Ativação — the only door into a real client row. -----------------
+function renderActivationCard(lead) {
+  if (lead.convertedToClientId) {
     return card(`
-      <p class="text-sm text-white/50 mb-3">Convertida em Cliente</p>
-      <p class="text-sm mb-4">Esta lead virou cliente em ${formatDate(lead.convertedAt)}.</p>
+      <p class="text-sm text-white/50 mb-3">Cliente Ativa</p>
+      <p class="text-sm mb-4">Ativada em ${formatDate(lead.convertedAt)} — acesso ao Persea OS liberado.</p>
       <a href="client-detail.html?id=${lead.convertedToClientId}" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver Perfil de Cliente</a>
     `, 'mb-6');
   }
+  if (lead.onboardingStatus !== 'ready_for_activation') return '';
   return card(`
-    <div class="flex items-center justify-between mb-3">
-      <p class="text-sm text-white/50">Converter em Cliente</p>
+    <p class="text-sm mb-1" style="color:var(--gold);">Pronta para ativação</p>
+    <p class="text-xs text-white/20 mb-4">Cadastro recebido e contrato assinado — ativar cria o perfil de cliente com tudo já preenchido (dados, condições comerciais e contrato) e libera o acesso dela ao Persea OS.</p>
+    <button id="activate-lead" class="btn-primary" style="padding:10px 20px;font-size:13px;">Ativar Cliente</button>
+  `, 'mb-6');
+}
+
+// --- 5. Histórico ----------------------------------------------------------
+function renderHistoryCard(lead) {
+  if (!lead.history || !lead.history.length) return '';
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Histórico do Onboarding</p>
+    <div class="space-y-2">
+      ${lead.history.map((h) => `<p class="text-xs text-white/40">${formatDateTime(h.at)} — ${h.text}</p>`).join('')}
     </div>
-    <p class="text-xs text-white/20 mb-4">Cria um novo perfil de cliente em onboarding, já com nome, email, WhatsApp e redes sociais preenchidos — o resto do fluxo continua normalmente em Clientes.</p>
-    <div class="flex items-center gap-3">
-      <select id="convert-tier" class="field text-sm" style="max-width:180px;">
-        <option value="essential">Jornada Essential</option>
-        <option value="premium">Jornada Premium</option>
-      </select>
-      <button id="convert-lead" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Converter em Cliente</button>
-    </div>
+  `, 'mb-6');
+}
+
+// --- Legacy quick-path — preserved, just demoted below the new flow. -----
+function renderLegacyConvertCard(lead) {
+  if (lead.convertedToClientId) return '';
+  return card(`
+    <details>
+      <summary class="text-sm cursor-pointer" style="color:var(--muted); list-style:none;">⚙ Converter em Cliente diretamente (pula o fluxo de cadastro/contrato)</summary>
+      <div class="mt-4">
+        <p class="text-xs text-white/20 mb-4">Cria o perfil de cliente em onboarding sem exigir cadastro ou contrato assinado — use só em casos excepcionais; o caminho normal é Ativar Cliente acima.</p>
+        <div class="flex items-center gap-3">
+          <select id="convert-tier" class="field text-sm" style="max-width:180px;">
+            <option value="essential">Jornada Essential</option>
+            <option value="premium">Jornada Premium</option>
+          </select>
+          <button id="convert-lead" class="btn-ghost">Converter em Cliente</button>
+        </div>
+      </div>
+    </details>
   `, 'mb-6');
 }
 
@@ -178,10 +323,62 @@ function render() {
 
   content.innerHTML = `
     ${renderHeader(lead)}
-    ${renderConvertCard(lead)}
+    ${renderCommercialCard(lead)}
+    ${renderRegistrationCard(lead)}
+    ${renderContractCard(lead)}
+    ${renderActivationCard(lead)}
+    ${renderHistoryCard(lead)}
+    ${renderLegacyConvertCard(lead)}
     ${renderInfoForm(lead)}
     ${renderInteractions(lead)}
   `;
+
+  content.querySelector('#commercial-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    MockDB.agreeSale(leadId, {
+      program: fd.get('program'), paymentMethod: fd.get('paymentMethod'),
+      installments: Number(fd.get('installments')) || 1, agreedAmount: Number(fd.get('agreedAmount')) || 0,
+      firstDueDate: fd.get('firstDueDate'), commercialNotes: fd.get('commercialNotes'), responsibleId: 'nay',
+    });
+    toast('Condições comerciais registradas.');
+    render();
+  });
+
+  content.querySelector('#generate-link')?.addEventListener('click', () => {
+    MockDB.generateRegistrationLink(leadId);
+    toast('Link de cadastro gerado.');
+    render();
+  });
+  content.querySelector('#copy-link')?.addEventListener('click', async (e) => {
+    const link = content.querySelector('#copy-link').previousElementSibling.value;
+    try { await navigator.clipboard.writeText(link); toast('Link copiado.'); }
+    catch { toast('Não foi possível copiar automaticamente — selecione e copie manualmente.', { tone: 'error' }); }
+  });
+  content.querySelector('#mark-sent')?.addEventListener('click', () => {
+    MockDB.markRegistrationSent(leadId);
+    toast('Cadastro marcado como enviado.');
+    render();
+  });
+
+  content.querySelector('#update-contract-status')?.addEventListener('click', () => {
+    MockDB.advanceLeadContractStatus(leadId, content.querySelector('#contract-status').value);
+    toast('Status do contrato atualizado.');
+    render();
+  });
+  content.querySelector('#upload-signed-contract')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Enviando…';
+    await MockDB.uploadLeadSignedContract(leadId, `contrato-${leadId}-assinado.pdf`);
+    toast('Contrato assinado enviado — pronta para ativação.');
+    render();
+  });
+
+  content.querySelector('#activate-lead')?.addEventListener('click', () => {
+    const result = MockDB.activateLead(leadId);
+    if (!result.ok) { toast('Não foi possível ativar — verifique cadastro e contrato.', { tone: 'error' }); return; }
+    toast('Cliente ativada — acesso ao Persea OS liberado!');
+    location.href = `client-detail.html?id=${result.clientId}`;
+  });
 
   content.querySelector('#lead-info-form').addEventListener('submit', (e) => {
     e.preventDefault();

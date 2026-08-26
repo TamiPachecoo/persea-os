@@ -7,6 +7,7 @@
 import {
   MockDB, LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL,
   VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL, PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL,
+  PROGRAM_LABEL_BY_SLUG, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
 import { renderShell, card, toast, formatDate, openModal } from '../shared/ui.js';
 
@@ -48,6 +49,35 @@ function leadRow(l) {
       </div>
     </a>
   `;
+}
+
+// Between sale and program activation — the Nova Persea pipeline (see
+// getOnboardingPipeline in mock-db.js), sorted so whatever most needs
+// Nay/the assistant's attention (ready to activate) is always on top.
+function onboardingRow(l) {
+  const summary = l.commercialTerms
+    ? `${PROGRAM_LABEL_BY_SLUG[l.program] || l.program || 'Programa a definir'} · R$ ${Number(l.commercialTerms.agreedAmount || 0).toLocaleString('pt-BR')} em ${l.commercialTerms.installments || 1}x`
+    : '';
+  return `
+    <a href="lead-detail.html?id=${l.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+      <div class="min-w-0">
+        <p class="font-medium">${l.fullName}</p>
+        <p class="text-xs text-white/30">${summary}</p>
+      </div>
+      <span class="badge ${LEAD_ONBOARDING_STATUS_BADGE_CLASS[l.onboardingStatus] || 'badge-locked'}">${l.pipelineLabel}</span>
+    </a>
+  `;
+}
+function renderOnboardingPipeline() {
+  const pipeline = MockDB.getOnboardingPipeline();
+  if (!pipeline.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Onboarding — Entre a Venda e a Ativação</p>
+      <span class="text-xs" style="color:var(--muted);">${pipeline.length}</span>
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">${pipeline.map(onboardingRow).join('')}</div>
+  `, 'mb-8');
 }
 
 function renderLeadsList() {
@@ -239,6 +269,7 @@ function openDynamicModal() {
 function render() {
   content.innerHTML = `
     ${renderKPIs()}
+    ${renderOnboardingPipeline()}
     ${renderLeadsList()}
     ${renderGroupDynamics()}
   `;

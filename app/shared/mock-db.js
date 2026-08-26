@@ -9,7 +9,7 @@
 
 import { blankAssessmentAnswers, blankOffer, blankFixedCost, blankVariableCost, blankReference } from './value-analysis-schema.js';
 
-const STORAGE_KEY = 'persea_mock_db_v26';
+const STORAGE_KEY = 'persea_mock_db_v27';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -581,6 +581,22 @@ export const LEAD_STAGE_LABEL = {
   convertido: 'Convertido em Cliente',
   perdido: 'Perdido',
 };
+// --- Post-sale onboarding (Nova Persea acquisition flow) — lives ON the
+// lead record itself: sale -> registration -> contract -> activation, all
+// before any db.clients row exists. This is deliberately a coarse status
+// (bookends only) — the contract stretch in the middle reuses the *existing*
+// ONBOARDING_STAGES/ONBOARDING_STAGE_LABEL vocabulary (see leadPipelineLabel
+// below) instead of inventing parallel contract words, so "Aguardando
+// Assinatura" etc. mean exactly one thing everywhere in the app.
+export const LEAD_ONBOARDING_STATUSES = ['sale_agreed', 'registration_sent', 'registration_completed', 'in_contract', 'ready_for_activation', 'client_active'];
+export const LEAD_ONBOARDING_STATUS_LABEL = {
+  sale_agreed: 'Venda Fechada', registration_sent: 'Cadastro Enviado', registration_completed: 'Cadastro Recebido',
+  in_contract: 'Contrato em Andamento', ready_for_activation: 'Pronta para Ativação', client_active: 'Cliente Ativa',
+};
+export const LEAD_ONBOARDING_STATUS_BADGE_CLASS = {
+  sale_agreed: 'badge-progress', registration_sent: 'badge-progress', registration_completed: 'badge-progress',
+  in_contract: 'badge-progress', ready_for_activation: 'badge-completed', client_active: 'badge-completed',
+};
 export const LEAD_SOURCES = ['vip_group', 'referral', 'organic', 'other'];
 export const LEAD_SOURCE_LABEL = {
   vip_group: 'Grupo VIP (WhatsApp)',
@@ -826,7 +842,20 @@ const SEED = {
         { id: 'li1', date: '2026-08-10T14:00:00', summary: 'Ligação rápida — perguntou sobre o formato do programa Persea (6 ou 12 meses) e como funciona o acompanhamento.' },
       ],
       convertedToClientId: null, convertedAt: null,
-      createdAt: '2026-07-15T09:00:00', updatedAt: '2026-08-10T14:00:00',
+      // Demo: sale closed on the call, registration link already sent —
+      // waiting on her to fill it in.
+      program: 'persea-essential', onboardingStatus: 'registration_sent',
+      commercialTerms: {
+        paymentMethod: 'cartao_credito', installments: 6, agreedAmount: 18000, firstDueDate: '2026-09-05',
+        commercialNotes: 'Fechou no plano semestral, parcelado no cartão em 6x.', responsibleId: 'nay', saleAgreedAt: '2026-08-18T15:00:00',
+      },
+      registrationToken: 'lead1-demo1234abcd5678', registrationInfo: null, registrationSentAt: '2026-08-18T16:00:00', registrationCompletedAt: null,
+      contractStatus: 'info_pending', signedFileName: null,
+      history: [
+        { type: 'registration_sent', text: 'Formulário de cadastro enviado à cliente.', at: '2026-08-18T16:00:00' },
+        { type: 'sale_agreed', text: 'Venda fechada — condições comerciais registradas.', at: '2026-08-18T15:00:00' },
+      ],
+      createdAt: '2026-07-15T09:00:00', updatedAt: '2026-08-18T16:00:00',
     },
     {
       id: 'lead2', fullName: 'Vanessa Tavares', email: 'vanessa.tavares@example.com', phone: '(31) 90000-1002',
@@ -847,7 +876,30 @@ const SEED = {
         { id: 'li3', date: '2026-08-08T16:30:00', summary: 'Proposta comercial enviada por email, aguardando retorno.' },
       ],
       convertedToClientId: null, convertedAt: null,
-      createdAt: '2026-07-28T09:00:00', updatedAt: '2026-08-08T16:30:00',
+      // Demo: registration completed, contract already signed — this is
+      // the "Ativar Cliente" state (see admin/lead-detail.js).
+      program: 'ascensao-imagem', onboardingStatus: 'ready_for_activation',
+      commercialTerms: {
+        paymentMethod: 'pix', installments: 1, agreedAmount: 6000, firstDueDate: '2026-08-20',
+        commercialNotes: 'Pagamento único via Pix, à vista com 5% de desconto já aplicado.', responsibleId: 'nay', saleAgreedAt: '2026-08-12T10:00:00',
+      },
+      registrationToken: 'lead3-demo9876zyxw4321', registrationCompletedAt: '2026-08-14T19:20:00', registrationSentAt: '2026-08-12T11:00:00',
+      registrationInfo: {
+        submitted: true, fullName: 'Fernanda Buono', socialName: '', birthDate: '1990-04-22', partyType: 'PF',
+        cpf: '345.678.901-22', rg: 'MG-19.887.223', profession: 'Palestrante', nationality: 'Brasileira', maritalStatus: 'Solteira',
+        cnpj: null, companyName: null, email: 'fernanda.buono@example.com', whatsapp: '(31) 90000-1003',
+        cep: '30140-071', street: 'Rua Pium-í', number: '255', complement: 'Apto 302', neighborhood: 'Serra', city: 'Belo Horizonte', state: 'MG',
+      },
+      contractStatus: 'completed', signedFileName: 'contrato-fernanda-buono-assinado.pdf',
+      history: [
+        { type: 'contract_signed', text: 'Contrato assinado enviado — pronta para ativação.', at: '2026-08-19T09:00:00' },
+        { type: 'contract_status_changed', text: 'Status do contrato: Aguardando Assinatura', at: '2026-08-16T10:00:00' },
+        { type: 'contract_status_changed', text: 'Status do contrato: Contrato Preparado', at: '2026-08-15T10:00:00' },
+        { type: 'registration_completed', text: 'Cadastro recebido da cliente.', at: '2026-08-14T19:20:00' },
+        { type: 'registration_sent', text: 'Formulário de cadastro enviado à cliente.', at: '2026-08-12T11:00:00' },
+        { type: 'sale_agreed', text: 'Venda fechada — condições comerciais registradas.', at: '2026-08-12T10:00:00' },
+      ],
+      createdAt: '2026-07-28T09:00:00', updatedAt: '2026-08-19T09:00:00',
     },
     {
       id: 'lead4', fullName: 'Isabela Prado', email: 'isabela.prado@example.com', phone: '(31) 90000-1004',
@@ -1864,6 +1916,21 @@ function client(db, id) {
   return db.clients[id];
 }
 
+// The Nova Persea registration form's shape — a superset of the older
+// onboarding.clientInfo (same fullName/partyType/cpf/cnpj/companyName/
+// email/whatsapp field names, so nothing downstream that already reads
+// clientInfo breaks), plus the structured personal/address fields the new
+// contract-prep step needs. See activateLead for how this merges into a
+// client's real onboarding.clientInfo once she's activated.
+function blankRegistrationInfo() {
+  return {
+    submitted: false, fullName: '', socialName: '', birthDate: '', partyType: 'PF', cpf: '', rg: '',
+    profession: '', nationality: '', maritalStatus: '', cnpj: null, companyName: null,
+    email: '', whatsapp: '',
+    cep: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '',
+  };
+}
+
 // --- Leitura Estratégica de Valor private helpers ---------------------------
 // --- Program Hub private helpers -------------------------------------------
 // Client-friendly primary-action copy per activity+status — the Painel's
@@ -2019,10 +2086,28 @@ export const MockDB = {
     });
   },
   getClient(id = DEFAULT_CLIENT_ID) {
-    return load().clients[id].profile;
+    // accessStatus defaults to 'created' (full access, no interstitial) for
+    // every pre-existing/legacy client — only activateLead explicitly sets
+    // 'pending' on a freshly-activated one, so this stays invisible unless
+    // a client actually goes through the new invitation step.
+    return { accessStatus: 'created', ...load().clients[id].profile };
   },
   getTenant() {
     return load().tenant;
+  },
+  // Stand-in for accepting a real Supabase invite/magic-link — there is no
+  // real auth in this prototype (see delivery report), so this just marks
+  // the interstitial as done. No password is ever generated or stored;
+  // wiring this to a real invite flow later only needs this one function's
+  // body replaced, nothing that calls it.
+  createClientAccess(id) {
+    const db = load();
+    const c = client(db, id);
+    if (!c) return null;
+    c.profile.accessStatus = 'created';
+    save(db);
+    this.logActivity(id, 'access_created', 'Acesso ao Persea OS criado pela cliente');
+    return c.profile;
   },
   setTenantHublaAllContentUrl(url) {
     const db = load();
@@ -4353,6 +4438,11 @@ export const MockDB = {
       source: 'vip_group', vipGroupStatus: 'in_group', stage: 'novo', interestedProgram: null,
       socialLinks: { ...BLANK_SOCIAL_LINKS }, notes: '', interactions: [],
       convertedToClientId: null, convertedAt: null,
+      // Post-sale onboarding fields (see LEAD_ONBOARDING_STATUSES) — null
+      // until agreeSale() starts the new flow for this lead.
+      program: null, onboardingStatus: null, commercialTerms: null,
+      registrationToken: null, registrationInfo: null, registrationSentAt: null, registrationCompletedAt: null,
+      contractStatus: null, signedFileName: null, history: [],
       createdAt: now, updatedAt: now, ...data,
     };
     db.leads.push(lead);
@@ -4388,6 +4478,188 @@ export const MockDB = {
     const converted = leads.filter((l) => l.stage === 'convertido').length;
     return { total, inGroup, converted, conversionRatePct: total ? Math.round((converted / total) * 100) : 0 };
   },
+
+  // --- Post-sale onboarding (see LEAD_ONBOARDING_STATUSES note above) ---
+  // The precise, Nay-facing label for wherever a lead actually is —
+  // reuses ONBOARDING_STAGE_LABEL for the contract stretch instead of a
+  // second vocabulary. Falls back to the old top-of-funnel LEAD_STAGE_LABEL
+  // for anything that never had a sale agreed yet.
+  getLeadPipelineLabel(lead) {
+    if (!lead.onboardingStatus) return LEAD_STAGE_LABEL[lead.stage] || lead.stage;
+    if (lead.onboardingStatus === 'registration_completed' && (!lead.contractStatus || lead.contractStatus === 'info_pending')) {
+      return 'Cadastro Recebido — Contrato Pendente';
+    }
+    if (lead.onboardingStatus === 'in_contract' && lead.contractStatus) {
+      return ONBOARDING_STAGE_LABEL[lead.contractStatus] || LEAD_ONBOARDING_STATUS_LABEL.in_contract;
+    }
+    return LEAD_ONBOARDING_STATUS_LABEL[lead.onboardingStatus] || lead.onboardingStatus;
+  },
+  // Every lead with a commercial agreement in flight, regardless of how far
+  // along — the "Onboarding" admin view's source list (see admin/leads.js).
+  // Ordered so whatever most needs Nay/the assistant's attention floats up:
+  // ready to activate first, then in-contract, then earlier stages.
+  getOnboardingPipeline() {
+    const weight = { ready_for_activation: 0, in_contract: 1, registration_completed: 2, registration_sent: 3, sale_agreed: 4 };
+    return load().leads
+      .filter((l) => l.onboardingStatus && l.onboardingStatus !== 'client_active')
+      .map((l) => ({ ...l, pipelineLabel: this.getLeadPipelineLabel(l) }))
+      .sort((a, b) => (weight[a.onboardingStatus] ?? 9) - (weight[b.onboardingStatus] ?? 9));
+  },
+  // Nay/assistant enter what was agreed on the sales call — the client
+  // never sees or edits these terms from her registration form.
+  agreeSale(id, { program, paymentMethod, installments, agreedAmount, firstDueDate, commercialNotes, responsibleId }) {
+    const db = load();
+    const lead = db.leads.find((l) => l.id === id);
+    if (!lead) return null;
+    lead.program = program || lead.program || null;
+    lead.commercialTerms = {
+      paymentMethod: paymentMethod || null, installments: installments || null, agreedAmount: agreedAmount ?? null,
+      firstDueDate: firstDueDate || null, commercialNotes: commercialNotes || '', responsibleId: responsibleId || null,
+      saleAgreedAt: new Date().toISOString(),
+    };
+    lead.onboardingStatus = 'sale_agreed';
+    lead.updatedAt = new Date().toISOString();
+    save(db);
+    this.logLeadHistory(id, 'sale_agreed', 'Venda fechada — condições comerciais registradas.');
+    return lead;
+  },
+  // Idempotent — calling it again just returns the same link rather than
+  // invalidating whatever the client may already have open.
+  generateRegistrationLink(id) {
+    const db = load();
+    const lead = db.leads.find((l) => l.id === id);
+    if (!lead) return null;
+    if (!lead.registrationToken) {
+      lead.registrationToken = `${id}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+      save(db);
+    }
+    return lead.registrationToken;
+  },
+  markRegistrationSent(id) {
+    const db = load();
+    const lead = db.leads.find((l) => l.id === id);
+    if (!lead) return null;
+    lead.registrationSentAt = new Date().toISOString();
+    if (lead.onboardingStatus === 'sale_agreed') lead.onboardingStatus = 'registration_sent';
+    save(db);
+    this.logLeadHistory(id, 'registration_sent', 'Formulário de cadastro enviado à cliente.');
+    return lead;
+  },
+  // Public-safe lookup for the registration page (see client/registration.js)
+  // — the only entry point an unauthenticated visitor has into any lead
+  // data, and deliberately returns just what the form needs to render,
+  // never commercial notes/responsible/internal fields. A wrong or made-up
+  // token returns null, same as one that belonged to a since-finalized
+  // onboarding (see below) — no signal either way about whether it ever
+  // existed. Real cross-account isolation still requires a real backend;
+  // see the report note on this.
+  getLeadByToken(token) {
+    if (!token) return null;
+    const lead = load().leads.find((l) => l.registrationToken === token);
+    if (!lead) return null;
+    return {
+      id: lead.id, fullName: lead.fullName, program: lead.program,
+      registrationInfo: lead.registrationInfo || blankRegistrationInfo(),
+      alreadySubmitted: !!lead.registrationCompletedAt,
+    };
+  },
+  submitRegistration(token, info) {
+    const db = load();
+    const lead = db.leads.find((l) => l.registrationToken === token);
+    if (!lead) return { ok: false, error: 'invalid_token' };
+    lead.registrationInfo = { ...blankRegistrationInfo(), ...info, submitted: true };
+    lead.registrationCompletedAt = new Date().toISOString();
+    lead.onboardingStatus = 'registration_completed';
+    lead.updatedAt = new Date().toISOString();
+    save(db);
+    this.logLeadHistory(lead.id, 'registration_completed', 'Cadastro recebido da cliente.');
+    return { ok: true };
+  },
+  // Reuses ONBOARDING_STAGES verbatim (see const above) — same contract
+  // sub-lifecycle a client already progresses through post-activation.
+  advanceLeadContractStatus(id, status) {
+    const db = load();
+    const lead = db.leads.find((l) => l.id === id);
+    if (!lead) return null;
+    lead.contractStatus = status;
+    if (lead.onboardingStatus === 'registration_completed' || lead.onboardingStatus === 'sale_agreed') lead.onboardingStatus = 'in_contract';
+    if (status === 'completed') lead.onboardingStatus = 'ready_for_activation';
+    lead.updatedAt = new Date().toISOString();
+    save(db);
+    this.logLeadHistory(id, 'contract_status_changed', `Status do contrato: ${ONBOARDING_STAGE_LABEL[status] || status}`);
+    return lead;
+  },
+  async uploadLeadSignedContract(id, fileName) {
+    await delay(600);
+    const db = load();
+    const lead = db.leads.find((l) => l.id === id);
+    if (!lead) return null;
+    lead.signedFileName = fileName;
+    lead.contractStatus = 'completed';
+    lead.onboardingStatus = 'ready_for_activation';
+    lead.updatedAt = new Date().toISOString();
+    save(db);
+    this.logLeadHistory(id, 'contract_signed', 'Contrato assinado enviado — pronta para ativação.');
+    return lead;
+  },
+  // Same "one running log" convention as whatsappNotes/activity elsewhere —
+  // guards against a duplicate entry if an action is retried (e.g. clicking
+  // "marcar como enviado" twice), per the "avoid duplicate history" ask.
+  logLeadHistory(id, type, text) {
+    const db = load();
+    const lead = db.leads.find((l) => l.id === id);
+    if (!lead) return;
+    lead.history = lead.history || [];
+    const last = lead.history[0];
+    if (last && last.type === type && last.text === text) return;
+    lead.history.unshift({ type, text, at: new Date().toISOString() });
+    save(db);
+  },
+  // The only door into db.clients for a post-sale lead — gated on exactly
+  // "contract signed + onboarding ready" per the methodology, so a client
+  // row (and therefore any OS access) cannot exist before that. Internally
+  // reuses convertLeadToClient (the pre-existing, still-available quick
+  // path) and folds in everything collected since: her registration answers
+  // and Nay's commercial terms, so nothing already typed is asked for again.
+  activateLead(id) {
+    const lead = this.getLead(id);
+    if (!lead) return { ok: false, error: 'not_found' };
+    if (lead.convertedToClientId) return { ok: true, clientId: lead.convertedToClientId }; // no duplicate client rows on retry
+    if (lead.onboardingStatus !== 'ready_for_activation') return { ok: false, error: 'not_ready' };
+    const tier = lead.program === 'persea-premium' ? 'premium' : 'essential';
+    const clientId = this.convertLeadToClient(id, { tier, programSlug: lead.program || 'persea-essential' });
+    if (!clientId) return { ok: false, error: 'convert_failed' };
+    const db = load();
+    const c = db.clients[clientId];
+    const reg = lead.registrationInfo || {};
+    const ct = lead.commercialTerms || {};
+    c.profile.status = 'active'; // she already paid + signed — never "onboarding" from her own side
+    // Invitation-based access (see item 8): she gets a "create your access"
+    // interstitial the first time the client side loads for her, instead of
+    // a visible password. See client/dashboard.js + createClientAccess.
+    c.profile.accessStatus = 'pending';
+    c.onboarding.clientInfo = {
+      ...c.onboarding.clientInfo, ...reg, submitted: true,
+      address: reg.street
+        ? `${reg.street}, ${reg.number || 's/n'}${reg.complement ? ' - ' + reg.complement : ''} - ${reg.neighborhood || ''}, ${reg.city || ''} - ${reg.state || ''}`.trim()
+        : c.onboarding.clientInfo.address,
+    };
+    c.onboarding.contract = {
+      ...c.onboarding.contract, program: lead.program || null, value: ct.agreedAmount ?? null,
+      paymentMethod: ct.paymentMethod || null, installments: ct.installments || null,
+      status: 'completed', signedFileName: lead.signedFileName || null,
+      notes: ct.commercialNotes || c.onboarding.contract.notes,
+    };
+    c.activity.unshift({ type: 'lead_activated', text: 'Cliente ativada — onboarding comercial concluído.', at: new Date().toISOString() });
+    save(db);
+    const db2 = load();
+    const leadAfter = db2.leads.find((l) => l.id === id);
+    leadAfter.onboardingStatus = 'client_active';
+    save(db2);
+    this.logLeadHistory(id, 'client_activated', 'Cliente ativada — acesso ao Persea OS liberado.');
+    return { ok: true, clientId };
+  },
+
   // Promotes a lead into a real client record — same shape/defaults as a
   // fresh onboarding-stage client elsewhere in this seed (locked journey
   // steps, blank questionnaire, no playbook yet), so it drops straight into

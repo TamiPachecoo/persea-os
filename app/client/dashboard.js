@@ -307,3 +307,27 @@ function renderMeetingRequestCard() {
     renderMeetingRequestCard();
   });
 }
+
+// --- Invitation-based access (Nova Persea item 8) — a freshly-activated
+// client (see MockDB.activateLead) lands here once, before ever seeing the
+// real Painel content above. No password is generated or shown; "Criar meu
+// acesso" just clears the flag (see createClientAccess) — the real
+// Supabase invite/magic-link flow this stands in for isn't connected in
+// this prototype (see delivery report), so this is intentionally the
+// smallest honest placeholder for it, not a fake success message.
+if (client.accessStatus === 'pending') {
+  content.innerHTML = `
+    <div class="min-h-[60vh] flex items-center justify-center">
+      <div class="max-w-md w-full text-center">
+        <p class="eyebrow mb-4">Persea</p>
+        <h1 class="font-serif text-3xl mb-4">Bem-vinda ao Persea</h1>
+        <p class="text-sm mb-8" style="color:var(--muted); line-height:1.7;">Seu espaço está pronto. Crie seu acesso para começar sua jornada.</p>
+        <button id="create-access" class="btn-primary" style="padding:12px 28px;font-size:13.5px;">Criar meu acesso</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('create-access').addEventListener('click', () => {
+    MockDB.createClientAccess(activeClientId);
+    location.reload();
+  });
+}

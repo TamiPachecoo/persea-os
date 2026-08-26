@@ -1,4 +1,4 @@
-import { MockDB, TIER_PHASES, MOOD_SCALE, ONBOARDING_STAGE_LABEL, AGENDA_TYPE_LABEL, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, LEAD_STAGE_LABEL, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL } from '../shared/mock-db.js';
+import { MockDB, TIER_PHASES, MOOD_SCALE, ONBOARDING_STAGE_LABEL, AGENDA_TYPE_LABEL, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, LEAD_STAGE_LABEL, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, formatDateTime, formatDate, toast } from '../shared/ui.js';
 
 const VALUE_OVERVIEW_ROWS = [
@@ -89,7 +89,12 @@ function renderAssistantExceptionsCard() {
 
 function renderLeadsSnapshotCard() {
   const s = MockDB.getLeadsSummary();
-  const active = MockDB.getLeads()
+  // Onboarding pipeline (post-sale, pre-activation) takes priority over the
+  // older top-of-funnel "em conversa" view — it's the one that actually
+  // needs Nay's action right now. Falls back to the old view when nothing's
+  // in that pipeline yet, so this card is never empty for no reason.
+  const pipeline = MockDB.getOnboardingPipeline();
+  const active = pipeline.length ? pipeline : MockDB.getLeads()
     .filter((l) => ['em_conversa', 'proposta_enviada'].includes(l.stage))
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   return card(`
@@ -104,12 +109,12 @@ function renderLeadsSnapshotCard() {
       <div><p class="text-2xl font-serif">${s.conversionRatePct}%</p><p class="text-white/40 text-xs mt-1">Taxa de Conversão</p></div>
     </div>
     ${active.length ? `
-      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.12em;">Em Andamento</p>
+      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.12em;">${pipeline.length ? 'Onboarding — Entre a Venda e a Ativação' : 'Em Andamento'}</p>
       <div class="divide-y" style="border-color:var(--line);">
         ${active.slice(0, 5).map((l) => `
           <a href="lead-detail.html?id=${l.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
             <span class="text-sm">${l.fullName}</span>
-            <span class="badge ${LEAD_STAGE_CLASS[l.stage] || 'badge-locked'}">${LEAD_STAGE_LABEL[l.stage]}</span>
+            <span class="badge ${l.onboardingStatus ? (LEAD_ONBOARDING_STATUS_BADGE_CLASS[l.onboardingStatus] || 'badge-locked') : (LEAD_STAGE_CLASS[l.stage] || 'badge-locked')}">${l.pipelineLabel || LEAD_STAGE_LABEL[l.stage]}</span>
           </a>
         `).join('')}
       </div>
