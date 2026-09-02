@@ -8,12 +8,14 @@
 import {
   MockDB, LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL,
   VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL, PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL,
-  PROGRAM_DEFS, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL,
+  PROGRAM_DEFS, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, ONBOARDING_STAGE_LABEL,
   LEAD_ONBOARDING_STATUS_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
 import { renderShell, card, toast, formatDate, formatDateTime, openModal, renderSocialLinks } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
-document.body.innerHTML = renderShell({ role: 'admin', active: 'leads.html' });
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
+document.body.innerHTML = renderShell({ role: 'admin', active: 'crm.html' });
 const content = document.getElementById('app-content');
 
 const leadId = new URLSearchParams(location.search).get('id');
@@ -29,7 +31,7 @@ function renderHeader(lead) {
     ? `<span class="badge ${LEAD_ONBOARDING_STATUS_BADGE_CLASS[lead.onboardingStatus] || 'badge-locked'}">${MockDB.getLeadPipelineLabel(lead)}</span>`
     : stageBadge(lead.stage);
   return `
-    <a href="leads.html" class="btn-text mb-4 inline-block">&larr; Todos os leads</a>
+    <a href="crm.html?section=leads" class="btn-text mb-4 inline-block">&larr; Todos os leads</a>
     <div class="mb-6 flex items-start justify-between flex-wrap gap-3">
       <div>
         <h1 class="text-2xl font-serif">${lead.fullName || '(sem nome)'}</h1>
@@ -42,58 +44,100 @@ function renderHeader(lead) {
 }
 
 // --- 1. Condições Comerciais — Nay/team enter what was agreed on the call.
-// The client never sees or edits this from her registration form. ---------
+// The client never sees or edits this from her registration form. Payment
+// terms are a free-form, ordered list of lines (same model used everywhere
+// else this gets entered — client onboarding, real contract): any number
+// of payments, each its own amount/method/optional date, in any
+// combination — an entrada, a Pix deposit mid-plan, card installments,
+// whatever was actually agreed. These lines carry straight onto the
+// client's own Plano de Pagamento the moment she's activated (see
+// MockDB.activateLead), so nobody re-types the schedule after this. -------
+function commercialLineRowHtml(l = {}) {
+  return `
+    <div class="flex items-center gap-2 py-2 flex-wrap commercial-line-row">
+      <input type="number" min="0" step="0.01" class="field text-sm" style="width:110px;" data-line-amount placeholder="Valor R$" value="${l.amount ?? ''}" />
+      <select class="field text-sm" style="width:160px;" data-line-method>
+        <option value="">Forma —</option>
+        ${PAYMENT_METHODS.map((m) => `<option value="${m}" ${l.method === m ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}
+      </select>
+      <input type="date" class="field text-sm" style="width:150px;" data-line-date value="${l.dueDate || ''}" />
+      <input type="text" class="field text-sm" style="flex:1; min-width:110px;" data-line-label placeholder="Nota (opcional — ex.: Entrada)" value="${l.label || ''}" />
+      <button type="button" class="btn-text" data-remove-line>Remover</button>
+    </div>
+  `;
+}
+
 function renderCommercialCard(lead) {
   const ct = lead.commercialTerms || {};
+  const lines = ct.paymentLines?.length ? ct.paymentLines : [{}];
   return card(`
     <div class="flex items-center justify-between mb-1">
       <p class="text-sm text-white/50">Condições Comerciais</p>
-      ${lead.onboardingStatus ? `<span class="text-xs" style="color:var(--gold);">Venda fechada${ct.saleAgreedAt ? ` em ${formatDate(ct.saleAgreedAt)}` : ''}</span>` : ''}
+      ${lead.onboardingStatus ? `<span class="text-xs" style="color:var(--gold);">Condições registradas${ct.saleAgreedAt ? ` em ${formatDate(ct.saleAgreedAt)}` : ''}</span>` : ''}
     </div>
-    <p class="text-xs text-white/20 mb-4">Preenchido por quem fechou a venda — a cliente não escolhe nem edita essas condições no formulário dela.</p>
+    <p class="text-xs text-white/20 mb-4">Preenchido por quem conduziu a conversa — a cliente não escolhe nem edita essas condições no formulário dela. O negócio só é considerado fechado quando a primeira parcela é paga.</p>
     <form id="commercial-form" class="space-y-4">
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Programa Acordado</label>
-          <select name="program" class="field text-sm" required>
-            <option value="">Selecione</option>
-            ${PROGRAM_DEFS.map((p) => `<option value="${p.slug}" ${lead.program === p.slug ? 'selected' : ''}>${p.name}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Forma de Pagamento</label>
-          <select name="paymentMethod" class="field text-sm" required>
-            <option value="">Selecione</option>
-            ${PAYMENT_METHODS.map((m) => `<option value="${m}" ${ct.paymentMethod === m ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}
-          </select>
-        </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Programa Acordado</label>
+        <select name="program" class="field text-sm" required>
+          <option value="">Selecione</option>
+          ${PROGRAM_DEFS.map((p) => `<option value="${p.slug}" ${lead.program === p.slug ? 'selected' : ''}>${p.name}</option>`).join('')}
+        </select>
       </div>
-      <div class="grid sm:grid-cols-3 gap-4">
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Valor Total Acordado</label>
-          <input name="agreedAmount" type="number" min="0" step="0.01" class="field text-sm" value="${ct.agreedAmount ?? ''}" required />
+      <div class="pt-2" style="border-top:1px solid var(--line);">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-xs text-white/40">Pagamentos Acordados <span class="text-white/20">(entrada, depósitos, parcelas — qualquer combinação e ordem)</span></p>
+          <p class="text-xs text-white/30">Total: <strong id="commercial-lines-total" style="color:var(--gold);">R$ 0,00</strong></p>
         </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Número de Parcelas</label>
-          <input name="installments" type="number" min="1" class="field text-sm" value="${ct.installments ?? 1}" required />
-        </div>
-        <div>
-          <label class="text-xs text-white/40 block mb-1">Primeiro Vencimento</label>
-          <input name="firstDueDate" type="date" class="field text-sm" value="${ct.firstDueDate || ''}" required />
-        </div>
+        <div id="commercial-lines">${lines.map((l) => commercialLineRowHtml(l)).join('')}</div>
+        <button type="button" id="add-commercial-line" class="btn-text mt-1">+ Adicionar Pagamento</button>
       </div>
       <div>
-        <label class="text-xs text-white/40 block mb-1">Notas Comerciais / Condição Negociada</label>
-        <textarea name="commercialNotes" rows="2" class="field text-sm">${ct.commercialNotes || ''}</textarea>
+        <label class="text-xs text-white/40 block mb-1">Detalhes do Acordo <span class="text-white/20">(condições especiais, contexto da negociação)</span></label>
+        <textarea name="commercialNotes" rows="2" class="field text-sm" placeholder="Ex.: desconto de 10% por indicação.">${ct.commercialNotes || ''}</textarea>
       </div>
       <div class="flex justify-end">
-        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${lead.onboardingStatus ? 'Atualizar Condições' : 'Registrar Venda Fechada'}</button>
+        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${lead.onboardingStatus ? 'Atualizar Condições' : 'Concluir'}</button>
       </div>
     </form>
   `, 'mb-6');
 }
 
-// --- 2. Cadastro — secure registration link + what she submitted. --------
+function wireCommercialLines(root) {
+  const linesEl = root.querySelector('#commercial-lines');
+  const totalEl = root.querySelector('#commercial-lines-total');
+  if (!linesEl) return;
+  function recalcTotal() {
+    let cents = 0;
+    linesEl.querySelectorAll('[data-line-amount]').forEach((input) => { cents += Math.round((parseFloat(input.value) || 0) * 100); });
+    totalEl.textContent = (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  linesEl.addEventListener('input', (e) => { if (e.target.matches('[data-line-amount]')) recalcTotal(); });
+  linesEl.addEventListener('click', (e) => {
+    if (!e.target.matches('[data-remove-line]')) return;
+    const row = e.target.closest('.commercial-line-row');
+    if (linesEl.children.length > 1) row.remove();
+    else row.querySelectorAll('input, select').forEach((el) => { el.value = ''; });
+    recalcTotal();
+  });
+  root.querySelector('#add-commercial-line')?.addEventListener('click', () => {
+    linesEl.insertAdjacentHTML('beforeend', commercialLineRowHtml());
+  });
+  recalcTotal();
+}
+
+function readCommercialLines(root) {
+  return [...root.querySelectorAll('.commercial-line-row')].map((row) => ({
+    amount: Math.round((parseFloat(row.querySelector('[data-line-amount]').value) || 0) * 100) / 100,
+    method: row.querySelector('[data-line-method]').value || null,
+    dueDate: row.querySelector('[data-line-date]').value || null,
+    label: row.querySelector('[data-line-label]').value.trim() || null,
+  })).filter((l) => l.amount > 0);
+}
+
+// --- 2. Cadastro — one link, one button. Nay is usually still on the call
+// or in WhatsApp with the client right now, so this needs to be copy-and-
+// send in a single click, not generate-then-copy-then-mark-sent. -----------
 function registrationSummary(info) {
   if (!info || !info.submitted) return '<p class="text-sm" style="color:var(--muted);">Ainda não preenchido.</p>';
   const rows = [
@@ -105,52 +149,44 @@ function registrationSummary(info) {
   return `<div class="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">${rows.map(([l, v]) => `<div><p class="text-xs text-white/30">${l}</p><p>${v}</p></div>`).join('')}</div>`;
 }
 function renderRegistrationCard(lead) {
-  if (!lead.onboardingStatus) return '';
-  const link = lead.registrationToken ? `${location.origin}${location.pathname.replace('admin/lead-detail.html', 'client/registration.html')}?token=${lead.registrationToken}` : null;
+  if (!lead.onboardingStatus || !lead.registrationToken) return '';
+  // location.origin inherits whatever protocol this admin page itself
+  // happened to load under — if the browser auto-upgraded localhost to
+  // https (Chrome's "Always use secure connections", a stale HSTS entry),
+  // the copied link silently breaks with ERR_SSL_PROTOCOL_ERROR, since the
+  // local dev server only ever speaks plain HTTP. Force http:// for
+  // localhost/127.0.0.1 specifically — real deployed hosts keep https.
+  const isLocalDev = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  const origin = isLocalDev ? `http://${location.host}` : location.origin;
+  const link = `${origin}${location.pathname.replace('admin/lead-detail.html', 'client/registration.html')}?token=${lead.registrationToken}`;
   return card(`
     <p class="text-sm text-white/50 mb-1">Cadastro</p>
-    <p class="text-xs text-white/20 mb-4">Formulário simples e seguro — não expõe o painel normal da cliente, só o cadastro necessário para preparar o contrato.</p>
-    ${!lead.registrationToken ? `
-      <button id="generate-link" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Gerar link de cadastro</button>
-    ` : `
-      <div class="flex items-center gap-2 mb-3">
-        <input readonly class="field text-sm" style="flex:1;" value="${link}" onclick="this.select()" />
-        <button id="copy-link" class="btn-ghost">Copiar</button>
-      </div>
-      <div class="flex items-center gap-3 mb-4">
-        ${!lead.registrationSentAt ? '<button id="mark-sent" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar formulário de cadastro</button>' : `<span class="text-xs" style="color:var(--gold);">Enviado em ${formatDateTime(lead.registrationSentAt)}</span>`}
-      </div>
-      <div class="pt-4" style="border-top:1px solid var(--line);">
-        <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">${lead.registrationCompletedAt ? `Cadastro recebido em ${formatDate(lead.registrationCompletedAt)}` : 'Aguardando preenchimento'}</p>
-        ${registrationSummary(lead.registrationInfo)}
-      </div>
-    `}
+    <p class="text-xs text-white/20 mb-4">Link pronto assim que a venda é fechada — copie e mande direto no WhatsApp com o cliente.</p>
+    <div class="flex items-center gap-2 mb-4">
+      <input readonly class="field text-sm" style="flex:1;" value="${link}" onclick="this.select()" />
+      <button id="copy-link" class="btn-primary" style="padding:9px 18px;font-size:12.5px; white-space:nowrap;">${lead.registrationSentAt ? 'Copiar de Novo' : 'Copiar Link'}</button>
+    </div>
+    ${lead.registrationSentAt ? `<p class="text-xs mb-4" style="color:var(--gold);">Enviado em ${formatDateTime(lead.registrationSentAt)}</p>` : ''}
+    <div class="pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">${lead.registrationCompletedAt ? `Cadastro recebido em ${formatDate(lead.registrationCompletedAt)} — agora com a assistente` : 'Aguardando preenchimento'}</p>
+      ${registrationSummary(lead.registrationInfo)}
+    </div>
   `, 'mb-6');
 }
 
-// --- 3. Contrato — reuses the exact same ONBOARDING_STAGES clients use. --
+// --- 3/4. Contrato + Ativação — read-only here. Once o cadastro chega, o
+// upload do contrato e o "Ativar Cliente" são ações da assistente (ver
+// assistant/leads.html) — essa página só mostra pra Nay onde as coisas
+// estão, sem duplicar os botões de ação em dois lugares. -------------------
 function renderContractCard(lead) {
   if (!lead.registrationCompletedAt) return '';
   const status = lead.contractStatus || 'info_pending';
   return card(`
-    <div class="flex items-center justify-between mb-1">
-      <p class="text-sm text-white/50">Contrato</p>
-      ${lead.onboardingStatus === 'registration_completed' || (lead.onboardingStatus === 'in_contract' && status === 'info_received') ? '<span class="text-xs" style="color:var(--gold);">Contrato pronto para preparação</span>' : ''}
-    </div>
-    <div class="flex items-center gap-2 mb-3">
-      <select id="contract-status" class="field text-sm">
-        ${ONBOARDING_STAGES.map((s) => `<option value="${s}" ${status === s ? 'selected' : ''}>${ONBOARDING_STAGE_LABEL[s]}</option>`).join('')}
-      </select>
-      <button id="update-contract-status" class="btn-ghost">Atualizar</button>
-    </div>
-    ${status === 'completed'
-      ? `<p class="text-xs" style="color:var(--gold);">Arquivado: ${lead.signedFileName || 'contrato-assinado.pdf'}</p>`
-      : `<button id="upload-signed-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Fazer upload do contrato autenticado</button>`}
-    <p class="text-xs text-white/30 mt-3">Assinatura acontece na plataforma externa de assinatura — o upload aqui é o que libera a ativação.</p>
+    <p class="text-sm text-white/50 mb-1">Contrato</p>
+    <p class="text-xs text-white/20 mb-4">Upload do contrato assinado é feito pela assistente.</p>
+    <p class="text-sm">${ONBOARDING_STAGE_LABEL[status] || status}${status === 'completed' ? ` — ${lead.signedFileName || 'contrato-assinado.pdf'}` : ''}</p>
   `, 'mb-6');
 }
-
-// --- 4. Ativação — the only door into a real client row. -----------------
 function renderActivationCard(lead) {
   if (lead.convertedToClientId) {
     return card(`
@@ -162,8 +198,7 @@ function renderActivationCard(lead) {
   if (lead.onboardingStatus !== 'ready_for_activation') return '';
   return card(`
     <p class="text-sm mb-1" style="color:var(--gold);">Pronta para ativação</p>
-    <p class="text-xs text-white/20 mb-4">Cadastro recebido e contrato assinado — ativar cria o perfil de cliente com tudo já preenchido (dados, condições comerciais e contrato) e libera o acesso dela ao Persea OS.</p>
-    <button id="activate-lead" class="btn-primary" style="padding:10px 20px;font-size:13px;">Ativar Cliente</button>
+    <p class="text-xs text-white/20">Cadastro recebido e contrato assinado — a assistente ativa o acesso dela no painel de Cadastros.</p>
   `, 'mb-6');
 }
 
@@ -317,7 +352,7 @@ function openInteractionModal() {
 function render() {
   const lead = MockDB.getLead(leadId);
   if (!lead) {
-    content.innerHTML = `<a href="leads.html" class="btn-text">&larr; Todos os leads</a><p class="mt-6 text-sm" style="color:var(--muted);">Lead não encontrada.</p>`;
+    content.innerHTML = `<a href="crm.html?section=leads" class="btn-text">&larr; Todos os leads</a><p class="mt-6 text-sm" style="color:var(--muted);">Lead não encontrada.</p>`;
     return;
   }
 
@@ -333,51 +368,25 @@ function render() {
     ${renderInteractions(lead)}
   `;
 
+  wireCommercialLines(content);
   content.querySelector('#commercial-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const paymentLines = readCommercialLines(content);
+    if (!paymentLines.length) { toast('Adicione ao menos um pagamento com valor.', { tone: 'error' }); return; }
     MockDB.agreeSale(leadId, {
-      program: fd.get('program'), paymentMethod: fd.get('paymentMethod'),
-      installments: Number(fd.get('installments')) || 1, agreedAmount: Number(fd.get('agreedAmount')) || 0,
-      firstDueDate: fd.get('firstDueDate'), commercialNotes: fd.get('commercialNotes'), responsibleId: 'nay',
+      program: fd.get('program'), paymentLines, commercialNotes: fd.get('commercialNotes'), responsibleId: 'nay',
     });
     toast('Condições comerciais registradas.');
     render();
   });
 
-  content.querySelector('#generate-link')?.addEventListener('click', () => {
-    MockDB.generateRegistrationLink(leadId);
-    toast('Link de cadastro gerado.');
-    render();
-  });
-  content.querySelector('#copy-link')?.addEventListener('click', async (e) => {
+  content.querySelector('#copy-link')?.addEventListener('click', async () => {
     const link = content.querySelector('#copy-link').previousElementSibling.value;
-    try { await navigator.clipboard.writeText(link); toast('Link copiado.'); }
+    try { await navigator.clipboard.writeText(link); toast('Link copiado — cole no WhatsApp da cliente.'); }
     catch { toast('Não foi possível copiar automaticamente — selecione e copie manualmente.', { tone: 'error' }); }
-  });
-  content.querySelector('#mark-sent')?.addEventListener('click', () => {
     MockDB.markRegistrationSent(leadId);
-    toast('Cadastro marcado como enviado.');
     render();
-  });
-
-  content.querySelector('#update-contract-status')?.addEventListener('click', () => {
-    MockDB.advanceLeadContractStatus(leadId, content.querySelector('#contract-status').value);
-    toast('Status do contrato atualizado.');
-    render();
-  });
-  content.querySelector('#upload-signed-contract')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Enviando…';
-    await MockDB.uploadLeadSignedContract(leadId, `contrato-${leadId}-assinado.pdf`);
-    toast('Contrato assinado enviado — pronta para ativação.');
-    render();
-  });
-
-  content.querySelector('#activate-lead')?.addEventListener('click', () => {
-    const result = MockDB.activateLead(leadId);
-    if (!result.ok) { toast('Não foi possível ativar — verifique cadastro e contrato.', { tone: 'error' }); return; }
-    toast('Cliente ativada — acesso ao Persea OS liberado!');
-    location.href = `client-detail.html?id=${result.clientId}`;
   });
 
   content.querySelector('#lead-info-form').addEventListener('submit', (e) => {

@@ -9,12 +9,14 @@ import {
   ASSISTANT_PERSONAS, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL,
 } from '../shared/mock-db.js';
 import { renderShell, card, formatDateTime, toast, openModal } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
 const AGENDA_TYPE_ICON = {
-  class: '🎓', individual_meeting: '👤', group_meeting: '👥',
+  class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
   online_event: '🌐', admin_task: '🗂️', deadline: '⏰', photo_review: '📸',
 };
 
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'agenda.html', title: 'Agenda' });
 const content = document.getElementById('app-content');
 

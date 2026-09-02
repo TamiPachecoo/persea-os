@@ -5,10 +5,10 @@
 // (PROTOTYPE — see docs/google-meet-integration.md); only ever this
 // client's own, via MockDB.getClientMeetingsWithRecording's clientId filter.
 import { MockDB, getActiveClientId, AGENDA_TYPE_LABEL, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, formatDateTime, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock } from '../shared/ui.js';
+import { renderShell, card, formatDateTime, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock, renderEncounterRequestsCard, wireEncounterRequestForms } from '../shared/ui.js';
 
 const AGENDA_TYPE_ICON = {
-  class: '🎓', individual_meeting: '👤', group_meeting: '👥', online_event: '🌐', photo_review: '📸',
+  class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥', online_event: '🌐', photo_review: '📸',
 };
 const AGENDA_STATUS_BADGE = { upcoming: 'badge-progress', completed: 'badge-completed', rescheduled: 'badge-locked', cancelled: 'badge-locked' };
 
@@ -19,7 +19,36 @@ const content = document.getElementById('app-content');
 
 // Only meeting-like types belong here — admin_task/deadline are Nay's
 // internal operational items, never meant for the client to see.
-const MEETING_TYPES = new Set(['class', 'individual_meeting', 'group_meeting', 'online_event', 'photo_review']);
+const MEETING_TYPES = new Set(['class', 'individual_meeting', 'checkpoint', 'group_meeting', 'online_event', 'photo_review']);
+
+// "How many of these did we actually do" — same numbers Nay sees on her
+// side (see MockDB.getMeetingsUsage), so there's one answer to that
+// question, not a client-side guess from scrolling the list below.
+function usageSummary() {
+  const usage = MockDB.getMeetingsUsage(clientId);
+  if (!usage) return '';
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Seus Encontros na Jornada</p>
+    <div class="grid sm:grid-cols-3 gap-6">
+      <div>
+        <p class="text-xs text-white/30 mb-1">Encontros Individuais</p>
+        <p class="text-2xl font-serif">${usage.encounters.completed} <span class="text-sm text-white/30">de ${usage.encounters.total}</span></p>
+      </div>
+      ${usage.checkpoints ? `
+        <div>
+          <p class="text-xs text-white/30 mb-1">Check-ins (30min)</p>
+          <p class="text-2xl font-serif">${usage.checkpoints.completed} <span class="text-sm text-white/30">de ${usage.checkpoints.total}</span></p>
+          ${usage.checkpoints.upcoming ? `<p class="text-xs mt-1" style="color:var(--gold);">${usage.checkpoints.upcoming} agendado${usage.checkpoints.upcoming === 1 ? '' : 's'}</p>` : ''}
+        </div>
+      ` : ''}
+      <div>
+        <p class="text-xs text-white/30 mb-1">Encontros em Grupo</p>
+        <p class="text-2xl font-serif">${usage.groupMeetings.completed} <span class="text-sm text-white/30">realizados</span></p>
+        <p class="text-xs text-white/20 mt-1">Ilimitados durante o programa</p>
+      </div>
+    </div>
+  `, 'mb-8');
+}
 
 function meetingCard(it, recordingByMeetingId) {
   const linkOk = it.status === 'upcoming' && isValidHttpUrl(it.onlineLink);
@@ -51,6 +80,8 @@ function render() {
       <p class="text-white/40 text-sm mb-1">Encontros</p>
       <h1 class="text-3xl font-serif">Seus Encontros</h1>
     </div>
+    ${renderEncounterRequestsCard(clientId)}
+    ${usageSummary()}
     <p class="text-xs uppercase mb-4" style="color:var(--muted); letter-spacing:.12em;">Próximos</p>
     ${upcoming.length ? upcoming.map((it) => meetingCard(it, recordingByMeetingId)).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado no momento — Nay avisa por aqui assim que marcar o próximo.</p>', 'mb-5')}
 
@@ -59,6 +90,8 @@ function render() {
       ${past.map((it) => meetingCard(it, recordingByMeetingId)).join('')}
     ` : ''}
   `;
+
+  wireEncounterRequestForms(content, render);
 }
 
 render();

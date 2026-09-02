@@ -13,7 +13,9 @@ import {
   renderShell, card, toast, formatDate, openModal, isValidHttpUrl,
   externalLinkAttrs, contentCardInner,
 } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'content.html', title: 'Conteúdos' });
 const content = document.getElementById('app-content');
 

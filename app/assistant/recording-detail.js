@@ -12,7 +12,9 @@ import {
   renderShell, card, toast, badgeFromMaps, formatDateTime, isValidHttpUrl, externalLinkAttrs,
   renderRecordingBlock, wireCopyLinkButtons, openRecordingLinksModal, openModal,
 } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 const meetingId = new URLSearchParams(location.search).get('id');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'queue.html' });
 const content = document.getElementById('app-content');

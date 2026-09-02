@@ -4,7 +4,9 @@
 // Financeiro tab (client-detail.html); this page is the overview.
 import { MockDB, PROGRAMS, PROGRAM_LABEL, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABEL, PAYMENT_STATUS_LABEL } from '../shared/mock-db.js';
 import { renderShell, card, toast, formatDate, openModal } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'financial.html', title: 'Financeiro' });
 const content = document.getElementById('app-content');
 
@@ -160,6 +162,7 @@ function openExpenseModal() {
 function render() {
   const summary = MockDB.getFinancialSummary();
   content.innerHTML = `
+    <div class="mb-6"><a href="payments.html" class="btn-primary inline-block">Cobranças (SumUp) — Sistema Real ↗</a></div>
     ${renderKPIs(summary)}
     ${renderForecast()}
     ${renderByProgram(summary)}

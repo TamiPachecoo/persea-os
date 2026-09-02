@@ -10,7 +10,9 @@ import {
   MEETING_LIFECYCLE_LABEL, MEETING_LIFECYCLE_BADGE_CLASS, ASSIGNEE_LABEL,
 } from '../shared/mock-db.js';
 import { renderShell, card, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'agenda.html', title: 'Gravações' });
 const content = document.getElementById('app-content');
 

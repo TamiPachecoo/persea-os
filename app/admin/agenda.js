@@ -9,13 +9,16 @@ import {
   MockDB, AGENDA_TYPES, AGENDA_TYPE_LABEL, AGENDA_STATUSES, AGENDA_STATUS_LABEL,
   ASSISTANT_PERSONAS, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, formatDateTime, toast, openModal } from '../shared/ui.js';
+import { renderShell, card, formatDateTime, formatDate, toast, openModal } from '../shared/ui.js';
+import { supabase } from '../shared/supabase-client.js';
+import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 
 const AGENDA_TYPE_ICON = {
-  class: '🎓', individual_meeting: '👤', group_meeting: '👥',
+  class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
   online_event: '🌐', admin_task: '🗂️', deadline: '⏰', photo_review: '📸',
 };
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'agenda.html', title: 'Agenda' });
 const content = document.getElementById('app-content');
 
@@ -23,6 +26,15 @@ const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MAX_CHIPS_PER_DAY = 3;
 
 const filters = { type: '', assignedTo: '', showCompleted: false };
+// Set fresh on every render() from google-calendar-status — read by
+// openQuickScheduleModal to decide whether to offer the "also create on
+// Google Calendar" checkbox at all.
+let calendarConnected = false;
+// Set fresh on every render() from google-calendar-list-events — merged
+// into the month grid itself (buildItemsByDay) so what's already on the
+// connected Google Calendar shows up in the actual day squares, not just
+// in the separate list at the top of the page.
+let googleEvents = [];
 // Which month the grid is currently showing — always normalized to day 1 so
 // setMonth() never overflows into the wrong month on short months.
 let viewDate = new Date();
@@ -57,14 +69,86 @@ function agendaFilterPredicate(it) {
   return true;
 }
 
+// All-day Google events carry a bare "YYYY-MM-DD" (no time) — parsing that
+// directly with `new Date(...)` reads it as UTC midnight, which lands on
+// the previous day once shifted to a negative UTC offset (e.g. Brazil).
+// Building the local Date from the parts instead avoids that shift.
+function dateKeyForGoogleEvent(e) {
+  if (e.all_day) {
+    const [y, m, d] = e.start.split('-').map(Number);
+    return dateKey(new Date(y, m - 1, d));
+  }
+  return dateKey(new Date(e.start));
+}
+
 function buildItemsByDay() {
   const byDay = {};
   MockDB.getAgendaItems().filter(agendaFilterPredicate).forEach((it) => {
     const key = dateKey(new Date(it.date));
     (byDay[key] || (byDay[key] = [])).push(it);
   });
+  // Merged in as plain read-only entries, tagged source:'google' so
+  // calChip/openDayListModal render them as links out to Google instead of
+  // PERSEA items you can click into and edit.
+  googleEvents.forEach((e) => {
+    const key = dateKeyForGoogleEvent(e);
+    (byDay[key] || (byDay[key] = [])).push({
+      id: e.id, source: 'google', title: e.summary, date: e.all_day ? `${e.start}T00:00:00` : e.start,
+      all_day: e.all_day, html_link: e.html_link, status: 'upcoming',
+    });
+  });
   Object.values(byDay).forEach((arr) => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
   return byDay;
+}
+
+// Connection layer only — no sync, no event creation/reading yet. Status
+// comes exclusively from google-calendar-status (see that function's
+// comment): calendar_connections itself has no client-facing RLS policy at
+// all, so this is the only way the UI can ever know whether an account is
+// connected.
+async function getCalendarStatus() {
+  const { data, error } = await supabase.functions.invoke('google-calendar-status');
+  if (error || data?.error) return { connected: false };
+  return data;
+}
+
+// Read-only pull of what's already on the connected calendar — no PERSEA
+// agenda item is created from these, just a list shown for reference/
+// conflict-checking. Empty array (not an error) when not connected.
+async function loadGoogleEvents() {
+  if (!calendarConnected) return [];
+  const { data, error } = await supabase.functions.invoke('google-calendar-list-events');
+  if (error || data?.error) return [];
+  return data.events || [];
+}
+
+function renderGoogleCalendarCard(status, events) {
+  return card(`
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-1">
+      <div>
+        <p class="text-sm text-white/50 mb-1">Google Calendar</p>
+        ${status.connected
+          ? `<p class="text-sm" style="color:var(--gold);">● Connected${status.google_account_email ? `<br/><span class="text-xs text-white/40">${status.google_account_email}</span>` : ''}</p>`
+          : '<p class="text-xs text-white/30">Nenhuma conta conectada ainda.</p>'}
+      </div>
+      ${status.connected ? '' : '<button id="connect-google-calendar" class="btn-primary">Connect Google Calendar</button>'}
+    </div>
+    ${status.connected ? `
+      <div class="pt-3 mt-3" style="border-top:1px solid var(--line);">
+        <p class="text-xs uppercase mb-2" style="color:var(--muted); letter-spacing:.1em;">Já está no seu Google Calendar</p>
+        ${events.length ? `
+          <div class="space-y-1.5">
+            ${events.map((e) => `
+              <div class="flex items-center justify-between text-sm gap-3">
+                <span class="truncate">${e.summary}</span>
+                <span class="text-xs text-white/30 whitespace-nowrap">${e.all_day ? formatDate(`${e.start}T00:00:00`) : formatDateTime(e.start)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<p class="text-xs text-white/20">Nenhum evento futuro encontrado.</p>'}
+      </div>
+    ` : ''}
+  `, 'mb-6');
 }
 
 function renderFilters() {
@@ -110,6 +194,13 @@ function renderPendenciasStrip() {
 }
 
 function calChip(it) {
+  if (it.source === 'google') {
+    return `
+      <a href="${it.html_link || '#'}" target="_blank" rel="noopener" data-google-event class="cal-chip" style="border-left:3px solid #4285F4; display:block;">
+        ${it.all_day ? '' : `<span class="cal-chip-time">${formatTime(it.date)}</span> `}📅 ${it.title}
+      </a>
+    `;
+  }
   return `
     <button type="button" data-agenda-item="${it.id}" class="cal-chip ${it.status !== 'upcoming' ? 'cal-chip-done' : ''}">
       <span class="cal-chip-time">${formatTime(it.date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}
@@ -164,7 +255,14 @@ function openDayListModal(key) {
     title: label,
     bodyHtml: `
       <div class="divide-y" style="border-color:var(--line);">
-        ${items.map((it) => `
+        ${items.map((it) => it.source === 'google' ? `
+          <a href="${it.html_link || '#'}" target="_blank" rel="noopener" class="w-full text-left flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors" style="display:flex;">
+            <div>
+              <p class="text-sm">📅 ${it.title}</p>
+              <p class="text-xs mt-0.5 text-white/30">${it.all_day ? 'Dia inteiro' : formatDateTime(it.date)} · Google Calendar</p>
+            </div>
+          </a>
+        ` : `
           <button type="button" data-agenda-item="${it.id}" class="w-full text-left flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
             <div>
               <p class="text-sm">${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}</p>
@@ -182,7 +280,137 @@ function openDayListModal(key) {
   el.querySelectorAll('[data-agenda-item]').forEach((btn) => {
     btn.addEventListener('click', () => { close(); openAgendaModal(btn.dataset.agendaItem); });
   });
-  el.querySelector('#day-modal-new').addEventListener('click', () => { close(); openAgendaModal(null, key); });
+  el.querySelector('#day-modal-new').addEventListener('click', () => { close(); openQuickScheduleModal(key); });
+}
+
+// Types that make sense with no client attached — individual_meeting and
+// checkpoint are always client-specific, so they're never offered here.
+const GENERAL_TYPES = ['class', 'group_meeting', 'online_event', 'admin_task', 'deadline', 'photo_review'];
+
+// The "click a day" quick-add flow: pick a client (or none), then pick from
+// *what that client actually has available* — her still-unscheduled
+// encontros, a checkpoint if she has room left (Premium), or a free
+// subject. Choosing an encontro never creates the agendaItem here — it
+// hands off to that client's own E-tab (see admin/client-detail.js), where
+// the real "Solicitar Agendamento" flow (prep checklist + candidate times)
+// lives, so Nay always briefs herself there before proposing a time.
+function openQuickScheduleModal(defaultDateKey) {
+  const clients = MockDB.listClients();
+  const dateValue = defaultDateKey ? `${defaultDateKey}T09:00` : '';
+
+  const { el, close } = openModal({
+    title: 'Novo Item da Agenda',
+    bodyHtml: `
+      <form id="quick-schedule-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Cliente</label>
+          <select id="qs-client" name="clientId" class="field">
+            <option value="">— Evento geral (sem cliente) —</option>
+            ${clients.map((c) => `<option value="${c.id}">${c.fullName}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">O Que Agendar</label>
+          <select id="qs-option" name="option" class="field"></select>
+        </div>
+        <p id="qs-redirect-note" class="text-xs text-white/30" style="display:none;">Você será direcionada para o perfil da cliente para solicitar esse encontro (checklist de preparo + horários).</p>
+        <div id="qs-title-wrap">
+          <label class="text-xs text-white/40 block mb-1">Assunto</label>
+          <input id="qs-title" name="title" class="field" />
+        </div>
+        <div id="qs-date-wrap">
+          <label class="text-xs text-white/40 block mb-1">Data e Hora</label>
+          <input type="datetime-local" name="date" class="field" value="${dateValue}" />
+        </div>
+        ${calendarConnected ? `
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="syncGoogle" checked /> Também criar no Google Calendar (com link do Meet)
+          </label>
+        ` : ''}
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Continuar</button>
+        </div>
+      </form>
+    `,
+  });
+
+  const optionSelect = el.querySelector('#qs-option');
+  const titleWrap = el.querySelector('#qs-title-wrap');
+  const dateWrap = el.querySelector('#qs-date-wrap');
+  const redirectNote = el.querySelector('#qs-redirect-note');
+
+  function updateFieldVisibility() {
+    const isEncounter = optionSelect.value.startsWith('encounter:');
+    titleWrap.style.display = isEncounter ? 'none' : '';
+    dateWrap.style.display = isEncounter ? 'none' : '';
+    redirectNote.style.display = isEncounter ? '' : 'none';
+  }
+  function populateOptions(clientId) {
+    if (!clientId) {
+      optionSelect.innerHTML = GENERAL_TYPES.map((t) => `<option value="general:${t}">${AGENDA_TYPE_LABEL[t]}</option>`).join('');
+      updateFieldVisibility();
+      return;
+    }
+    const program = MockDB.getClientProgram(clientId);
+    const isPremiumProgram = program.slug === 'persea-premium';
+    const availableEncounters = MockDB.getEncounterJourney(clientId).filter((e) => e.status === 'not_scheduled' && (!e.premiumOnly || isPremiumProgram));
+    const usage = MockDB.getMeetingsUsage(clientId);
+    const checkpointRoom = usage.checkpoints && (usage.checkpoints.completed + usage.checkpoints.upcoming) < usage.checkpoints.total;
+    optionSelect.innerHTML = `
+      ${availableEncounters.length ? `<optgroup label="Encontros">${availableEncounters.map((e) => `<option value="encounter:${e.number}">E${e.number} — ${e.name}</option>`).join('')}</optgroup>` : ''}
+      <optgroup label="Outros">
+        ${checkpointRoom ? '<option value="checkpoint">Check-in (30min)</option>' : ''}
+        <option value="other">Outro assunto</option>
+      </optgroup>
+    `;
+    updateFieldVisibility();
+  }
+
+  populateOptions('');
+  el.querySelector('#qs-client').addEventListener('change', (e) => populateOptions(e.target.value));
+  optionSelect.addEventListener('change', updateFieldVisibility);
+
+  el.querySelector('#quick-schedule-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const clientId = fd.get('clientId') || null;
+    const option = fd.get('option');
+
+    if (option.startsWith('encounter:')) {
+      const n = option.split(':')[1];
+      close();
+      location.href = `client-detail.html?id=${clientId}&tab=e${n}`;
+      return;
+    }
+
+    const title = (fd.get('title') || '').trim();
+    const date = fd.get('date');
+    if (!title || !date) { toast('Preencha o assunto e a data.', { tone: 'error' }); return; }
+    let type = 'admin_task';
+    if (option === 'checkpoint') type = 'checkpoint';
+    else if (option === 'other') type = clientId ? 'individual_meeting' : 'admin_task';
+    else if (option.startsWith('general:')) type = option.split(':')[1];
+
+    const startIso = new Date(date).toISOString();
+    const item = MockDB.createAgendaItem({ title, type, date: startIso, status: 'upcoming', relatedStudentId: clientId });
+    close();
+
+    if (fd.get('syncGoogle') && calendarConnected) {
+      const endIso = new Date(new Date(date).getTime() + 60 * 60 * 1000).toISOString(); // default 1h
+      const { data, error } = await supabase.functions.invoke('google-calendar-create-event', {
+        body: { summary: title, start: startIso, end: endIso },
+      });
+      if (error || data?.error) {
+        toast(`Item adicionado — mas não foi possível criar no Google Calendar: ${data?.error || error.message}`, { tone: 'error' });
+      } else {
+        MockDB.updateAgendaItem(item.id, { googleEventId: data.event_id, onlineLink: data.meet_url || '' });
+        toast('Item adicionado — criado também no Google Calendar, com link do Meet.');
+      }
+    } else {
+      toast('Item adicionado à agenda.');
+    }
+    render();
+  });
 }
 
 function openAgendaModal(itemId, defaultDateKey) {
@@ -305,7 +533,10 @@ function openAgendaModal(itemId, defaultDateKey) {
   });
 }
 
-function render() {
+async function render() {
+  const calendarStatus = await getCalendarStatus();
+  calendarConnected = calendarStatus.connected;
+  googleEvents = await loadGoogleEvents();
   content.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
       <div>
@@ -314,15 +545,32 @@ function render() {
       </div>
       <a href="recordings.html" class="btn-ghost">Gravações e Transcrições →</a>
     </div>
+    ${renderGoogleCalendarCard(calendarStatus, googleEvents)}
     ${renderFilters()}
     ${renderPendenciasStrip()}
     ${renderCalendar()}
   `;
 
+  content.querySelector('#connect-google-calendar')?.addEventListener('click', async (e) => {
+    const profile = await getCurrentProfile();
+    if (!profile || !['admin', 'assistant'].includes(profile.role)) {
+      toast('Faça login no sistema real (login.html) antes de conectar o Google Calendar.', { tone: 'error' });
+      return;
+    }
+    e.target.disabled = true; e.target.textContent = 'Conectando...';
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth-start');
+    if (error || data?.error) {
+      toast(data?.error || error.message, { tone: 'error' });
+      e.target.disabled = false; e.target.textContent = 'Connect Google Calendar';
+      return;
+    }
+    window.location.href = data.url;
+  });
+
   content.querySelector('#filter-type').addEventListener('change', (e) => { filters.type = e.target.value; render(); });
   content.querySelector('#filter-assigned').addEventListener('change', (e) => { filters.assignedTo = e.target.value; render(); });
   content.querySelector('#filter-completed').addEventListener('change', (e) => { filters.showCompleted = e.target.checked; render(); });
-  content.querySelector('#new-agenda-item').addEventListener('click', () => openAgendaModal(null));
+  content.querySelector('#new-agenda-item').addEventListener('click', () => openQuickScheduleModal(dateKey(new Date())));
 
   content.querySelector('#cal-prev').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() - 1); render(); });
   content.querySelector('#cal-next').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() + 1); render(); });
@@ -332,8 +580,8 @@ function render() {
 
   content.querySelectorAll('[data-cal-day]').forEach((cell) => {
     cell.addEventListener('click', (e) => {
-      if (e.target.closest('[data-agenda-item]') || e.target.closest('[data-cal-more]')) return;
-      openAgendaModal(null, cell.dataset.calDay);
+      if (e.target.closest('[data-agenda-item]') || e.target.closest('[data-cal-more]') || e.target.closest('[data-google-event]')) return;
+      openQuickScheduleModal(cell.dataset.calDay);
     });
   });
   content.querySelectorAll('[data-cal-more]').forEach((btn) => {
@@ -345,6 +593,24 @@ function render() {
 }
 
 render();
+
+// google-calendar-callback redirects back here with ?calendar=connected|
+// denied|error(&reason=...) — surface it once, then scrub the URL so a
+// refresh doesn't keep re-showing the toast.
+const calendarParam = new URLSearchParams(location.search).get('calendar');
+if (calendarParam) {
+  const CALENDAR_TOAST = {
+    connected: { text: 'Google Calendar conectado com sucesso.' },
+    denied: { text: 'Conexão com o Google Calendar cancelada.', tone: 'error' },
+    error: { text: 'Não foi possível conectar o Google Calendar.', tone: 'error' },
+  };
+  const t = CALENDAR_TOAST[calendarParam];
+  if (t) toast(t.text, t.tone ? { tone: t.tone } : undefined);
+  const cleanUrl = new URL(location.href);
+  cleanUrl.searchParams.delete('calendar');
+  cleanUrl.searchParams.delete('reason');
+  history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
+}
 
 // Deep-link from the Painel's exceptions card ("agenda.html?item=<id>") —
 // jump straight into that item's edit modal instead of making her hunt for it.

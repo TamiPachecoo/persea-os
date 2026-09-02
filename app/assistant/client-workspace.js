@@ -88,10 +88,10 @@ function fileToDataUrl(file) {
   });
 }
 
-// Summary + Canva link ride along so this deliverable is useful later, not
-// just to this client — see getProjectsLibrary/projects.js: "a future client
-// looks like this one, what did I build for her?" only works if the brief
-// is captured here, at submission time, while it's fresh.
+// Summary + Canva link ride along so there's a record of what was actually
+// built for this client and why, captured here at submission time while
+// the brief is still fresh — the Canva source template itself lives in
+// Templates (see assistant/templates.js), not duplicated per-submission.
 function openSubmitReviewModal(type, refSlug, title) {
   const { el, close } = openModal({
     title: `Enviar para revisão — ${title}`,
@@ -191,7 +191,7 @@ function renderChecklist(client) {
   const needsLink = payments.filter((p) => p.status !== 'paid' && !p.linkSentAt);
   const needsConfirmation = payments.filter((p) => p.status !== 'paid' && p.reportedPaidAt);
   const canReport = payments.filter((p) => p.status !== 'paid' && p.linkSentAt && !p.reportedPaidAt);
-  const soldOnCard = o.contract.paymentMethod === 'cartao_credito';
+  const soldOnCard = (o.contract.paymentMethods && o.contract.paymentMethods.length ? o.contract.paymentMethods : [o.contract.paymentMethod]).includes('cartao_credito');
   // Nota Fiscal is owed whenever the client asked for one, or automatically
   // whenever the sale went through a credit card — regardless of request.
   const nfOwed = payments.filter((p) => p.nf.status !== 'issued' && (p.nf.status === 'requested' || soldOnCard));
@@ -259,7 +259,7 @@ function renderChecklist(client) {
     {
       weight: 3, pending: nfOwed.length > 0, html: card(`
         <p class="text-sm text-white/50 mb-1">Emitir Nota Fiscal</p>
-        <p class="text-xs text-white/30 mb-4">Sempre que a cliente solicitar, ou automaticamente quando a venda for no cartão de crédito${o.contract.paymentMethod ? ` — forma de pagamento desta cliente: <span style="color:var(--gold);">${PAYMENT_METHOD_LABEL[o.contract.paymentMethod]}</span>` : ''}.</p>
+        <p class="text-xs text-white/30 mb-4">Sempre que a cliente solicitar, ou automaticamente quando a venda for no cartão de crédito${(o.contract.paymentMethods && o.contract.paymentMethods.length) ? ` — forma${o.contract.paymentMethods.length > 1 ? 's' : ''} de pagamento desta cliente: <span style="color:var(--gold);">${o.contract.paymentMethods.map((m) => PAYMENT_METHOD_LABEL[m]).join(' + ')}</span>` : o.contract.paymentMethod ? ` — forma de pagamento desta cliente: <span style="color:var(--gold);">${PAYMENT_METHOD_LABEL[o.contract.paymentMethod]}</span>` : ''}.</p>
         ${payments.length ? `
           <div class="space-y-2">
             ${payments.map((p) => `
@@ -276,23 +276,34 @@ function renderChecklist(client) {
         ${!nfOwed.length && payments.length ? '<p class="text-xs mt-3" style="color:var(--gold);">Nada pendente de emissão.</p>' : ''}
       `),
     },
+    // Three quick, single-fact duties that used to each be their own
+    // full-width card (mostly empty space around one select or one button)
+    // — bundled into small tiles instead, same "at a glance" box style as
+    // Contexto da Cliente, so this reads as a quick reference, not three
+    // near-empty rectangles.
     {
-      weight: 4, pending: o.whatsappGroup.status !== 'added', html: card(`
-        <p class="text-sm text-white/50 mb-4">Criar Grupo do WhatsApp</p>
-        <div class="flex items-center gap-2">
-          <select id="whatsapp-status" class="field text-sm">
-            ${WHATSAPP_STATUSES.map((s) => `<option value="${s}" ${o.whatsappGroup.status === s ? 'selected' : ''}>${WHATSAPP_STATUS_LABEL[s]}</option>`).join('')}
-          </select>
-          <button id="update-whatsapp-status" class="btn-ghost">Atualizar</button>
-        </div>
-      `),
-    },
-    {
-      weight: 5, pending: hubla.status !== 'granted', html: card(`
-        <p class="text-sm text-white/50 mb-4">Enviar Convite de Acesso à Hubla (Conteúdo)</p>
-        <div class="flex items-center justify-between">
-          <span class="badge ${hubla.status === 'granted' ? 'badge-completed' : 'badge-locked'}">${HUBLA_STATUS_LABEL[hubla.status]}</span>
-          <button id="toggle-hubla" class="btn-ghost">${hubla.status === 'granted' ? 'Revogar acesso' : 'Enviar convite'}</button>
+      weight: 4, pending: o.whatsappGroup.status !== 'added' || hubla.status !== 'granted' || kit.status !== 'delivered', html: card(`
+        <p class="text-sm text-white/50 mb-4">Providências Rápidas</p>
+        <div class="action-grid">
+          <div class="action-box ${o.whatsappGroup.status !== 'added' ? 'action-box-pending' : ''}">
+            <p class="ctx-box-label">Grupo do WhatsApp</p>
+            <select id="whatsapp-status" class="field text-sm">
+              ${WHATSAPP_STATUSES.map((s) => `<option value="${s}" ${o.whatsappGroup.status === s ? 'selected' : ''}>${WHATSAPP_STATUS_LABEL[s]}</option>`).join('')}
+            </select>
+            <button id="update-whatsapp-status" class="btn-ghost">Atualizar</button>
+          </div>
+          <div class="action-box ${hubla.status !== 'granted' ? 'action-box-pending' : ''}">
+            <p class="ctx-box-label">Acesso à Hubla (Conteúdo)</p>
+            <span class="badge ${hubla.status === 'granted' ? 'badge-completed' : 'badge-locked'}">${HUBLA_STATUS_LABEL[hubla.status]}</span>
+            <button id="toggle-hubla" class="btn-ghost">${hubla.status === 'granted' ? 'Revogar acesso' : 'Enviar convite'}</button>
+          </div>
+          <div class="action-box ${kit.status !== 'delivered' ? 'action-box-pending' : ''}">
+            <p class="ctx-box-label">Kit Digital</p>
+            <span class="badge ${kit.status === 'delivered' ? 'badge-completed' : kit.status === 'in_review' ? 'badge-progress' : 'badge-locked'}">${GUIDE_STATUS_LABEL[kit.status]}</span>
+            ${reviewNoteHtml(kit)}
+            ${kit.status !== 'delivered' && kit.status !== 'in_review' ? '<button id="submit-kit" class="btn-text">Enviar para revisão</button>' : ''}
+            ${kit.status === 'in_review' && kit.review && kit.review.status === 'changes_requested' ? '<button id="submit-kit" class="btn-text">Reenviar</button>' : ''}
+          </div>
         </div>
       `),
     },
@@ -332,19 +343,6 @@ function renderChecklist(client) {
         </div>
       `),
     }] : []),
-    {
-      weight: 10, pending: kit.status !== 'delivered', html: card(`
-        <p class="text-sm text-white/50 mb-4">Kit Digital</p>
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="badge ${kit.status === 'delivered' ? 'badge-completed' : kit.status === 'in_review' ? 'badge-progress' : 'badge-locked'}">${GUIDE_STATUS_LABEL[kit.status]}</span>
-            ${reviewNoteHtml(kit)}
-          </div>
-          ${kit.status !== 'delivered' && kit.status !== 'in_review' ? '<button id="submit-kit" class="btn-text">Enviar para revisão</button>' : ''}
-          ${kit.status === 'in_review' && kit.review && kit.review.status === 'changes_requested' ? '<button id="submit-kit" class="btn-text">Reenviar</button>' : ''}
-        </div>
-      `),
-    },
     {
       // Evergreen, never "done" — always settles last among pending items,
       // but still above fully-resolved ones isn't the point here; it's a

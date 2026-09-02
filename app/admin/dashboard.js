@@ -1,33 +1,167 @@
-import { MockDB, TIER_PHASES, MOOD_SCALE, ONBOARDING_STAGE_LABEL, AGENDA_TYPE_LABEL, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, LEAD_STAGE_LABEL, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, formatDateTime, formatDate, toast } from '../shared/ui.js';
-
-const VALUE_OVERVIEW_ROWS = [
-  ['awaitingClientAnswers', 'Aguardando respostas das clientes'],
-  ['submittedAwaitingAnalysis', 'Enviadas, aguardando análise'],
-  ['inAnalysis', 'Em análise'],
-  ['clarificationsRequired', 'Com pontos a esclarecer'],
-  ['readyToPublish', 'Recomendações prontas para publicar'],
-  ['publishedNeedingReview', 'Publicadas, revisão vencida'],
-];
+// Painel — redesigned to answer one question: "what do I need to do right
+// now?" Nay said the old version (a dozen stacked cards — metrics, mood,
+// recent clients, every pipeline at once) left her not knowing where to
+// look. Everything that's a number to admire rather than a thing to act on
+// moved to Relatórios (see admin/reports.js); everything actionable here
+// got folded into one prioritized list instead of one card per source.
+import { MockDB, AGENDA_TYPE_LABEL, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, ENCOUNTER_DEFS, ENCOUNTER_LABEL } from '../shared/mock-db.js';
+import { renderShell, card, formatDateTime, formatDate, toast } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
 const AGENDA_TYPE_ICON = {
-  class: '🎓', individual_meeting: '👤', group_meeting: '👥',
+  class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
   online_event: '🌐', admin_task: '🗂️', deadline: '⏰', photo_review: '📸',
 };
-
-const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 const REQUEST_STATUS_LABEL = {
   pending: ['Aguardando triagem', 'badge-locked'],
   assigned: ['Agendada', 'badge-progress'],
   done: ['Concluída', 'badge-completed'],
 };
-const LEAD_STAGE_CLASS = {
-  novo: 'badge-locked', engajado: 'badge-progress', em_conversa: 'badge-progress',
-  proposta_enviada: 'badge-progress', convertido: 'badge-completed', perdido: 'badge-locked',
-};
+const brl = (n) => `R$ ${Math.round(n).toLocaleString('pt-BR')}`;
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'dashboard.html', title: 'Painel Admin' });
 const content = document.getElementById('app-content');
+
+// --- One prioritized action list, instead of one card per data source. ---
+// Same underlying facts as before (getClientsAwaitingInfo,
+// getOverdueAssistantTasks, financial summary) — just merged and ranked so
+// the single most urgent thing is always the first line, not buried in the
+// third card down.
+function getActionItems() {
+  const items = [];
+
+  MockDB.getClientsAwaitingInfo().forEach((c) => {
+    items.push({
+      rank: 0, tone: 'var(--terracotta)',
+      text: `<strong>${c.fullName}</strong> — contrato não pode ser preparado, aguardando informações dela`,
+      href: `client-detail.html?id=${c.id}`, cta: 'Ver cliente',
+    });
+  });
+
+  MockDB.getOverdueAssistantTasks().forEach((it) => {
+    items.push({
+      rank: 1, tone: 'var(--terracotta)',
+      text: `<strong>${it.title}</strong>${it.clientName ? ` — ${it.clientName}` : ''} — tarefa da assistente em atraso desde ${formatDateTime(it.date)}`,
+      href: `agenda.html?item=${it.id}`, cta: 'Abrir',
+    });
+  });
+
+  const fin = MockDB.getFinancialSummary();
+  if (fin.totalOverdue > 0) {
+    items.push({
+      rank: 2, tone: 'var(--terracotta)',
+      text: `<strong>${brl(fin.totalOverdue)}</strong> em pagamentos atrasados`,
+      href: 'financial.html', cta: 'Ver financeiro',
+    });
+  }
+
+  const va = MockDB.getOwnerValueAnalysisOverview();
+  if (va.readyToPublish > 0) {
+    items.push({
+      rank: 3, tone: 'var(--gold)',
+      text: `<strong>${va.readyToPublish}</strong> leitura${va.readyToPublish === 1 ? '' : 's'} estratégica${va.readyToPublish === 1 ? '' : 's'} de valor pronta${va.readyToPublish === 1 ? '' : 's'} para publicar`,
+      href: 'crm.html', cta: 'Ver clientes',
+    });
+  }
+
+  MockDB.getPremiumUpgradeInterests().filter((i) => ['novo', 'em_conversa'].includes(i.status)).forEach((i) => {
+    items.push({
+      rank: 4, tone: 'var(--gold)',
+      text: `<strong>${i.clientName}</strong> demonstrou interesse em upgrade para Premium`,
+      href: 'crm.html', cta: 'Ver cliente',
+    });
+  });
+
+  return items.sort((a, b) => a.rank - b.rank);
+}
+
+function renderActionList() {
+  const items = getActionItems();
+  if (!items.length) {
+    return card(`<p class="text-sm" style="color:var(--gold);">Tudo em dia ✦ Nada precisa da sua atenção agora.</p>`, 'mb-8');
+  }
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Precisa de Você Agora</p>
+      <span class="text-xs" style="color:var(--muted);">${items.length}</span>
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">
+      ${items.map((it) => `
+        <div class="flex items-center justify-between gap-4 py-3">
+          <p class="text-sm" style="color:${it.tone};"><span style="color:var(--cream);">●</span> ${it.text}</p>
+          <a href="${it.href}" class="btn-text shrink-0">${it.cta} →</a>
+        </div>
+      `).join('')}
+    </div>
+  `, 'mb-8');
+}
+
+// Encontro-scheduling requests (see admin/client-detail.js's E-tabs) share
+// this same card — one place for every "a client's waiting on a meeting
+// decision" item, not a separate heading. Full context/actions (confirm,
+// re-propose, decline) live on the client's own E-tab; this just links her
+// there, same "surface it, act where the context lives" rule as elsewhere.
+function encounterRequestRow(r) {
+  const client = MockDB.getClient(r.clientId);
+  const def = ENCOUNTER_DEFS[r.encounterNumber - 1];
+  const detail = r.status === 'awaiting_nay_confirmation'
+    ? `Horário escolhido: ${formatDateTime(r.selectedTime)}`
+    : r.status === 'client_unavailable' ? 'Nenhum horário ofertado funcionou'
+    : 'Aguardando a cliente escolher um horário';
+  const needsNay = r.status !== 'awaiting_client_response';
+  return `
+    <div class="py-3 border-b border-white/5 last:border-0">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="font-medium text-sm">${client ? client.fullName : r.clientId}</p>
+          <p class="text-sm mt-1">${ENCOUNTER_LABEL[def.slug]} — ${detail}</p>
+        </div>
+        <span class="badge ${needsNay ? 'badge-progress' : 'badge-locked'}">${needsNay ? 'Aguardando você' : 'Aguardando a cliente'}</span>
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <a href="client-detail.html?id=${r.clientId}&tab=e${r.encounterNumber}" class="btn-text">Abrir</a>
+      </div>
+    </div>
+  `;
+}
+// Meeting requests keep their own card — they need inline assign/resolve
+// actions, not just a link — but only appear at all when one is pending.
+function renderRequestsCard() {
+  const pending = MockDB.listAllMeetingRequests().filter((r) => r.status !== 'done');
+  const encounterPending = MockDB.listAllEncounterRequests().filter((r) => !['confirmed', 'cancelled'].includes(r.status));
+  if (!pending.length && !encounterPending.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Solicitações de Reunião</p>
+      <span class="text-xs" style="color:var(--muted);">${pending.length + encounterPending.length} em aberto</span>
+    </div>
+    <div class="space-y-4">
+      ${encounterPending.map(encounterRequestRow).join('')}
+      ${pending.map((r) => `
+        <div class="py-3 border-b border-white/5 last:border-0">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="font-medium text-sm">${r.clientName}</p>
+              <p class="text-sm mt-1">${r.reason}</p>
+              <p class="text-xs mt-1" style="color:var(--muted);">${formatDate(r.createdAt)}</p>
+            </div>
+            <span class="badge ${REQUEST_STATUS_LABEL[r.status][1]}">${REQUEST_STATUS_LABEL[r.status][0]}</span>
+          </div>
+          <div class="flex items-center gap-2 mt-3">
+            ${r.status === 'pending' ? `
+              <button data-assign="${r.clientId}:${r.id}:nay" class="btn-ghost">Atribuir à Nay</button>
+              <button data-assign="${r.clientId}:${r.id}:assistant" class="btn-ghost">Atribuir à Assistente</button>
+            ` : `
+              <span class="text-xs" style="color:var(--muted);">Com ${ASSIGNEE_LABEL[r.assignedTo]}</span>
+              <button data-resolve="${r.clientId}:${r.id}" class="btn-text">Marcar como concluída</button>
+            `}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `, 'mb-8');
+}
 
 function agendaItemLink(it) {
   const who = it.relatedStudentId ? (MockDB.getClient(it.relatedStudentId)?.fullName || '') : (it.relatedGroupLabel || '');
@@ -42,336 +176,57 @@ function agendaItemLink(it) {
     </a>
   `;
 }
-
-// Compact snapshot only — today's items plus a count of what's further out.
-// Full visualization (every bucket, filters, history, create/edit) lives on
-// its own Agenda page now; Painel just needs "what's happening today" and a
-// way in.
 function renderAgendaSnapshot() {
   const buckets = MockDB.getAgendaBuckets();
-  const upcomingCount = buckets.proximosDias.length + buckets.estaSemana.length + buckets.maisAdiante.length;
   return card(`
     <div class="flex items-center justify-between mb-5">
       <p class="text-sm text-white/50">Agenda de Hoje</p>
       <a href="agenda.html" class="btn-text">Ver agenda completa &rarr;</a>
     </div>
     ${buckets.hoje.length ? buckets.hoje.map(agendaItemLink).join('') : '<p class="text-xs text-white/20">Nada agendado para hoje.</p>'}
-    <p class="text-xs mt-4" style="color:var(--muted);">
-      ${upcomingCount} próximo${upcomingCount === 1 ? '' : 's'} nos próximos dias${buckets.pendencias.length ? ` · ${buckets.pendencias.length} pendência${buckets.pendencias.length === 1 ? '' : 's'}` : ''}
-    </p>
   `, 'mb-8');
 }
 
-// Only renders when there's something to see — this is meant to be an
-// exception signal ("a delay requiring Nay's attention"), not a routine
-// status card she has to scan past every time the queue is healthy.
-function renderAssistantExceptionsCard() {
-  const overdue = MockDB.getOverdueAssistantTasks();
-  if (!overdue.length) return '';
-  return card(`
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-sm" style="color:var(--terracotta);">⚠ Tarefas da Assistente em Atraso</p>
-      <span class="text-xs" style="color:var(--muted);">${overdue.length} pendência${overdue.length === 1 ? '' : 's'}</span>
-    </div>
-    <div class="divide-y" style="border-color:var(--line);">
-      ${overdue.map((it) => `
-        <a href="agenda.html?item=${it.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
-          <div>
-            <p class="text-sm">${it.title}</p>
-            <p class="text-xs mt-0.5 text-white/30">${it.clientName ? it.clientName + ' · ' : ''}era para ${formatDateTime(it.date)}</p>
-          </div>
-          <span class="badge badge-locked" style="font-size:9px;">${it.assistantPersona ? ASSISTANT_PERSONA_LABEL[it.assistantPersona] : 'Assistente'}</span>
-        </a>
-      `).join('')}
-    </div>
-  `, 'mb-8');
-}
-
-function renderLeadsSnapshotCard() {
-  const s = MockDB.getLeadsSummary();
-  // Onboarding pipeline (post-sale, pre-activation) takes priority over the
-  // older top-of-funnel "em conversa" view — it's the one that actually
-  // needs Nay's action right now. Falls back to the old view when nothing's
-  // in that pipeline yet, so this card is never empty for no reason.
-  const pipeline = MockDB.getOnboardingPipeline();
-  const active = pipeline.length ? pipeline : MockDB.getLeads()
-    .filter((l) => ['em_conversa', 'proposta_enviada'].includes(l.stage))
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-  return card(`
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-sm text-white/50">Leads</p>
-      <a href="leads.html" class="btn-text">Ver todos os leads &rarr;</a>
-    </div>
-    <div class="grid sm:grid-cols-4 gap-4 text-sm mb-4">
-      <div><p class="text-2xl font-serif">${s.total}</p><p class="text-white/40 text-xs mt-1">Total</p></div>
-      <div><p class="text-2xl font-serif">${s.inGroup}</p><p class="text-white/40 text-xs mt-1">No Grupo VIP</p></div>
-      <div><p class="text-2xl font-serif">${s.converted}</p><p class="text-white/40 text-xs mt-1">Convertidos</p></div>
-      <div><p class="text-2xl font-serif">${s.conversionRatePct}%</p><p class="text-white/40 text-xs mt-1">Taxa de Conversão</p></div>
-    </div>
-    ${active.length ? `
-      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.12em;">${pipeline.length ? 'Onboarding — Entre a Venda e a Ativação' : 'Em Andamento'}</p>
-      <div class="divide-y" style="border-color:var(--line);">
-        ${active.slice(0, 5).map((l) => `
-          <a href="lead-detail.html?id=${l.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
-            <span class="text-sm">${l.fullName}</span>
-            <span class="badge ${l.onboardingStatus ? (LEAD_ONBOARDING_STATUS_BADGE_CLASS[l.onboardingStatus] || 'badge-locked') : (LEAD_STAGE_CLASS[l.stage] || 'badge-locked')}">${l.pipelineLabel || LEAD_STAGE_LABEL[l.stage]}</span>
-          </a>
-        `).join('')}
-      </div>
-    ` : '<p class="text-sm" style="color:var(--muted);">Nenhum lead em conversa avançada no momento.</p>'}
-  `, 'mb-8');
-}
-
-// Concise and exception-focused, per design: only rows with something to
-// act on show up — a healthy queue with everything at zero renders nothing.
-function renderValueAnalysisOverviewCard() {
-  const o = MockDB.getOwnerValueAnalysisOverview();
-  const rows = VALUE_OVERVIEW_ROWS.filter(([key]) => o[key] > 0);
-  if (!rows.length) return '';
-  return card(`
-    <p class="text-sm text-white/50 mb-4">Leitura Estratégica de Valor</p>
-    <div class="grid sm:grid-cols-2 gap-3">
-      ${rows.map(([key, label]) => `
-        <div class="flex items-center justify-between py-1.5 border-b border-white/5">
-          <span class="text-sm">${label}</span>
-          <span class="badge ${key === 'readyToPublish' ? 'badge-completed' : 'badge-progress'}">${o[key]}</span>
-        </div>
-      `).join('')}
-    </div>
-  `, 'mb-8');
-}
-
-// Every Premium-preview activity (Business, or Direção da Marca for
-// Ascensão de Imagem) can generate one of these — not just Business, so
-// this stays separate from the Leitura Estratégica de Valor card above.
-function renderUpgradeInterestCard() {
-  const interests = MockDB.getPremiumUpgradeInterests().filter((i) => ['novo', 'em_conversa'].includes(i.status));
-  if (!interests.length) return '';
-  return card(`
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-sm text-white/50">Interesse em Upgrade</p>
-      <span class="text-xs" style="color:var(--muted);">${interests.length} em aberto</span>
-    </div>
-    <div class="divide-y" style="border-color:var(--line);">
-      ${interests.map((i) => `
-        <div class="py-3">
-          <div class="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p class="text-sm font-medium">${i.clientName}</p>
-              <p class="text-xs text-white/30 mt-0.5">${i.currentProgramName} · via ${i.activityTitle} · ${formatDate(i.createdAt)}${i.currentPhase ? ` · ${i.currentPhase}` : ''}</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <a href="clients.html" class="btn-text">Contatar</a>
-              <select data-interest-status="${i.id}" class="field text-xs" style="max-width:150px;">
-                ${UPGRADE_INTEREST_STATUSES.map((s) => `<option value="${s}" ${i.status === s ? 'selected' : ''}>${UPGRADE_INTEREST_STATUS_LABEL[s]}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `, 'mb-8');
-}
-
-function renderRequestsCard() {
-  const requests = MockDB.listAllMeetingRequests();
-  const pending = requests.filter((r) => r.status !== 'done');
-  return card(`
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-sm text-white/50">Solicitações de Reunião</p>
-      <span class="text-xs" style="color:var(--muted);">${pending.length} em aberto</span>
-    </div>
-    ${pending.length ? `
-      <div class="space-y-4">
-        ${pending.map((r) => `
-          <div class="py-3 border-b border-white/5 last:border-0">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <p class="font-medium text-sm">${r.clientName}</p>
-                <p class="text-sm mt-1">${r.reason}</p>
-                <p class="text-xs mt-1" style="color:var(--muted);">${formatDate(r.createdAt)}</p>
-              </div>
-              <span class="badge ${REQUEST_STATUS_LABEL[r.status][1]}">${REQUEST_STATUS_LABEL[r.status][0]}</span>
-            </div>
-            <div class="flex items-center gap-2 mt-3">
-              ${r.status === 'pending' ? `
-                <button data-assign="${r.clientId}:${r.id}:nay" class="btn-ghost">Atribuir à Nay</button>
-                <button data-assign="${r.clientId}:${r.id}:assistant" class="btn-ghost">Atribuir à Assistente</button>
-              ` : `
-                <span class="text-xs" style="color:var(--muted);">Com ${ASSIGNEE_LABEL[r.assignedTo]}</span>
-                <button data-resolve="${r.clientId}:${r.id}" class="btn-text">Marcar como concluída</button>
-              `}
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    ` : '<p class="text-sm" style="color:var(--muted);">Nenhuma solicitação em aberto.</p>'}
-  `, 'mb-8');
-}
-
-const brl = (n) => `R$ ${Math.round(n).toLocaleString('pt-BR')}`;
-
-// The single most urgent thing that can block a whole client relationship
-// from moving forward, so it sits at the very top of the dashboard —
-// surfaced identically here, on Clientes, on the client's own detail page,
-// and in the assistant's checklist (see getClientsAwaitingInfo).
-function renderAwaitingInfoCard() {
-  const clients = MockDB.getClientsAwaitingInfo();
-  if (!clients.length) return '';
+// One quiet row of orientation numbers instead of the old wall of cards
+// (recent clients, mood, onboarding breakdown, full leads snapshot) —
+// each of those still has its own home (Clientes, Leads, Relatórios); this
+// is just "where do things stand" at a glance, not a second copy of them.
+function renderShortcuts() {
+  const clients = MockDB.listClients();
+  const activeCount = clients.filter((c) => c.status === 'active').length;
+  const onboardingCount = clients.filter((c) => c.status === 'onboarding').length;
+  const leadsSummary = MockDB.getLeadsSummary();
+  const fin = MockDB.getFinancialSummary();
+  const tiles = [
+    ['crm.html', `${activeCount}`, 'Clientes Ativas'],
+    ['crm.html', `${onboardingCount}`, 'Em Onboarding'],
+    ['crm.html?section=leads', `${leadsSummary.total}`, 'Leads'],
+    ['financial.html', brl(fin.totalPending), 'A Receber'],
+  ];
   return `
-    <div class="mb-8" style="border-left:3px solid var(--terracotta); border-radius:4px;">${card(`
-      <div class="flex items-center justify-between mb-4">
-        <p class="text-sm" style="color:var(--terracotta);">⚠ Aguardando Informações da Cliente</p>
-        <span class="text-xs" style="color:var(--muted);">${clients.length}</span>
-      </div>
-      <div class="divide-y" style="border-color:var(--line);">
-        ${clients.map((c) => `
-          <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
-            <div>
-              <p class="font-medium text-sm">${c.fullName}</p>
-              <p class="text-xs text-white/30">${c.email}</p>
-            </div>
-            <span class="text-xs" style="color:var(--terracotta);">Contrato não pode ser preparado ainda</span>
-          </a>
-        `).join('')}
-      </div>
-    `)}</div>
+    <div class="grid sm:grid-cols-4 gap-4 mb-8">
+      ${tiles.map(([href, value, label]) => `
+        <a href="${href}" class="block">${card(`<p class="text-2xl font-serif">${value}</p><p class="text-white/40 text-xs mt-1">${label}</p>`)}</a>
+      `).join('')}
+    </div>
   `;
-}
-
-// Motivational proof-of-impact numbers, per Nay's explicit request — real
-// numbers derived from data that already exists (payments, leads,
-// programHistory, priceHistory), never invented. See getSuccessMetrics.
-function renderSuccessMetricsCard() {
-  const m = MockDB.getSuccessMetrics();
-  const topPricing = m.pricingImpact.entries[0];
-  return card(`
-    <p class="text-sm text-white/50 mb-1">Impacto do Seu Trabalho</p>
-    <p class="text-xs text-white/20 mb-5">Números reais, calculados a partir dos dados do sistema.</p>
-    <div class="grid sm:grid-cols-4 gap-4 text-sm mb-5">
-      <div>
-        <p class="text-2xl font-serif" style="color:var(--gold);">${m.revenueGrowth.growthPct !== null ? `${m.revenueGrowth.growthPct >= 0 ? '+' : ''}${m.revenueGrowth.growthPct}%` : '—'}</p>
-        <p class="text-white/40 text-xs mt-1">Crescimento de receita</p>
-      </div>
-      <div>
-        <p class="text-2xl font-serif" style="color:var(--gold);">${m.leadConversion.conversionRatePct}%</p>
-        <p class="text-white/40 text-xs mt-1">Taxa de conversão de leads</p>
-      </div>
-      <div>
-        <p class="text-2xl font-serif" style="color:var(--gold);">${m.upsells.count}</p>
-        <p class="text-white/40 text-xs mt-1">Upsells em clientes atuais</p>
-      </div>
-      <div>
-        <p class="text-2xl font-serif" style="color:var(--gold);">${m.pricingImpact.avgMultiplier ? `${m.pricingImpact.avgMultiplier.toFixed(2)}x` : '—'}</p>
-        <p class="text-white/40 text-xs mt-1">Preço médio recomendado vs. anterior</p>
-      </div>
-    </div>
-    ${topPricing ? `
-      <p class="text-sm" style="border-top:1px solid var(--line); padding-top:16px;">
-        <strong>${topPricing.clientName}</strong> agora cobra <strong style="color:var(--gold);">${topPricing.multiplier.toFixed(2)}x mais</strong> por "${topPricing.offerName}" — de ${brl(topPricing.previousPrice)} para ${brl(topPricing.newPrice)}${topPricing.monthlyLift ? `, um ganho estimado de ${brl(topPricing.monthlyLift)}/mês para ela` : ''}.
-      </p>
-    ` : ''}
-  `, 'mb-8');
-}
-
-function renderOnboardingSummaryCard() {
-  const s = MockDB.getOnboardingSummary();
-  if (!s.stillOnboarding && !s.readyForPhase1) return '';
-  return card(`
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-sm text-white/50">Onboarding de Clientes</p>
-      <span class="text-xs" style="color:var(--muted);">${s.stillOnboarding} em andamento</span>
-    </div>
-    <div class="grid sm:grid-cols-3 gap-4 text-sm">
-      <div><p class="text-2xl font-serif">${s.awaitingContractPrep}</p><p class="text-white/40 text-xs mt-1">Aguardando Contrato</p></div>
-      <div><p class="text-2xl font-serif">${s.awaitingSignature}</p><p class="text-white/40 text-xs mt-1">Aguardando Assinatura</p></div>
-      <div><p class="text-2xl font-serif">${s.readyForPhase1}</p><p class="text-white/40 text-xs mt-1">Prontas para a Fase 1</p></div>
-    </div>
-  `, 'mb-8');
-}
-
-function renderMoodCard() {
-  const stats = MockDB.getGlobalMoodStats();
-  if (!stats.count) return card(`<p class="text-sm" style="color:var(--muted);">Ainda sem registros de sentimento dos clientes.</p>`, 'mb-8');
-  const avgEmoji = MOOD_SCALE.find((m) => m.value === Math.round(stats.avg))?.emoji || '😐';
-  return card(`
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-sm text-white/50">Sentimento dos Clientes</p>
-      <span class="text-xs" style="color:var(--muted);">${stats.count} registro${stats.count === 1 ? '' : 's'}</span>
-    </div>
-    <div class="flex items-center gap-4 mb-5">
-      <span style="font-size:2.2rem;">${avgEmoji}</span>
-      <div>
-        <p class="text-2xl font-serif">${stats.avg.toFixed(1)} / 5</p>
-        <p class="text-xs" style="color:var(--muted);">Média geral entre todos os clientes</p>
-      </div>
-    </div>
-    <div class="space-y-2">
-      ${MOOD_SCALE.map((m) => {
-        const n = stats.distribution[m.value] || 0;
-        const pct = stats.count ? Math.round((n / stats.count) * 100) : 0;
-        return `
-          <div class="flex items-center gap-3">
-            <span style="width:22px;">${m.emoji}</span>
-            <div class="progress-track flex-1"><div class="progress-fill" style="width:${pct}%;"></div></div>
-            <span class="text-xs w-10 text-right" style="color:var(--muted);">${n}</span>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `, 'mb-8');
 }
 
 function render() {
-  const clients = MockDB.listClients();
-
   content.innerHTML = `
-    ${renderAwaitingInfoCard()}
-    ${renderSuccessMetricsCard()}
+    <div class="mb-8">
+      <p class="text-white/40 text-sm mb-1">Painel</p>
+      <h1 class="text-3xl font-serif">Olá, Nay</h1>
+    </div>
+
+    ${renderActionList()}
     ${renderAgendaSnapshot()}
-    ${renderAssistantExceptionsCard()}
-    ${renderLeadsSnapshotCard()}
-    ${renderValueAnalysisOverviewCard()}
-    ${renderUpgradeInterestCard()}
-    ${renderOnboardingSummaryCard()}
     ${renderRequestsCard()}
+    ${renderShortcuts()}
 
-    ${card(`
-      <div class="flex items-center justify-between mb-4">
-        <p class="text-sm text-white/50">Clientes Recentes</p>
-        <a href="clients.html" class="btn-text">Ver todos os clientes &rarr;</a>
-      </div>
-      <div class="divide-y" style="border-color:var(--line);">
-        ${clients.slice(0, 5).map((c) => {
-          const metaLine = c.status === 'onboarding'
-            ? `Onboarding: ${ONBOARDING_STAGE_LABEL[c.onboardingStage]}`
-            : `${TIER_LABEL[c.tier] || c.tier} · Fase: ${TIER_PHASES[c.tier][c.phaseIndex]}`;
-          return `
-          <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
-            <div>
-              <p class="font-medium">${c.fullName}</p>
-              <p class="text-xs text-white/30">${c.email} · ${metaLine}</p>
-            </div>
-            <div class="flex items-center gap-4">
-              ${c.status === 'onboarding' ? '' : `<span class="text-xs text-white/40">Jornada ${c.journeyPct}% · Tarefas ${c.homeworkPct}%</span>`}
-              ${statusBadge(c.status)}
-            </div>
-          </a>
-        `;
-        }).join('')}
-      </div>
-    `)}
-
-    ${renderMoodCard()}
+    <a href="reports.html" class="btn-text">Ver relatórios completos (impacto, adesão, engajamento, financeiro) &rarr;</a>
   `;
 
-  content.querySelectorAll('[data-interest-status]').forEach((sel) => {
-    sel.addEventListener('change', () => {
-      MockDB.setUpgradeInterestStatus(sel.dataset.interestStatus, sel.value);
-      toast('Status do interesse atualizado.');
-      render();
-    });
-  });
   content.querySelectorAll('[data-assign]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const [clientId, requestId, assignee] = btn.dataset.assign.split(':');

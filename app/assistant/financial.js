@@ -5,7 +5,9 @@
 // see MockDB.issueInvoice, which now accepts a real uploaded file.
 import { MockDB, NF_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL } from '../shared/mock-db.js';
 import { renderShell, card, toast, formatDate, isValidAssetSrc, assetLinkAttrs } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'financial.html', title: 'Financeiro' });
 const content = document.getElementById('app-content');
 
@@ -21,6 +23,12 @@ function fileToDataUrl(file) {
   });
 }
 
+// A client can pay through more than one method at once (part card, part
+// Pix) — NF is still owed automatically if card is any part of that mix.
+function soldOnCard(contract) {
+  return (contract.paymentMethods && contract.paymentMethods.length ? contract.paymentMethods : [contract.paymentMethod]).includes('cartao_credito');
+}
+
 function rowsAcrossClients() {
   return MockDB.listClients().flatMap((c) => {
     const contract = MockDB.getOnboarding(c.id).contract;
@@ -29,15 +37,16 @@ function rowsAcrossClients() {
 }
 
 function paymentRow({ client, contract, payment: p }) {
-  const owed = p.nf.status !== 'issued' && (p.nf.status === 'requested' || contract.paymentMethod === 'cartao_credito');
+  const owed = p.nf.status !== 'issued' && (p.nf.status === 'requested' || soldOnCard(contract));
   const fileOk = isValidAssetSrc(p.nf.fileUrl);
+  const methods = contract.paymentMethods && contract.paymentMethods.length ? contract.paymentMethods : (contract.paymentMethod ? [contract.paymentMethod] : []);
   return `
     <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
       <div>
         <a href="client-workspace.html?id=${client.id}" class="text-sm font-medium hover:underline">${client.fullName}</a>
         <p class="text-xs text-white/30 mt-0.5">
           R$ ${p.amount.toLocaleString('pt-BR')} · vencimento ${formatDate(p.dueDate)}
-          ${contract.paymentMethod ? ` · ${PAYMENT_METHOD_LABEL[contract.paymentMethod]}` : ''}
+          ${methods.length ? ` · ${methods.map((m) => PAYMENT_METHOD_LABEL[m]).join(' + ')}` : ''}
           <span class="badge ${PAYMENT_BADGE_CLASS[p.status]}" style="font-size:9px; margin-left:6px;">${PAYMENT_STATUS_LABEL[p.status]}</span>
         </p>
       </div>
@@ -57,7 +66,7 @@ function paymentRow({ client, contract, payment: p }) {
 
 function render() {
   const rows = rowsAcrossClients();
-  const owed = rows.filter(({ contract, payment: p }) => p.nf.status !== 'issued' && (p.nf.status === 'requested' || contract.paymentMethod === 'cartao_credito'));
+  const owed = rows.filter(({ contract, payment: p }) => p.nf.status !== 'issued' && (p.nf.status === 'requested' || soldOnCard(contract)));
   const rest = rows.filter((r) => !owed.includes(r));
 
   content.innerHTML = `

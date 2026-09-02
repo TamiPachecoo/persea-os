@@ -11,9 +11,11 @@ import {
 } from '../shared/mock-db.js';
 import {
   renderShell, card, toast, badgeFromMaps, formatDateTime, isValidHttpUrl, externalLinkAttrs,
-  renderRecordingBlock, wireCopyLinkButtons, openRecordingLinksModal,
+  renderRecordingBlock, wireCopyLinkButtons, openRecordingLinksModal, isLocalDev,
 } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 const meetingId = new URLSearchParams(location.search).get('id');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'agenda.html' });
 const content = document.getElementById('app-content');
@@ -40,7 +42,11 @@ function renderSyncPanel(m) {
   `, 'mb-6');
 }
 
+// Gated to localhost only — see isLocalDev — so this demo-state simulator
+// can never render (or be interacted with) on a hosted preview or
+// production URL.
 function renderDevControls(m) {
+  if (!isLocalDev()) return '';
   return `
     <div class="dev-preview-panel">
       <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Controles da demonstração (dev, removível)</p>

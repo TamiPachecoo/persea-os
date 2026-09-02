@@ -8,7 +8,9 @@ import {
   MEETING_LIFECYCLE_LABEL, MEETING_LIFECYCLE_BADGE_CLASS,
 } from '../shared/mock-db.js';
 import { renderShell, card, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'queue.html', title: 'Recomendações de Conteúdo' });
 const content = document.getElementById('app-content');
 

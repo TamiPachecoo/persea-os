@@ -2,7 +2,17 @@
 // Visual language matches the PERSEA brand deck: dark ground, terracotta/gold
 // accents, Playfair Display headline type over Poppins body type.
 
-import { MockDB, getActiveClientId, setActiveClientId } from './mock-db.js';
+import { MockDB, getActiveClientId, setActiveClientId, PREMIUM_ONLY_PHASE_INDEX, ENCOUNTER_DEFS, ENCOUNTER_LABEL } from './mock-db.js';
+
+// Gate for the handful of removable dev-only controls scattered through the
+// prototype (state-forcing panels on value-analysis, recording-detail,
+// etc.) — real auth (requireProfile) is what actually protects a page;
+// this only decides whether a *convenience* shortcut renders at all, so
+// none of them show up on a hosted preview or production URL, only on a
+// developer's own machine.
+export function isLocalDev() {
+  return /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+}
 
 export function formatDate(iso) {
   return new Date(iso).toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -50,14 +60,13 @@ export function statusBadge(status) {
 // no longer top-level nav items. The Program Hub's own label is dynamic
 // (the client's actual enrolled program name), computed in renderShell.
 function clientNav() {
-  const program = MockDB.getClientProgram(getActiveClientId());
   const gated = MockDB.needsOnboardingCompletion(getActiveClientId());
   const lock = gated ? '🔒 ' : '';
   return [
-    ['dashboard.html', 'Painel'],
-    ['program.html', `${lock}${program ? program.name : 'Seu Programa'}`],
-    ['content.html', `${lock}Conteúdos`],
+    ['dashboard.html', 'Resumo'],
+    ['program.html', `${lock}Minha Jornada`],
     ['encontros.html', 'Encontros'],
+    ['content.html', `${lock}Conteúdos`],
     ['financial.html', 'Financeiro'],
   ];
 }
@@ -93,25 +102,26 @@ function onboardingGateBanner(active) {
 const ADMIN_NAV = [
   ['dashboard.html', 'Painel'],
   ['agenda.html', 'Agenda'],
-  ['clients.html', 'Clientes'],
-  ['leads.html', 'Leads'],
+  ['crm.html', 'CRM'],
   ['content.html', 'Conteúdos'],
+  ['assistente.html', 'Assistente'],
   ['financial.html', 'Financeiro'],
   ['reports.html', 'Relatórios'],
-  ['reviews.html', 'Revisões'],
 ];
 
 // The assistant's own mirror of Nay's admin nav — same shape (Painel,
 // Agenda, Clientes, Financeiro), scoped to her actual duties. Deliberately
 // not the full admin CRM: no Leads, no business-wide revenue/Relatórios —
-// Projetos/Guia de Produções replace those with her real day-to-day: the
-// reference library of deliverables she's already built for other clients.
+// Templates replaces those with her real day-to-day: the Canva source
+// material she works from, per client-workspace, before uploading what she
+// builds straight onto that client's own profile (no separate "delivered
+// projects" library to browse — the client's CRM record is that record now).
 const ASSISTANT_NAV = [
   ['queue.html', 'Painel'],
   ['agenda.html', 'Agenda'],
+  ['leads.html', 'Cadastros'],
   ['clients.html', 'Clientes'],
-  ['projects.html', 'Projetos'],
-  ['production-guides.html', 'Guia de Produções'],
+  ['templates.html', 'Templates'],
   ['financial.html', 'Financeiro'],
 ];
 
@@ -168,7 +178,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
             <nav class="hidden md:flex items-center gap-1">${navHtml}</nav>
           </div>
           <div class="flex items-center gap-4">
-            ${role === 'client' ? renderClientSwitcher() : ''}
+            ${role === 'client' && isLocalDev() ? renderClientSwitcher() : ''}
             <span class="text-[10px] uppercase tracking-[.2em]" style="color:var(--muted);">Visão ${ROLE_LABEL[role] || role}</span>
             <a href="../index.html" class="btn-text">Trocar perfil</a>
           </div>
@@ -711,17 +721,130 @@ export function renderPhaseTracker({ tier, phases, currentIndex }, { id = 'phase
         <div class="phase-line"></div>
         <div class="phase-line-fill" style="width:${fillPct}%;"></div>
         ${phases.map((label, i) => {
-          const state = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
+          // The one phase a non-Premium tier can see but never enter (see
+          // PREMIUM_ONLY_PHASE_INDEX) — shown locked with a 🔒, not folded
+          // into the ordinary "not reached yet" state, so it reads as
+          // "Premium content" rather than "coming up soon for you too".
+          const premiumLocked = tier !== 'premium' && i === PREMIUM_ONLY_PHASE_INDEX;
+          const state = premiumLocked ? 'premium' : i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'locked';
           return `
             <button type="button" data-phase-index="${i}" data-phase-state="${state}" class="phase-node phase-${state}">
-              <div class="phase-dot">${state === 'done' ? '&#10003;' : i + 1}</div>
-              <div class="phase-label">${label}</div>
+              <div class="phase-dot">${premiumLocked ? '&#128274;' : state === 'done' ? '&#10003;' : i + 1}</div>
+              <div class="phase-label">${label}${premiumLocked ? ' <span class="premium-badge" style="font-size:9px; padding:1px 6px; vertical-align:1px;">Premium</span>' : ''}</div>
             </button>
           `;
         }).join('')}
       </div>
     </div>
   `;
+}
+
+// Makes the phase tracker's nodes clickable — a completed phase takes her
+// to the playbook/deliverables that were sent during it, the current phase
+// to what she still needs to do, an upcoming one to its short preview.
+// Each phase section (see client/program.js's renderPhaseSection) carries
+// a matching `id="phase-section-<i>"`; if that section already lives in
+// `root` (Seu Programa itself), clicking just opens + scrolls to it. If
+// not (the Painel's copy of the tracker, which has no sections of its own),
+// it follows `hrefBase` into Seu Programa with the phase in the hash.
+export function wirePhaseTrackerNav(root, { hrefBase } = {}) {
+  root.querySelectorAll('[data-phase-index]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = root.querySelector(`#phase-section-${btn.dataset.phaseIndex}`);
+      if (target) {
+        if (target.tagName === 'DETAILS') target.open = true;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (hrefBase) {
+        location.href = `${hrefBase}#phase-section-${btn.dataset.phaseIndex}`;
+      }
+    });
+  });
+}
+
+// Encounter-scheduling requests — shared between Resumo (dashboard.js) and
+// Encontros (encontros.js) so both ever show the exact same set/state for
+// a request, never independently-drifting copies. Covers every open
+// status: Nay's offered times to pick from, the decline-with-observation
+// path when none work, and the two "waiting on Nay now" states, read-only.
+export function renderEncounterRequestsCard(clientId) {
+  const requests = MockDB.getEncounterRequests(clientId).filter((r) => !['confirmed', 'cancelled'].includes(r.status));
+  if (!requests.length) return '';
+  return card(`
+    <p class="text-sm mb-1" style="color:var(--gold);">Solicitações de Agendamento</p>
+    <div class="divide-y mt-3" style="border-color:var(--line);">
+      ${requests.map((r) => {
+        const def = ENCOUNTER_DEFS[r.encounterNumber - 1];
+        const label = ENCOUNTER_LABEL[def.slug];
+        if (r.status === 'awaiting_nay_confirmation') {
+          return `
+            <div class="py-4">
+              <p class="text-sm font-medium mb-1">${label}</p>
+              <p class="text-xs text-white/30">Horário escolhido: ${formatDateTime(r.selectedTime)} — aguardando confirmação.</p>
+            </div>
+          `;
+        }
+        if (r.status === 'client_unavailable') {
+          return `
+            <div class="py-4">
+              <p class="text-sm font-medium mb-1">${label}</p>
+              <p class="text-xs text-white/30">Observação enviada — aguardando novas opções de horário.</p>
+            </div>
+          `;
+        }
+        return `
+          <div class="py-4">
+            <p class="text-sm font-medium mb-2">${label}</p>
+            <div class="space-y-2 mb-3">
+              ${r.proposedTimes.map((t) => `
+                <label class="flex items-center gap-2 text-sm">
+                  <input type="radio" name="time-${r.id}" value="${t}" />
+                  ${formatDateTime(t)}
+                </label>
+              `).join('')}
+            </div>
+            <div class="flex items-center gap-3 flex-wrap mb-3">
+              <button type="button" data-select-time="${r.id}" class="btn-primary" style="padding:8px 16px;font-size:12.5px;">Confirmar Horário</button>
+              <button type="button" data-toggle-decline="${r.id}" class="btn-text">Nenhum horário funciona</button>
+            </div>
+            <div class="hidden" data-decline-form="${r.id}">
+              <textarea data-decline-note="${r.id}" rows="2" class="field text-sm" placeholder="Quando você costuma estar disponível?"></textarea>
+              <button type="button" data-send-decline="${r.id}" class="btn-ghost mt-2">Enviar Observação</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `, 'mb-8');
+}
+
+// Wires the buttons rendered by renderEncounterRequestsCard — call once
+// after inserting its HTML. onDone runs after either action succeeds
+// (each page decides how to refresh: re-render or reload).
+export function wireEncounterRequestForms(root, onDone) {
+  root.querySelectorAll('[data-select-time]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.selectTime;
+      const picked = root.querySelector(`input[name="time-${id}"]:checked`);
+      if (!picked) { toast('Escolha um horário antes de confirmar.', { tone: 'error' }); return; }
+      MockDB.selectEncounterMeetingTime(id, picked.value);
+      toast('Horário enviado — aguardando confirmação.');
+      onDone();
+    });
+  });
+  root.querySelectorAll('[data-toggle-decline]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      root.querySelector(`[data-decline-form="${btn.dataset.toggleDecline}"]`)?.classList.toggle('hidden');
+    });
+  });
+  root.querySelectorAll('[data-send-decline]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.sendDecline;
+      const note = root.querySelector(`[data-decline-note="${id}"]`)?.value || '';
+      MockDB.declineEncounterMeetingTimes(id, note.trim());
+      toast('Observação enviada.');
+      onDone();
+    });
+  });
 }
 
 const MOOD_EMOJIS = [

@@ -4,7 +4,9 @@
 // (that page orders the same checklist by priority — see client-workspace.js).
 import { MockDB, PROGRAM_LABEL } from '../shared/mock-db.js';
 import { renderShell, card } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'clients.html', title: 'Clientes' });
 const content = document.getElementById('app-content');
 

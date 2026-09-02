@@ -7,12 +7,33 @@ initClientSwitcher();
 
 const q = MockDB.getQuestionnaire(activeClientId);
 const content = document.getElementById('app-content');
+// Once submitted, this opens straight into "just the answers" — the form
+// itself only comes back if she explicitly asks to edit (see #edit-answers).
+let editing = q.status !== 'submitted';
 
-function render() {
+function renderReadOnly() {
+  content.innerHTML = `
+    <div class="mb-6 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm flex items-center justify-between gap-3 flex-wrap">
+      <span>Enviado — suas respostas estão registradas.</span>
+      <button type="button" id="edit-answers" class="btn-text" style="color:inherit; text-decoration:underline;">Editar respostas</button>
+    </div>
+    <div class="space-y-4">
+      ${q.questions.map((question) => `
+        <div class="card">
+          <p class="text-sm text-white/40 mb-1">${question.text}</p>
+          <p class="text-white/90">${question.answer || '—'}</p>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  content.querySelector('#edit-answers').addEventListener('click', () => { editing = true; render(); });
+}
+
+function renderForm() {
   content.innerHTML = `
     ${q.status === 'submitted' ? `
-      <div class="mb-6 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm">
-        Enviado. Você ainda pode revisar suas respostas abaixo.
+      <div class="mb-6 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm">
+        Editando suas respostas já enviadas.
       </div>
     ` : ''}
     <div class="space-y-6">
@@ -27,7 +48,8 @@ function render() {
         </div>
       `).join('')}
     </div>
-    <div class="mt-8 flex justify-end">
+    <div class="mt-8 flex justify-end gap-3">
+      ${q.status === 'submitted' ? '<button id="cancel-edit" class="px-6 py-3 rounded-xl border border-white/15 text-white/60 hover:text-white transition-colors">Cancelar</button>' : ''}
       <button id="submit-btn" class="px-6 py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition-colors">
         ${q.status === 'submitted' ? 'Salvar Alterações' : 'Enviar Questionário'}
       </button>
@@ -38,10 +60,12 @@ function render() {
     el.addEventListener('change', () => MockDB.saveAnswer(activeClientId, el.dataset.qid, el.value));
   });
 
+  content.querySelector('#cancel-edit')?.addEventListener('click', () => { editing = false; render(); });
   content.querySelector('#submit-btn').addEventListener('click', () => {
     const wasSubmitted = q.status === 'submitted';
     MockDB.submitQuestionnaire(activeClientId);
     q.status = 'submitted';
+    editing = false;
     toast(wasSubmitted ? 'Respostas atualizadas.' : 'Questionário enviado!');
     render();
     if (!wasSubmitted) {
@@ -52,6 +76,11 @@ function render() {
     }
   });
   initScrollReveal();
+}
+
+function render() {
+  if (q.status === 'submitted' && !editing) renderReadOnly();
+  else renderForm();
 }
 
 render();

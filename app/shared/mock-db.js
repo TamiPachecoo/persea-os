@@ -9,7 +9,7 @@
 
 import { blankAssessmentAnswers, blankOffer, blankFixedCost, blankVariableCost, blankReference } from './value-analysis-schema.js';
 
-const STORAGE_KEY = 'persea_mock_db_v27';
+const STORAGE_KEY = 'persea_mock_db_v38';
 export const DEFAULT_CLIENT_ID = 'client-1';
 
 // Which client the "client" side of the prototype is currently acting as —
@@ -24,17 +24,24 @@ export function setActiveClientId(id) {
   localStorage.setItem(ACTIVE_CLIENT_KEY, id);
 }
 
-// Mentoring program phases per tier — tenant-level config (persea/methodology/
-// in the real build), not per-client. A client's progress is just an index
-// into their tier's phase list. Aligned with the Nova Persea methodology's
-// Fase 1-4 groupings (see ENCOUNTER_DEFS below for which encounters land in
-// each phase) — same phase *count* per tier as before this alignment pass,
-// just renamed; renderPhaseTracker (ui.js) is index/label-agnostic so this
-// is a pure data rename, no component change needed.
+// Mentoring program phases — both tiers show all 4 names (Fase 1-4, see
+// ENCOUNTER_DEFS below for which encounters land in each), but Fase 4
+// ("Negócio e Aquisição") is Premium-only content: an Essencial client sees
+// it on her tracker and journey as a locked/Premium-teaser card (see
+// PREMIUM_ONLY_PHASE_INDEX below and its use in ui.js's renderPhaseTracker
+// + getClientJourney), never something she can actually enter. That's why
+// her real advancement cap is separate — see TIER_MAX_PHASE_INDEX.
 export const TIER_PHASES = {
   premium: ['Essência, Comunicação e Vendas', 'Imagem e Estratégia', 'Posicionamento e Metas', 'Negócio e Aquisição'],
-  essential: ['Essência, Comunicação e Vendas', 'Imagem e Estratégia', 'Posicionamento e Metas'],
+  essential: ['Essência, Comunicação e Vendas', 'Imagem e Estratégia', 'Posicionamento e Metas', 'Negócio e Aquisição'],
 };
+// The one phase every non-Premium tier can see but never actually enter —
+// matches E5-E8 (premiumOnly) all living in this same phase.
+export const PREMIUM_ONLY_PHASE_INDEX = 3;
+// How far setClientPhase will actually let a client advance, per tier —
+// distinct from TIER_PHASES.length, which is display-only (see above).
+// Premium can reach every phase; Essencial's real ceiling is Fase 3.
+export const TIER_MAX_PHASE_INDEX = { premium: 3, essential: 2 };
 
 // --- Program Hub ------------------------------------------------------------
 // The real enrollment model, replacing the old tier(premium/essential) +
@@ -80,32 +87,32 @@ export const PROGRAM_LABEL_BY_SLUG = Object.fromEntries(PROGRAM_DEFS.map((p) => 
 export const ENCOUNTER_DEFS = [
   {
     number: 1, slug: 'e1', name: 'Extração e Essência', phase: 0,
-    purpose: 'Entender o que a cliente vende e por que vende — considerando o onboarding, o Teste de Arquétipos e a Extração de Marca.',
+    purpose: 'Ouvir e entender QUEM a cliente é e POR QUE ela vende o que vende — Nay chega preparada a partir da Extração de Marca e do Teste de Arquétipos. Depois deste encontro, Nay monta o mural de inspiração (Direção da Marca).',
     premiumOnly: false,
   },
   {
     number: 2, slug: 'e2', name: 'Comunicação e Vendas', phase: 0,
-    purpose: 'Entender as dificuldades de venda da cliente, trabalhar comunicação, posicionamento e pitch, e definir o que ela precisa praticar.',
+    purpose: 'A cliente já respondeu a pesquisa de precificação (O QUE e COMO ela vende hoje) — Nay entra direcionando o encontro para as vendas dela: pitch para praticar, conteúdo recomendado, e onde ela pode se inspirar na Direção da Marca.',
     premiumOnly: false,
   },
   {
     number: 3, slug: 'e3', name: 'Imagem e Estratégia', phase: 1,
-    purpose: 'Conectar imagem pessoal à estratégia e percepção do negócio — revisar estilo e coordenar os entregáveis de imagem.',
+    purpose: 'A imagem a serviço do QUE e do COMO vender. A assistente já preparou e Nay já aprovou a Cartela de Cores, o Guia de Produções, o Planejamento de Imagem e as Ferramentas para Nova Imagem — apresentados juntos à cliente nesta chamada de 1h.',
     premiumOnly: false,
   },
   {
     number: 4, slug: 'e4', name: 'Posicionamento e Metas', phase: 2,
-    purpose: 'Esclarecer para quem, onde e por que a cliente deve se posicionar, e estabelecer metas tangíveis. Encerramento formal da Persea Essencial.',
+    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação. Encerramento formal da Persea Essencial.',
     premiumOnly: false,
   },
   {
     number: 5, slug: 'e5', name: 'Vendas e Comunicação', phase: 3,
-    purpose: 'Aprofundar as sete etapas do pitch de vendas, ouvir as barreiras comerciais da cliente e refinar comunicação e valor percebido.',
+    purpose: 'A cliente já preencheu a Análise de Negócio (pré-requisito obrigatório). Nay aprofunda o COMO e ONDE vender, apresenta a nova estratégia de precificação e encoraja a cliente — recomendando apoio extra (ex.: oratória) quando fizer sentido.',
     premiumOnly: true,
   },
   {
     number: 6, slug: 'e6', name: 'Negócio e Aquisição', phase: 3,
-    purpose: 'Analisar nicho, mercado e números do negócio, avaliar oferta e precificação, e definir indicadores mensuráveis de ROI.',
+    purpose: 'Validar o que está sendo implementado e discutir os próximos passos. Nay apresenta o Business Playbook (análise de negócio + pontos de foco para a cliente perseguir).',
     premiumOnly: true,
   },
   {
@@ -121,6 +128,67 @@ export const ENCOUNTER_DEFS = [
 ];
 export const ENCOUNTER_LABEL = Object.fromEntries(ENCOUNTER_DEFS.map((e) => [e.slug, `E${e.number} — ${e.name}`]));
 
+// What Nay is confirming she has ready *before* requesting a time for each
+// encontro — prefills the checklist on her "Solicitar Agendamento" request
+// (see requestEncounterMeeting). Editable per request (she can add/remove
+// lines when she opens the form), this is just the sensible starting point.
+export const ENCOUNTER_PREP_CHECKLIST = {
+  1: ['Resultados do Teste de Arquétipos e da Extração de Marca revisados', 'Notas prontas para explorar QUEM ela é, O QUE e POR QUE vende'],
+  2: ['Pesquisa de Precificação respondida', 'Pitch e conteúdos para recomendar já escolhidos'],
+  3: ['Cartela de Cores e Guia de Produções aprovados', 'Planejamento de Imagem e Ferramentas para Nova Imagem prontos'],
+  4: ['Ensaio fotográfico profissional realizado', 'Kit Digital pronto', 'Playbook de Marca Pessoal pronto (link salvo)'],
+  5: ['Análise de Negócio preenchida pela cliente', 'Nova estratégia de precificação definida'],
+  6: ['Business Playbook pronto (link salvo)', 'Pontos de implementação para validar com a cliente'],
+  7: ['Necessidade específica da cliente identificada para este encontro'],
+  8: ['Necessidade específica da cliente identificada para este encontro'],
+};
+
+// --- Client Journey — single source of truth for "Program -> Phase ->
+// Encounter -> Client activities -> Mentor deliverables", consumed by both
+// the client's guided journey view (client/program.js) and, so names/
+// statuses can never drift apart, admin's own broader view. Phase id/name
+// here is exactly TIER_PHASES (index-matched) — this config only adds which
+// existing PROGRAM_ACTIVITIES slugs and mentor-deliverable keys belong to
+// each phase; it does not introduce a second phase-naming scheme.
+// clientActivitySlugs must already exist in PROGRAM_ACTIVITIES — nothing
+// new is invented here, only grouped. See getClientJourney/mentorDeliverable.
+export const PROGRAM_PHASES = [
+  {
+    id: 0,
+    description: 'Entender o que você vende e por que vende — sua essência, sua história, e o que já apareceu no Teste de Arquétipos e na Extração de Marca.',
+    clientActivitySlugs: ['brand-extraction', 'archetype-test', 'business-survey', 'activity-guide', 'initial-images'],
+    mentorDeliverableKeys: ['extraction_analysis', 'archetype_reading', 'materials_analysis'],
+  },
+  {
+    id: 1,
+    description: 'Conectar sua imagem pessoal à sua estratégia e à percepção da sua marca.',
+    clientActivitySlugs: ['brand-direction'],
+    mentorDeliverableKeys: ['image_project', 'image_guides', 'mood_photo', 'positioning_direction'],
+  },
+  {
+    id: 2,
+    description: 'Esclarecer para quem, onde e por que você deve se posicionar — e aplicar isso na prática, na sua comunicação e no seu conteúdo.',
+    clientActivitySlugs: ['pitch', 'content'],
+    mentorDeliverableKeys: ['pitch_feedback', 'content_feedback'],
+  },
+  {
+    id: 3,
+    description: 'Aprofundar sua oferta, seus números e sua estratégia comercial — a etapa mais estratégica da jornada Premium.',
+    clientActivitySlugs: ['business'],
+    mentorDeliverableKeys: ['value_reading', 'digital_kit'],
+  },
+];
+export const MENTOR_DELIVERABLE_LABEL = {
+  extraction_analysis: 'Análise da Extração de Marca', archetype_reading: 'Leitura dos Arquétipos',
+  materials_analysis: 'Análise dos Materiais Enviados',
+  image_project: 'Projeto de Imagem', image_guides: 'Guias de Imagem', mood_photo: 'Mood Fotográfico',
+  positioning_direction: 'Direção de Comunicação e Posicionamento',
+  pitch_feedback: 'Devolutiva do Pitch', content_feedback: 'Devolutiva de Conteúdo',
+  value_reading: 'Leitura Estratégica de Valor', digital_kit: 'Kit Digital',
+};
+export const MENTOR_DELIVERABLE_STATUS_LABEL = { em_preparacao: 'Em preparação', pronto: 'Pronto', entregue: 'Entregue' };
+export const MENTOR_DELIVERABLE_STATUS_BADGE_CLASS = { em_preparacao: 'badge-progress', pronto: 'badge-progress', entregue: 'badge-completed' };
+
 // The 8 canonical activities every program is built from — order here is
 // the journey order shown in the Program Hub.
 export const PROGRAM_ACTIVITIES = [
@@ -132,16 +200,24 @@ export const PROGRAM_ACTIVITIES = [
     slug: 'archetype-test', title: 'Teste de Arquétipos', activityType: 'archetype_quiz', displayOrder: 2,
     description: 'Descubra quais energias aparecem com mais força na sua imagem, comunicação e posicionamento.', route: 'arquetipos.html',
   },
+  // Ahead of E2 — surface-level, never overwhelming (see BUSINESS_SURVEY_QUESTIONS):
+  // how she charges today, how long each delivery takes, and what she'd
+  // like to be charging. Gives Nay clarity before that encounter, not a
+  // full business diagnostic (that's the Business/Ficha de Valor activity).
   {
-    slug: 'activity-guide', title: 'Guia de Atividades', activityType: 'document', displayOrder: 3,
+    slug: 'business-survey', title: 'Pesquisa de Precificação', activityType: 'survey', displayOrder: 3,
+    description: 'Perguntas rápidas sobre como você cobra hoje e o que gostaria de estar cobrando — direciona o seu Encontro 2.', route: 'business-survey.html',
+  },
+  {
+    slug: 'activity-guide', title: 'Guia de Atividades', activityType: 'document', displayOrder: 4,
     description: 'Veja como preparar e fotografar as imagens que serão analisadas pela equipe.', route: 'activity-guide.html',
   },
   {
-    slug: 'initial-images', title: 'Imagens', activityType: 'upload', displayOrder: 4,
+    slug: 'initial-images', title: 'Imagens', activityType: 'upload', displayOrder: 5,
     description: 'Envie as imagens solicitadas para que a equipe possa iniciar sua análise.', route: 'images.html',
   },
   {
-    slug: 'brand-direction', title: 'Direção da Marca', activityType: 'workspace', displayOrder: 5,
+    slug: 'brand-direction', title: 'Direção da Marca', activityType: 'workspace', displayOrder: 6,
     description: 'Organize os direcionamentos estratégicos que irão orientar sua imagem, sua comunicação e suas decisões de marca.', route: 'brand-direction.html',
   },
   {
@@ -164,18 +240,30 @@ export const PROGRAM_ACTIVITY_LABEL = Object.fromEntries(PROGRAM_ACTIVITIES.map(
 // Source-of-truth access matrix from the Program Hub spec.
 export const PROGRAM_ACTIVITY_ACCESS = {
   'persea-essential': {
-    'brand-extraction': 'included', 'archetype-test': 'included', 'activity-guide': 'included', 'initial-images': 'included',
+    'brand-extraction': 'included', 'archetype-test': 'included', 'business-survey': 'included', 'activity-guide': 'included', 'initial-images': 'included',
     'brand-direction': 'included', pitch: 'included', content: 'included', business: 'premium_preview',
   },
   'persea-premium': {
-    'brand-extraction': 'included', 'archetype-test': 'included', 'activity-guide': 'included', 'initial-images': 'included',
+    'brand-extraction': 'included', 'archetype-test': 'included', 'business-survey': 'included', 'activity-guide': 'included', 'initial-images': 'included',
     'brand-direction': 'included', pitch: 'included', content: 'included', business: 'included',
   },
   'ascensao-imagem': {
-    'brand-extraction': 'included', 'archetype-test': 'included', 'activity-guide': 'included', 'initial-images': 'included',
+    'brand-extraction': 'included', 'archetype-test': 'included', 'business-survey': 'included', 'activity-guide': 'included', 'initial-images': 'included',
     'brand-direction': 'premium_preview', pitch: 'included', content: 'included', business: 'premium_preview',
   },
 };
+
+// E2's short pricing survey — deliberately surface-level (4 short
+// questions, no follow-ups), so Nay walks into E2 already knowing how the
+// cliente prices herself today without this feeling like homework. See
+// deriveActivityStatus's 'business-survey' case + getBusinessSurvey/
+// submitBusinessSurvey below.
+export const BUSINESS_SURVEY_QUESTIONS = [
+  { key: 'currentPricing', label: 'Como você cobra hoje pelos seus serviços?', type: 'text', placeholder: 'Ex.: R$ 300 por sessão' },
+  { key: 'timePerDelivery', label: 'Quanto tempo você gasta, em média, por entrega ou atendimento?', type: 'text', placeholder: 'Ex.: 3 horas' },
+  { key: 'goalPricing', label: 'Quanto você gostaria de estar cobrando?', type: 'text', placeholder: 'Ex.: R$ 500 por sessão' },
+  { key: 'biggestChallenge', label: 'Qual é o maior desafio que você sente hoje para vender?', type: 'textarea', placeholder: '' },
+];
 
 // Client-friendly status vocabulary for program activities — technical
 // status strings (see getProgramActivities) stay internal.
@@ -477,6 +565,66 @@ export const GUIDE_STATUSES = ['not_started', 'in_review', 'delivered'];
 export const GUIDE_STATUS_LABEL = { not_started: 'Não iniciado', in_review: 'Em revisão com a Nay', delivered: 'Entregue' };
 export const DIGITAL_KIT_STATUS_LABEL = GUIDE_STATUS_LABEL;
 
+// --- Template Library — Nay-curated source templates (Canva links, etc.)
+// the assistant works from when building each client's actual deliverable.
+// Not the same thing as IMAGE_GUIDE_SLUGS above: those are the per-client
+// *delivered* guides; this is the shared starting-point material behind
+// them, one config both admin/templates.js (editable) and
+// assistant/templates.js (read-only) render from, so the two views can
+// never drift — same "single source of truth" rule as everywhere else here.
+// The standard 12-tone seasonal color analysis — each season's 3 sub-types
+// are their own named variants (not one shared Escuro/Frio/Brilhante set
+// reused across all four): a sub-type name like "Brilhante" or "Quente"
+// shows up under two neighboring seasons, never all four.
+export const COLOR_SEASONS = ['primavera', 'verao', 'outono', 'inverno'];
+export const COLOR_SEASON_LABEL = { primavera: 'Primavera', verao: 'Verão', outono: 'Outono', inverno: 'Inverno' };
+export const COLOR_SEASON_VARIANTS = {
+  primavera: ['brilhante', 'quente', 'clara'],
+  verao: ['claro', 'frio', 'suave'],
+  outono: ['suave', 'quente', 'escuro'],
+  inverno: ['brilhante', 'frio', 'escuro'],
+};
+export const COLOR_VARIANT_LABEL = {
+  brilhante: 'Brilhante', quente: 'Quente', clara: 'Clara', claro: 'Claro', frio: 'Frio', suave: 'Suave', escuro: 'Escuro',
+};
+
+export const TEMPLATE_CATEGORIES = [
+  {
+    key: 'cartelaCores', label: 'Cartela de Cores',
+    description: 'Um modelo por subtipo de estação (análise sazonal de 12 tons) — 12 no total.',
+    groups: COLOR_SEASONS.map((season) => ({
+      groupLabel: COLOR_SEASON_LABEL[season],
+      items: COLOR_SEASON_VARIANTS[season].map((variant) => ({ itemKey: `${season}_${variant}`, itemLabel: COLOR_VARIANT_LABEL[variant] })),
+    })),
+  },
+  {
+    key: 'guiaProducoes', label: 'Guia de Produções',
+    description: 'Um modelo completo e um modelo mensal — o mensal também pode ser enviado direto para a cliente.',
+    groups: [{ groupLabel: null, items: [
+      { itemKey: 'completo', itemLabel: 'Guia Completo' },
+      { itemKey: 'mensal', itemLabel: 'Guia Mensal' },
+    ] }],
+  },
+  // These three are each a single link — grouped together on one row in
+  // both templates.js pages instead of three near-empty cards stacked on
+  // top of each other (see `single: true`, checked by the renderers).
+  {
+    key: 'kitDigital', label: 'Kit Digital', single: true,
+    description: 'Modelo único usado para montar o Kit Digital de cada cliente.',
+    groups: [{ groupLabel: null, items: [{ itemKey: 'padrao', itemLabel: 'Modelo' }] }],
+  },
+  {
+    key: 'planejamentoImagem', label: 'Planejamento de Imagem', single: true,
+    description: 'Modelo único.',
+    groups: [{ groupLabel: null, items: [{ itemKey: 'padrao', itemLabel: 'Modelo' }] }],
+  },
+  {
+    key: 'ferramentasNovaImagem', label: 'Ferramentas para Nova Imagem', single: true,
+    description: 'Modelo único.',
+    groups: [{ groupLabel: null, items: [{ itemKey: 'padrao', itemLabel: 'Modelo' }] }],
+  },
+];
+
 // Generic "send this to the client only after Nay reviews it" queue — used
 // today by image guides and the Digital Kit, built generically (type/refSlug)
 // so future assistant-authored deliverables can reuse it without a new table.
@@ -495,16 +643,27 @@ export const WHATSAPP_STATUS_LABEL = {
 // Extends, rather than replaces, the existing per-client `journey.upcomingMeeting`
 // field (kept in sync by hand in seed data for this pass — see the note above
 // `getAgendaItems()` for why a full merge is left to a later pass).
-export const AGENDA_TYPES = ['class', 'individual_meeting', 'group_meeting', 'online_event', 'admin_task', 'deadline', 'photo_review'];
+// 'checkpoint' is the Premium-only 30min check-in — distinct from an
+// individual_meeting so it never gets swept into the E1-E8 encounter count
+// (see getEncounterJourney, which only ever looks at individual_meeting)
+// while still being a real scheduled thing Nay and the client can both see
+// and tally against the 12-checkpoint allowance (see getMeetingsUsage).
+export const AGENDA_TYPES = ['class', 'individual_meeting', 'checkpoint', 'group_meeting', 'online_event', 'admin_task', 'deadline', 'photo_review'];
 export const AGENDA_TYPE_LABEL = {
   class: 'Aula',
   individual_meeting: 'Reunião Individual',
+  checkpoint: 'Check-in (30min)',
   group_meeting: 'Reunião em Grupo',
   online_event: 'Evento Online',
   admin_task: 'Tarefa Administrativa',
   deadline: 'Prazo / Follow-up',
   photo_review: 'Revisão de Fotos',
 };
+// Encontro allowances per the Nova Persea methodology — Essencial gets the
+// first 4 encontros (E1-E4) and no checkpoints; Premium gets all 8 encontros
+// plus 12 ad-hoc checkpoints. Group encontros are unlimited for both, so
+// they're tallied (see getMeetingsUsage) but never capped against a total.
+export const CHECKPOINT_ALLOWANCE = 12;
 export const AGENDA_STATUSES = ['upcoming', 'completed', 'rescheduled', 'cancelled'];
 export const AGENDA_STATUS_LABEL = {
   upcoming: 'Agendado',
@@ -590,7 +749,7 @@ export const LEAD_STAGE_LABEL = {
 // Assinatura" etc. mean exactly one thing everywhere in the app.
 export const LEAD_ONBOARDING_STATUSES = ['sale_agreed', 'registration_sent', 'registration_completed', 'in_contract', 'ready_for_activation', 'client_active'];
 export const LEAD_ONBOARDING_STATUS_LABEL = {
-  sale_agreed: 'Venda Fechada', registration_sent: 'Cadastro Enviado', registration_completed: 'Cadastro Recebido',
+  sale_agreed: 'Condições Registradas', registration_sent: 'Cadastro Enviado', registration_completed: 'Cadastro Recebido',
   in_contract: 'Contrato em Andamento', ready_for_activation: 'Pronta para Ativação', client_active: 'Cliente Ativa',
 };
 export const LEAD_ONBOARDING_STATUS_BADGE_CLASS = {
@@ -666,6 +825,34 @@ const SEED = {
       nextCheckAt: '2026-08-18T20:00:00',
       attempts: 128,
     },
+  },
+  // Template Library — see TEMPLATE_CATEGORIES above for the shape this
+  // must match (one entry per itemKey, nested under its category key).
+  // Seeded with placeholder Canva links, same "PLACEHOLDER" convention as
+  // tenant.hublaAllContentUrl above, so the admin page opens already
+  // populated rather than as 17 blank inputs — Nay swaps in the real ones.
+  templateLibrary: {
+    cartelaCores: {
+      primavera_brilhante: 'https://www.canva.com/design/PLACEHOLDER-cartela-primavera-brilhante/view',
+      primavera_quente: 'https://www.canva.com/design/PLACEHOLDER-cartela-primavera-quente/view',
+      primavera_clara: 'https://www.canva.com/design/PLACEHOLDER-cartela-primavera-clara/view',
+      verao_claro: 'https://www.canva.com/design/PLACEHOLDER-cartela-verao-claro/view',
+      verao_frio: 'https://www.canva.com/design/PLACEHOLDER-cartela-verao-frio/view',
+      verao_suave: 'https://www.canva.com/design/PLACEHOLDER-cartela-verao-suave/view',
+      outono_suave: 'https://www.canva.com/design/PLACEHOLDER-cartela-outono-suave/view',
+      outono_quente: 'https://www.canva.com/design/PLACEHOLDER-cartela-outono-quente/view',
+      outono_escuro: 'https://www.canva.com/design/PLACEHOLDER-cartela-outono-escuro/view',
+      inverno_brilhante: 'https://www.canva.com/design/PLACEHOLDER-cartela-inverno-brilhante/view',
+      inverno_frio: 'https://www.canva.com/design/PLACEHOLDER-cartela-inverno-frio/view',
+      inverno_escuro: 'https://www.canva.com/design/PLACEHOLDER-cartela-inverno-escuro/view',
+    },
+    guiaProducoes: {
+      completo: 'https://www.canva.com/design/PLACEHOLDER-guia-producoes-completo/view',
+      mensal: 'https://www.canva.com/design/PLACEHOLDER-guia-producoes-mensal/view',
+    },
+    kitDigital: { padrao: 'https://www.canva.com/design/PLACEHOLDER-kit-digital/view' },
+    planejamentoImagem: { padrao: 'https://www.canva.com/design/PLACEHOLDER-planejamento-imagem/view' },
+    ferramentasNovaImagem: { padrao: 'https://www.canva.com/design/PLACEHOLDER-ferramentas-nova-imagem/view' },
   },
   // Conteúdos gateway cards (see CONTENT_CATEGORY_TONES note above).
   contentCategories: [
@@ -846,14 +1033,14 @@ const SEED = {
       // waiting on her to fill it in.
       program: 'persea-essential', onboardingStatus: 'registration_sent',
       commercialTerms: {
-        paymentMethod: 'cartao_credito', installments: 6, agreedAmount: 18000, firstDueDate: '2026-09-05',
-        commercialNotes: 'Fechou no plano semestral, parcelado no cartão em 6x.', responsibleId: 'nay', saleAgreedAt: '2026-08-18T15:00:00',
+        paymentMethods: ['cartao_credito', 'pix'], paymentMethod: 'cartao_credito', installments: 6, agreedAmount: 18000, firstDueDate: '2026-09-05',
+        commercialNotes: 'Fechou no plano semestral: entrada via Pix + saldo parcelado no cartão em 6x.', responsibleId: 'nay', saleAgreedAt: '2026-08-18T15:00:00',
       },
       registrationToken: 'lead1-demo1234abcd5678', registrationInfo: null, registrationSentAt: '2026-08-18T16:00:00', registrationCompletedAt: null,
       contractStatus: 'info_pending', signedFileName: null,
       history: [
         { type: 'registration_sent', text: 'Formulário de cadastro enviado à cliente.', at: '2026-08-18T16:00:00' },
-        { type: 'sale_agreed', text: 'Venda fechada — condições comerciais registradas.', at: '2026-08-18T15:00:00' },
+        { type: 'sale_agreed', text: 'Condições comerciais registradas.', at: '2026-08-18T15:00:00' },
       ],
       createdAt: '2026-07-15T09:00:00', updatedAt: '2026-08-18T16:00:00',
     },
@@ -880,7 +1067,7 @@ const SEED = {
       // the "Ativar Cliente" state (see admin/lead-detail.js).
       program: 'ascensao-imagem', onboardingStatus: 'ready_for_activation',
       commercialTerms: {
-        paymentMethod: 'pix', installments: 1, agreedAmount: 6000, firstDueDate: '2026-08-20',
+        paymentMethods: ['pix'], paymentMethod: 'pix', installments: 1, agreedAmount: 6000, firstDueDate: '2026-08-20',
         commercialNotes: 'Pagamento único via Pix, à vista com 5% de desconto já aplicado.', responsibleId: 'nay', saleAgreedAt: '2026-08-12T10:00:00',
       },
       registrationToken: 'lead3-demo9876zyxw4321', registrationCompletedAt: '2026-08-14T19:20:00', registrationSentAt: '2026-08-12T11:00:00',
@@ -897,7 +1084,7 @@ const SEED = {
         { type: 'contract_status_changed', text: 'Status do contrato: Contrato Preparado', at: '2026-08-15T10:00:00' },
         { type: 'registration_completed', text: 'Cadastro recebido da cliente.', at: '2026-08-14T19:20:00' },
         { type: 'registration_sent', text: 'Formulário de cadastro enviado à cliente.', at: '2026-08-12T11:00:00' },
-        { type: 'sale_agreed', text: 'Venda fechada — condições comerciais registradas.', at: '2026-08-12T10:00:00' },
+        { type: 'sale_agreed', text: 'Condições comerciais registradas.', at: '2026-08-12T10:00:00' },
       ],
       createdAt: '2026-07-28T09:00:00', updatedAt: '2026-08-19T09:00:00',
     },
@@ -975,38 +1162,34 @@ const SEED = {
   // have real examples. Individual-meeting entries mirror the matching
   // client's journey.upcomingMeeting (see the duplication note above
   // getAgendaItems()).
+  // Trimmed to a handful of examples on purpose (Nay: the old seed — 21
+  // demo items covering every type/status combo — made the Agenda feel
+  // overwhelming rather than useful). Keep only enough to show each real
+  // type once or twice; add real events as they actually happen.
   agendaItems: [
     { id: 'ag1', type: 'admin_task', title: 'Preparar contrato da Bianca Souza', date: '2026-08-13T11:00:00', status: 'upcoming', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Preparar contrato a partir das informações recebidas', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-08-10T09:00:00', updatedAt: '2026-08-10T09:00:00' },
-    { id: 'ag2', type: 'deadline', title: 'Responder solicitação da Marina', date: '2026-08-13T17:00:00', status: 'upcoming', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Dúvida sobre como aplicar a Voz da Marca nas redes', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-07-09T10:00:00', updatedAt: '2026-07-09T10:00:00' },
     { id: 'ag3', type: 'class', title: 'N Time Class — Tendências de Imagem 2026', date: '2026-08-13T20:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: 'N Time Class', topic: 'Aula mensal ao vivo sobre tendências de imagem', prepNotes: 'Revisar slides da aula anterior.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-ntime', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
     { id: 'ag4', type: 'group_meeting', title: 'Q&A Mensal — Turma Geral', date: '2026-08-14T19:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: 'Q&A Mensal PERSEA', topic: 'Perguntas e respostas ao vivo com todas as mentoradas', prepNotes: 'Revisar dúvidas enviadas durante a semana.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-qna', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
-    { id: 'ag5', type: 'admin_task', title: 'Fechar contrato da Camila Rocha', date: '2026-08-14T09:00:00', status: 'upcoming', relatedStudentId: 'client-5', relatedGroupLabel: null, topic: 'Confirmar assinatura do contrato Semestral', prepNotes: '', generalNotes: 'Contrato já está na plataforma externa, aguardando confirmação.', onlineLink: '', followUpNotes: '', createdAt: '2026-08-05T09:00:00', updatedAt: '2026-08-05T09:00:00' },
     { id: 'ag6', type: 'individual_meeting', title: 'E2 — Comunicação e Vendas', date: '2026-08-15T10:00:00', status: 'upcoming', relatedStudentId: 'client-2', relatedGroupLabel: null, topic: 'Dificuldades de venda, comunicação, posicionamento e pitch', prepNotes: 'Revisar respostas do questionário antes da reunião.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-julia', followUpNotes: '', createdAt: '2026-07-11T09:00:00', updatedAt: '2026-07-11T09:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
       recording: { recordingStatus: 'aguardando', transcriptStatus: 'nao_aplicavel', recordingUrl: null, transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: null, nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'aguardando', attempts: 0 } } },
-    { id: 'ag7', type: 'online_event', title: 'Live Instagram — Bastidores da Mentoria', date: '2026-08-16T18:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: null, topic: 'Conteúdo institucional para redes sociais', prepNotes: 'Definir roteiro da live.', generalNotes: '', onlineLink: 'https://instagram.com/naymurta', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
-    { id: 'ag8', type: 'individual_meeting', title: 'E4 — Posicionamento e Metas', date: '2026-08-17T13:30:00', status: 'upcoming', relatedStudentId: 'client-3', relatedGroupLabel: null, topic: 'Para quem, onde e por que se posicionar — metas tangíveis', prepNotes: 'Levar comentários sobre o posicionamento como estrategista.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-renata', followUpNotes: '', createdAt: '2026-07-02T09:00:00', updatedAt: '2026-07-02T09:00:00', durationMinutes: 60, assignedTo: 'assistant', assistantPersona: 'ju',
-      recording: { recordingStatus: 'aguardando', transcriptStatus: 'nao_aplicavel', recordingUrl: null, transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: null, nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'aguardando', attempts: 0 } } },
-    { id: 'ag9', type: 'individual_meeting', title: 'E3 — Imagem e Estratégia', date: '2026-08-19T15:00:00', status: 'upcoming', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Imagem pessoal conectada à estratégia e percepção do negócio', prepNotes: 'Preparar exemplos de conteúdo alinhado à Voz da Marca.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-marina', followUpNotes: '', createdAt: '2026-07-09T09:00:00', updatedAt: '2026-07-09T09:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
-      recording: { recordingStatus: 'aguardando', transcriptStatus: 'nao_aplicavel', recordingUrl: null, transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: null, nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'aguardando', attempts: 0 } } },
-    { id: 'ag10', type: 'deadline', title: 'Revisar Playbook em rascunho da Renata', date: '2026-08-12T00:00:00', status: 'upcoming', relatedStudentId: 'client-3', relatedGroupLabel: null, topic: 'Revisão final antes de publicar', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-07-02T10:00:00', updatedAt: '2026-07-02T10:00:00' },
-    { id: 'ag11', type: 'admin_task', title: 'Follow-up — Bianca sem grupo de WhatsApp', date: '2026-08-11T00:00:00', status: 'upcoming', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Adicionar ao grupo após conclusão do onboarding', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-08-10T09:00:00', updatedAt: '2026-08-10T09:00:00' },
-    // client-6's pre-onboarding diagnostic call had no Google Meet link on
-    // file — no recording could ever have been captured, so this is the
-    // "sem gravação" demo case rather than a failure state.
-    { id: 'ag12', type: 'individual_meeting', title: 'Diagnóstico Inicial', date: '2026-08-05T10:00:00', status: 'completed', relatedStudentId: 'client-6', relatedGroupLabel: null, topic: 'Diagnóstico inicial pré-onboarding', prepNotes: '', generalNotes: 'Reunião realizada, cliente segue para assinatura de contrato.', onlineLink: '', followUpNotes: 'Nenhum follow-up necessário.', createdAt: '2026-08-05T11:00:00', updatedAt: '2026-08-05T11:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
-      recording: { recordingStatus: 'sem_gravacao', transcriptStatus: 'nao_aplicavel', recordingUrl: null, transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: '2026-08-05T20:00:00', nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'concluido', attempts: 1 } } },
-    // --- Meeting-recording prototype demo set (see docs/google-meet-integration.md) ---
-    { id: 'ag13', type: 'individual_meeting', title: 'E2 — Comunicação e Vendas', date: '2026-08-16T14:00:00', status: 'completed', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Aprofundamento de posicionamento comercial', prepNotes: '', generalNotes: 'Reunião realizada — aguardando o Google processar a gravação.', onlineLink: 'https://meet.google.com/persea-marina-e2', followUpNotes: '', createdAt: '2026-08-09T09:00:00', updatedAt: '2026-08-16T14:50:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
-      recording: { recordingStatus: 'processando', transcriptStatus: 'aguardando', recordingUrl: null, transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: '2026-08-16T15:10:00', nextCheckAt: '2026-08-16T21:10:00', googleAccount: 'nay@persea.com.br', syncStatus: 'em_andamento', attempts: 2 } } },
-    { id: 'ag14', type: 'individual_meeting', title: 'E3 — Imagem e Estratégia', date: '2026-08-10T10:00:00', status: 'completed', relatedStudentId: 'client-3', relatedGroupLabel: null, topic: 'Diagnóstico de imagem pessoal e estilo', prepNotes: '', generalNotes: 'Gravação disponível — transcrição ainda não retornou do Google Docs.', onlineLink: 'https://meet.google.com/persea-renata-e3', followUpNotes: '', createdAt: '2026-08-03T09:00:00', updatedAt: '2026-08-10T11:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
-      recording: { recordingStatus: 'disponivel', transcriptStatus: 'aguardando', recordingUrl: 'https://drive.google.com/file/d/persea-renata-e3-gravacao/view', transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: '2026-08-10T14:00:00', nextCheckAt: '2026-08-10T20:00:00', googleAccount: 'nay@persea.com.br', syncStatus: 'em_andamento', attempts: 4 } } },
+    // One completed meeting kept to show the "requires attention" recording
+    // state (see docs/google-meet-integration.md) — the rest of that demo
+    // set was cut for being more than anyone needs to see at once.
     { id: 'ag15', type: 'individual_meeting', title: 'E1 — Extração e Essência', date: '2026-08-09T10:00:00', status: 'completed', relatedStudentId: 'client-2', relatedGroupLabel: null, topic: 'Extração de marca e essência', prepNotes: '', generalNotes: '', onlineLink: 'https://meet.google.com/persea-julia-e1', followUpNotes: '', createdAt: '2026-08-02T09:00:00', updatedAt: '2026-08-09T18:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
       recording: { recordingStatus: 'erro', transcriptStatus: 'erro', recordingUrl: null, transcriptUrl: null, requiresAttention: true, attentionNote: 'O Google não retornou o link da gravação depois de várias tentativas — verifique manualmente no Drive e cole o link abaixo.', sync: { lastCheckedAt: '2026-08-12T09:00:00', nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'erro', attempts: 6 } } },
-    { id: 'ag16', type: 'individual_meeting', title: 'Diagnóstico Inicial', date: '2026-08-06T10:00:00', status: 'completed', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Diagnóstico inicial pré-onboarding', prepNotes: '', generalNotes: 'Reunião realizada, cliente segue para preenchimento das informações.', onlineLink: 'https://meet.google.com/persea-bianca-diag', followUpNotes: '', createdAt: '2026-08-06T09:00:00', updatedAt: '2026-08-06T12:00:00', durationMinutes: 60, assignedTo: 'assistant', assistantPersona: 'ju',
-      recording: { recordingStatus: 'disponivel', transcriptStatus: 'disponivel', recordingUrl: 'https://drive.google.com/file/d/persea-bianca-diagnostico-gravacao/view', transcriptUrl: 'https://docs.google.com/document/d/persea-bianca-diagnostico-transcricao/edit', requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: '2026-08-06T15:00:00', nextCheckAt: '2026-09-06T15:00:00', googleAccount: 'nay@persea.com.br', syncStatus: 'concluido', attempts: 3 } } },
-    { id: 'ag17', type: 'individual_meeting', title: 'Reunião de Fechamento — Assinatura do Contrato', date: '2026-08-22T11:00:00', status: 'upcoming', relatedStudentId: 'client-5', relatedGroupLabel: null, topic: 'Confirmar assinatura e alinhar início da Fase 1', prepNotes: '', generalNotes: '', onlineLink: 'https://meet.google.com/persea-camila-fechamento', followUpNotes: '', createdAt: '2026-08-14T09:00:00', updatedAt: '2026-08-14T09:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
-      recording: { recordingStatus: 'aguardando', transcriptStatus: 'nao_aplicavel', recordingUrl: null, transcriptUrl: null, requiresAttention: false, attentionNote: '', sync: { lastCheckedAt: null, nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'aguardando', attempts: 0 } } },
+    // Premium checkpoints (see CHECKPOINT_ALLOWANCE) — one done, one
+    // upcoming, enough to show the 30min ad-hoc check-in on Marina's tally.
+    { id: 'ag18', type: 'checkpoint', title: 'Check-in — Dúvidas de Precificação', date: '2026-07-20T09:30:00', status: 'completed', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Ajuste rápido na tabela de preços antes do lançamento', prepNotes: '', generalNotes: 'Alinhado — Marina vai testar o novo valor no próximo lote de clientes.', onlineLink: 'https://meet.google.com/persea-marina-checkin1', followUpNotes: '', createdAt: '2026-07-18T09:00:00', updatedAt: '2026-07-20T10:00:00', durationMinutes: 30, assignedTo: 'nay', assistantPersona: null },
+    { id: 'ag21', type: 'checkpoint', title: 'Check-in — Feedback de Proposta', date: '2026-08-25T14:00:00', status: 'upcoming', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Ler uma proposta comercial antes de enviar', prepNotes: '', generalNotes: '', onlineLink: 'https://meet.google.com/persea-marina-checkin4', followUpNotes: '', createdAt: '2026-08-19T09:00:00', updatedAt: '2026-08-19T09:00:00', durationMinutes: 30, assignedTo: 'nay', assistantPersona: null },
   ],
+  // Encontro scheduling requests — Nay starts one from a client's E{n} tab
+  // with candidate date/times (plus the prep checklist she's confirming for
+  // herself); the client either picks one or sends back an observation
+  // about her availability. Only once Nay confirms a final time does it
+  // become a real agendaItem (see requestEncounterMeeting and friends
+  // below). Nothing here duplicates the agenda — a confirmed request just
+  // points at the agendaItem it created.
+  encounterRequests: [],
   // Generic "assistant prepared this, Nay needs to look before it goes to the
   // client" queue — see CONTENT_REVIEW_STATUSES above. type+refSlug identify
   // what's under review; approving applies its effect on that source record
@@ -1231,6 +1414,13 @@ const SEED = {
         { id: 'mr1', reason: 'Tenho dúvida sobre como aplicar a Voz da Marca nas redes sociais.', status: 'assigned', assignedTo: 'nay', createdAt: '2026-07-09T10:00:00' },
       ],
       notes: 'Lembrar de perguntar sobre precificação na próxima reunião.',
+      // Filled in by Nay from E1/E2 — see admin/client-detail.js's Programa tab.
+      summary: {
+        who: 'Consultora de posicionamento para especialistas de alto nível — profissionais tecnicamente excelentes, mas com pouca visibilidade de marca.',
+        what: 'Mentorias e consultorias de posicionamento de marca pessoal para consultores e coaches já estabelecidos.',
+        why: 'Fechar a lacuna entre a real competência dos clientes e como o mercado os percebe, transformando autoridade invisível em autoridade reconhecida.',
+        how: 'Mentorias 1:1 e conteúdo estratégico nas redes — Mago e o trio Exploradora/Amante/Governante aparecem com força na comunicação dela.',
+      },
       moodLog: [
         { context: 'questionnaire_submitted', mood: 4, at: '2026-07-01T09:41:00' },
         { context: 'playbook_experience', mood: 5, at: '2026-07-06T19:31:00' },
@@ -1357,7 +1547,7 @@ const SEED = {
           { key: 'questionnaire', title: 'Extração de Marca', status: 'completed' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'available' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
-          { key: 'assessment', title: 'Teste de Arquétipos', status: 'locked' },
+          { key: 'assessment', title: 'Teste de Arquétipos', status: 'available' },
           { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
           { key: 'homework', title: 'Tarefas', status: 'locked' },
         ],
@@ -1423,6 +1613,13 @@ const SEED = {
         { id: 'mr2', reason: 'Fiquei perdida em uma pergunta do questionário, queria confirmar se respondi certo.', status: 'pending', assignedTo: null, createdAt: '2026-07-11T14:00:00' },
       ],
       notes: '',
+      // Filled in by Nay from E1/E2 — see admin/client-detail.js's Programa tab.
+      summary: {
+        who: 'Educadora financeira ainda no início da construção da sua autoridade pública — tecnicamente segura, mas evita se expor.',
+        what: 'Consultoria e conteúdo educativo sobre finanças pessoais para mulheres autônomas.',
+        why: 'Ser vista como referência em finanças para mulheres autônomas, ajudando-as a sair da confusão financeira para a clareza e o controle.',
+        how: 'Hoje se comunica principalmente por conteúdo escrito — ainda evita vídeos e lives; o objetivo é migrar aos poucos conforme ganha confiança.',
+      },
       moodLog: [
         { context: 'questionnaire_submitted', mood: 3, at: '2026-07-10T09:01:00' },
       ],
@@ -1570,6 +1767,13 @@ const SEED = {
       quiz: { score: null, total: null, completedAt: null },
       meetingRequests: [],
       notes: 'Verificar com a Nay se posso usar o playbook em uma proposta comercial antes da publicação.',
+      // Filled in by Nay from E1/E2 — see admin/client-detail.js's Programa tab.
+      summary: {
+        who: 'Estrategista de marca e consultora de negócios, com um perfil racional e estruturado (Sábio, Governante e Criador em destaque).',
+        what: 'Consultoria de organização operacional e estratégica para negócios que cresceram rápido.',
+        why: 'Ajudar negócios que expandiram rápido demais a organizarem a operação antes que o crescimento desorganizado vire prejuízo.',
+        how: 'Diagnóstico de negócio, plano de ação estruturado e acompanhamento próximo — nomear a própria metodologia é um dos focos atuais.',
+      },
       moodLog: [
         { context: 'questionnaire_submitted', mood: 4, at: '2026-06-28T10:41:00' },
         { context: 'homework_task', mood: 3, at: '2026-07-03T09:00:00' },
@@ -1938,6 +2142,7 @@ function blankRegistrationInfo() {
 const PROGRAM_ACTIVITY_PRIMARY_ACTION = {
   'brand-extraction': { not_started: 'Iniciar Extração de Marca', in_progress: 'Continuar Extração de Marca', completed: 'Ver Extração de Marca' },
   'archetype-test': { not_started: 'Iniciar teste', in_progress: 'Continuar teste', completed: 'Ver meu resultado' },
+  'business-survey': { not_started: 'Responder pesquisa', completed: 'Ver minhas respostas' },
   'activity-guide': { not_started: 'Ver Guia de Atividades', completed: 'Ver Guia de Atividades' },
   'initial-images': {
     not_started: 'Enviar imagens', in_progress: 'Continuar envio de imagens', submitted: 'Ver imagens enviadas',
@@ -1972,31 +2177,42 @@ function archetypeQuizStatusFor(c) {
 // so the Painel and the Program Hub, which both call this, can never drift
 // out of sync with each other or with the feature's own page.
 function deriveActivityStatus(c, slug) {
-  // Extração de Marca and Teste de Arquétipos are the two activities a
-  // client can (and should) start *during* onboarding — as soon as her
-  // contract is signed and filed, not only after the full onboarding
-  // sequence (WhatsApp group, resources) finishes. Everything else stays
-  // locked until she's fully active. Bypasses the legacy per-step
-  // `journey.steps` lock below (which only starts advancing post-onboarding)
-  // for exactly these two, since a freshly-signed client's journey steps
-  // are still seeded 'locked'.
-  if (c.profile.status === 'onboarding') {
-    const preOnboardingUnlockable = slug === 'brand-extraction' || slug === 'archetype-test';
-    if (!preOnboardingUnlockable) return 'locked';
-    if (c.onboarding.contract.status !== 'completed') return 'locked';
-    if (slug === 'brand-extraction') return c.questionnaire.status === 'submitted' ? 'completed' : 'in_progress';
-    if (slug === 'archetype-test') return archetypeQuizStatusFor(c);
+  // Teste de Arquétipos is available to every client, on every program,
+  // from the moment her contract is signed — never gated behind a program
+  // tier (see PROGRAM_ACTIVITY_ACCESS: 'archetype-test' is 'included'
+  // everywhere) or behind reaching a later phase. Checked before the
+  // onboarding/active branches below so a legacy `journey.steps`
+  // "assessment" entry seeded 'locked' can never override this — the
+  // contract being signed is the one real prerequisite, same as Extração
+  // de Marca.
+  if (slug === 'archetype-test') {
+    return c.onboarding.contract.status === 'completed' ? archetypeQuizStatusFor(c) : 'locked';
   }
-  const stepMap = { 'brand-extraction': 'questionnaire', 'archetype-test': 'assessment', pitch: 'pitch' };
+  // Pesquisa de Precificação (see BUSINESS_SURVEY_QUESTIONS) — same rule as
+  // the archetype quiz: available the moment the contract's signed, never
+  // gated behind a later phase.
+  if (slug === 'business-survey') {
+    if (c.onboarding.contract.status !== 'completed') return 'locked';
+    return (c.businessSurvey && c.businessSurvey.status === 'submitted') ? 'completed' : 'not_started';
+  }
+  // Extração de Marca is the other activity a client can (and should) start
+  // *during* onboarding — as soon as her contract is signed and filed, not
+  // only after the full onboarding sequence (WhatsApp group, resources)
+  // finishes. Everything else stays locked until she's fully active.
+  // Bypasses the legacy per-step `journey.steps` lock below (which only
+  // starts advancing post-onboarding), since a freshly-signed client's
+  // journey steps are still seeded 'locked'.
+  if (c.profile.status === 'onboarding') {
+    if (slug !== 'brand-extraction') return 'locked';
+    if (c.onboarding.contract.status !== 'completed') return 'locked';
+    return c.questionnaire.status === 'submitted' ? 'completed' : 'in_progress';
+  }
+  const stepMap = { 'brand-extraction': 'questionnaire', pitch: 'pitch' };
   if (stepMap[slug]) {
     const step = (c.journey.steps || []).find((s) => s.key === stepMap[slug]);
     const base = step ? step.status : 'locked';
     if (base === 'locked') return 'locked';
     if (slug === 'brand-extraction') return c.questionnaire.status === 'submitted' ? 'completed' : 'in_progress';
-    if (slug === 'archetype-test') {
-      const qStatus = archetypeQuizStatusFor(c);
-      return qStatus === 'not_started' && base === 'completed' ? 'completed' : qStatus;
-    }
     if (slug === 'pitch') return c.pitches ? 'completed' : (base === 'available' ? 'not_started' : base);
   }
   if (slug === 'activity-guide') return c.guideAcknowledged ? 'completed' : 'not_started';
@@ -2015,6 +2231,56 @@ function deriveActivityStatus(c, slug) {
   }
   if (slug === 'content') return c.contentActivity.status;
   return 'locked';
+}
+
+// A "mentor deliverable" — client-friendly framing over an existing,
+// already-tracked fact (never a new stored status), so it can't drift from
+// what admin/assistant already see. Client language only: em_preparacao /
+// pronto / entregue, per the "she should never think she needs to complete
+// this herself" requirement — see MENTOR_DELIVERABLE_STATUS_LABEL.
+function mentorDeliverable(db, c, key) {
+  const base = { key, label: MENTOR_DELIVERABLE_LABEL[key] };
+  switch (key) {
+    case 'extraction_analysis':
+      return { ...base, description: 'Nay está lendo suas respostas para entender sua essência e seus objetivos.',
+        status: (c.questionnaireAnalysis && c.questionnaireAnalysis.generatedAt) ? 'entregue' : 'em_preparacao' };
+    case 'archetype_reading':
+      return { ...base, description: 'Nay está conectando os arquétipos que mais apareceram à sua imagem e ao seu posicionamento.',
+        status: c.archetypeQuiz.notes ? 'entregue' : 'em_preparacao' };
+    case 'materials_analysis':
+      return { ...base, description: 'A equipe está analisando as fotos que você enviou.',
+        status: c.imagesStatus === 'aprovado' ? 'entregue' : 'em_preparacao' };
+    case 'image_project':
+      return { ...base, description: 'Seu projeto de imagem, organizado pela equipe a partir das suas fotos.',
+        status: c.imageProjectStatus === 'created' ? 'pronto' : 'em_preparacao' };
+    case 'image_guides': {
+      const guides = (c.imageGuides || []).filter((g) => g.slug === 'paleta_cores' || g.slug === 'estilo');
+      const delivered = guides.filter((g) => g.fileUrl).length;
+      return { ...base, description: 'Sua paleta de cores e guia de estilo.',
+        status: delivered && delivered === guides.length ? 'entregue' : (delivered ? 'pronto' : 'em_preparacao') };
+    }
+    case 'mood_photo': {
+      const g = (c.imageGuides || []).find((g) => g.slug === 'moodboard_ensaio');
+      return { ...base, description: 'Mood fotográfico para orientar seu próximo ensaio.', status: g && g.fileUrl ? 'entregue' : 'em_preparacao' };
+    }
+    case 'positioning_direction':
+      return { ...base, description: 'Direção de comunicação e posicionamento de marca.',
+        status: c.brandDirection.guidance ? 'entregue' : 'em_preparacao' };
+    case 'pitch_feedback':
+      return { ...base, description: 'Devolutiva sobre sua apresentação/pitch.', status: c.pitches ? 'entregue' : 'em_preparacao' };
+    case 'content_feedback':
+      return { ...base, description: 'Devolutiva sobre o conteúdo que você produziu.', status: c.contentActivity.status === 'feedback_available' ? 'entregue' : 'em_preparacao' };
+    case 'value_reading': {
+      const isPremium = c.profile.programSlug === 'persea-premium';
+      const rec = db.businessValueAssessments[c.profile.id];
+      const status = !isPremium ? null : (rec && rec.status === 'published' ? 'entregue' : (rec ? 'em_preparacao' : 'em_preparacao'));
+      return { ...base, description: 'Leitura estratégica do seu negócio, sua oferta e sua precificação.', status, premiumOnly: !isPremium };
+    }
+    case 'digital_kit':
+      return { ...base, description: 'Template editável para suas redes sociais.', status: c.digitalKit && c.digitalKit.fileUrl ? 'entregue' : 'em_preparacao' };
+    default:
+      return { ...base, description: '', status: 'em_preparacao' };
+  }
 }
 
 // Blank recording/transcript bundle for a freshly-created individual
@@ -2115,9 +2381,56 @@ export const MockDB = {
     save(db);
     return db.tenant;
   },
+  // Template Library — see TEMPLATE_CATEGORIES for the editable shape.
+  // admin/templates.js writes here; assistant/templates.js only ever reads.
+  getTemplateLibrary() {
+    return load().templateLibrary;
+  },
+  setTemplateLink(categoryKey, itemKey, url) {
+    const db = load();
+    db.templateLibrary[categoryKey] = db.templateLibrary[categoryKey] || {};
+    db.templateLibrary[categoryKey][itemKey] = (url || '').trim();
+    save(db);
+    return db.templateLibrary;
+  },
   getPhaseProgress(id = DEFAULT_CLIENT_ID) {
     const p = client(load(), id).profile;
     return { tier: p.tier, phases: TIER_PHASES[p.tier], currentIndex: p.phaseIndex };
+  },
+  // The client's guided journey — Program -> Phase -> Encounter -> Client
+  // activities -> Mentor deliverables, per PROGRAM_PHASES above. Reads only
+  // already-existing per-client facts (getProgramActivities, encounter
+  // journey, brandDirection, imageGuides, etc.) — nothing stored here can
+  // disagree with what those same facts show elsewhere (Program Hub,
+  // Painel, admin). currentIndex reuses profile.phaseIndex, the exact same
+  // manually-advanced field the phase tracker already uses — phase
+  // progression stays a deliberate/Nay-driven action, not auto-computed
+  // from "all tasks checked," per the "don't over-engineer" instruction.
+  getClientJourney(id = DEFAULT_CLIENT_ID) {
+    const db = load();
+    const c = db.clients[id];
+    if (!c) return null;
+    const currentIndex = c.profile.phaseIndex || 0;
+    const activityBySlug = Object.fromEntries(this.getProgramActivities(id).map((a) => [a.slug, a]));
+    const encountersByPhase = {};
+    this.getEncounterJourney(id).forEach((e) => { (encountersByPhase[e.phase] = encountersByPhase[e.phase] || []).push(e); });
+    const phaseNames = TIER_PHASES[c.profile.tier] || TIER_PHASES.essential;
+    const phases = PROGRAM_PHASES.map((p) => {
+      const activities = p.clientActivitySlugs.map((slug) => activityBySlug[slug]).filter(Boolean);
+      const includedActivities = activities.filter((a) => a.access === 'included');
+      const doneCount = includedActivities.filter((a) => ['completed', 'feedback_available'].includes(a.status)).length;
+      const mentorDeliverables = p.mentorDeliverableKeys.map((key) => mentorDeliverable(db, c, key)).filter((d) => d.status !== null);
+      // Essencial sees Fase 4 too, just locked as a Premium teaser — never
+      // filtered out entirely (see PREMIUM_ONLY_PHASE_INDEX).
+      const premiumLocked = p.id === PREMIUM_ONLY_PHASE_INDEX && c.profile.tier !== 'premium';
+      return {
+        id: p.id, name: phaseNames[p.id] || `Fase ${p.id + 1}`, description: p.description, premiumLocked,
+        status: p.id < currentIndex ? 'completed' : p.id === currentIndex ? 'current' : 'upcoming',
+        activities, mentorDeliverables, encounters: encountersByPhase[p.id] || [],
+        progress: { completed: doneCount, total: includedActivities.length, pct: includedActivities.length ? Math.round((doneCount / includedActivities.length) * 100) : 0 },
+      };
+    });
+    return { phases, currentIndex, tier: c.profile.tier, programSlug: c.profile.programSlug };
   },
 
   // --- Program Hub ---
@@ -2164,14 +2477,20 @@ export const MockDB = {
   // program — Premium-preview activities never reduce a non-Premium
   // client's percentage (per spec's explicit requirement).
   getProgramProgress(id = DEFAULT_CLIENT_ID) {
+    const c = client(load(), id);
     const activities = this.getProgramActivities(id);
     const included = activities.filter((a) => a.access === 'included');
     const completed = included.filter((a) => ['completed', 'feedback_available'].includes(a.status));
     const pct = included.length ? Math.round((completed.length / included.length) * 100) : 0;
     // "Next" must be something she can actually act on right now — never a
     // still-locked activity (nothing to click yet) or a premium preview
-    // (not hers to open).
-    const nextActivity = included.find((a) => !['completed', 'feedback_available', 'locked', 'premium_preview'].includes(a.status)) || null;
+    // (not hers to open) — AND it has to belong to her *current* phase.
+    // Some activities can technically read as "not_started" ahead of her
+    // real phase (deriveActivityStatus unlocks by feature-completion chains,
+    // independent of profile.phaseIndex) — she shouldn't be nudged to act on
+    // something from a phase Nay hasn't actually moved her into yet.
+    const currentPhaseSlugs = new Set((PROGRAM_PHASES[(c && c.profile.phaseIndex) || 0] || {}).clientActivitySlugs || []);
+    const nextActivity = included.find((a) => currentPhaseSlugs.has(a.slug) && !['completed', 'feedback_available', 'locked', 'premium_preview'].includes(a.status)) || null;
     return { totalIncluded: included.length, completedCount: completed.length, pct, nextActivity };
   },
   // The Painel's one primary next action.
@@ -2182,19 +2501,26 @@ export const MockDB = {
     return { activitySlug: a.slug, title: a.title, label: a.primaryActionLabel, route: a.route };
   },
   // Everything actionable besides the one primary next action — the
-  // Painel's "Outras pendências". Deliberately small: included activities
-  // still open (minus the one already surfaced as the next action) plus any
-  // outstanding homework items (homework isn't part of the activity matrix,
-  // but per spec still needs a visible, non-buried home for its actions).
+  // Painel's "Outras pendências". Scoped to her current phase only, same
+  // reasoning as getProgramProgress's nextActivity above: a pendência is
+  // only ever something missing *for the phase she's actually in* — nothing
+  // from a phase she hasn't reached, and nothing already behind her once
+  // Nay's moved her forward (that's just history now, browsable on Minha
+  // Jornada, never a nag on the Painel). Homework stays unscoped since it
+  // isn't part of the phase system at all (see note below).
   getOtherPendingItems(id = DEFAULT_CLIENT_ID) {
     const db = load();
     const c = db.clients[id];
     if (!c) return [];
     const progress = this.getProgramProgress(id);
-    const activities = this.getProgramActivities(id).filter((a) => a.access === 'included');
+    const currentPhaseSlugs = new Set((PROGRAM_PHASES[c.profile.phaseIndex || 0] || {}).clientActivitySlugs || []);
+    const activities = this.getProgramActivities(id).filter((a) => a.access === 'included' && currentPhaseSlugs.has(a.slug));
     const items = activities
       .filter((a) => !['completed', 'feedback_available', 'locked'].includes(a.status) && a.slug !== (progress.nextActivity && progress.nextActivity.slug))
       .map((a) => ({ kind: 'activity', key: a.slug, title: a.title, label: a.primaryActionLabel, route: a.route }));
+    // Homework isn't part of the activity matrix/phase system (no
+    // clientActivitySlugs entry) — it's a separate, ongoing responsibility,
+    // so it's never phase-scoped the way activities above are.
     (c.homework || []).filter((t) => t.status !== 'completed').forEach((t) => {
       items.push({ kind: 'homework', key: t.id, title: t.title, label: 'Abrir Tarefas', route: 'homework.html' });
     });
@@ -2894,6 +3220,77 @@ export const MockDB = {
     save(db);
   },
 
+  // --- E2's short pricing survey (see BUSINESS_SURVEY_QUESTIONS) ---
+  getBusinessSurvey(id = DEFAULT_CLIENT_ID) {
+    const c = client(load(), id);
+    return (c && c.businessSurvey) || { status: 'not_started', responses: {}, submittedAt: null };
+  },
+  submitBusinessSurvey(id, responses) {
+    const db = load();
+    const c = client(db, id);
+    if (!c) return null;
+    c.businessSurvey = { status: 'submitted', responses, submittedAt: new Date().toISOString() };
+    save(db);
+    this.logActivity(id, 'business_survey_submitted', 'Pesquisa de precificação enviada.');
+    return c.businessSurvey;
+  },
+
+  // --- Programa tab profile — photo + the WHO/WHAT/WHY/HOW summary Nay
+  // fills in from E1/E2, so this reads as "who is this client" at a glance
+  // instead of scrolling activity statuses to piece it together. ---
+  getClientProfileSummary(id = DEFAULT_CLIENT_ID) {
+    const c = client(load(), id);
+    return {
+      photoUrl: (c && c.photoUrl) || null,
+      who: (c && c.summary && c.summary.who) || '',
+      what: (c && c.summary && c.summary.what) || '',
+      why: (c && c.summary && c.summary.why) || '',
+      how: (c && c.summary && c.summary.how) || '',
+    };
+  },
+  setClientProfileSummary(id, { photoUrl, who, what, why, how }) {
+    const db = load();
+    const c = client(db, id);
+    if (!c) return null;
+    if (photoUrl !== undefined) c.photoUrl = photoUrl || null;
+    c.summary = { who: who || '', what: what || '', why: why || '', how: how || '' };
+    save(db);
+    return this.getClientProfileSummary(id);
+  },
+
+  // --- Playbooks — split in two (Nova Persea): the Personal Brand Playbook
+  // (presented at E4) and the Business Playbook (presented at E6). Both are
+  // links Nay builds externally and pastes in herself — no in-system
+  // generator for either, so this is never something the client sees as
+  // "ready" before Nay actually decided it was.
+  getPlaybookLinks(id = DEFAULT_CLIENT_ID) {
+    const c = client(load(), id);
+    return {
+      personalPlaybookUrl: (c && c.personalPlaybookUrl) || null, personalPlaybookDeliveredAt: (c && c.personalPlaybookDeliveredAt) || null,
+      businessPlaybookUrl: (c && c.businessPlaybookUrl) || null, businessPlaybookDeliveredAt: (c && c.businessPlaybookDeliveredAt) || null,
+    };
+  },
+  setPersonalPlaybookUrl(id, url) {
+    const db = load();
+    const c = client(db, id);
+    if (!c) return null;
+    c.personalPlaybookUrl = url || null;
+    c.personalPlaybookDeliveredAt = url ? new Date().toISOString() : null;
+    save(db);
+    if (url) this.logActivity(id, 'playbook_published', 'Playbook de Marca Pessoal enviado.');
+    return this.getPlaybookLinks(id);
+  },
+  setBusinessPlaybookUrl(id, url) {
+    const db = load();
+    const c = client(db, id);
+    if (!c) return null;
+    c.businessPlaybookUrl = url || null;
+    c.businessPlaybookDeliveredAt = url ? new Date().toISOString() : null;
+    save(db);
+    if (url) this.logActivity(id, 'material_published', 'Business Playbook enviado.');
+    return this.getPlaybookLinks(id);
+  },
+
   // --- Mood check-ins (for later satisfaction/experience metrics) ---
   logMood(id, context, mood) {
     const db = load();
@@ -2958,6 +3355,16 @@ export const MockDB = {
     }
     save(db);
   },
+  // Real negotiated deals don't always land on a catalog price (custom
+  // discount, bundled extra, etc.) — this lets Nay override the suggested
+  // catalog value with what was actually agreed on the closing call,
+  // independent of program/duration selection above.
+  setContractValue(id, value) {
+    const db = load();
+    const c = client(db, id);
+    c.onboarding.contract.value = value || null;
+    save(db);
+  },
   advanceContractStatus(id, status) {
     const db = load();
     client(db, id).onboarding.contract.status = status;
@@ -2979,36 +3386,62 @@ export const MockDB = {
     save(db);
   },
   // Builds the actual installment schedule from what was agreed on the
-  // closing call (method, number of installments, first due date),
-  // replacing whatever payments array the client had before (placeholder
-  // or a prior plan). Monthly cadence from startDate.
-  setPaymentPlan(id, { method, installments, startDate }) {
+  // closing call, replacing whatever payments array the client had before
+  // (placeholder or a prior plan). Real deals are rarely one flat method
+  // across every parcela — a down payment taken by Pix/transfer up front,
+  // then the balance on card, are common — so the down payment and the
+  // remaining installments each carry their own amount + payment method;
+  // any individual row can still be fine-tuned afterward via updatePayment.
+  // Monthly cadence: down payment on startDate, remaining installments one
+  // per month starting the following month.
+  // Replaces the whole payment schedule with a free-form, ordered list of
+  // lines — no assumption that it's "entrada + N equal installments": an
+  // extra deposit between card installments, uneven amounts, a mix of
+  // methods in any order all just work, since each line is independent.
+  // Matches the same model used for the real contract's payment clause
+  // (see admin/contract.js's Condições Comerciais). Lines that carry the id
+  // of a payment that already existed keep its paid/pending status and
+  // paidAt — regenerating the plan never silently un-pays something that
+  // was already collected; a line with no matching id is a brand-new entry.
+  setPaymentLines(id, lines) {
     const db = load();
     const c = client(db, id);
     const contract = c.onboarding.contract;
-    if (!contract.value || !installments || installments < 1) return null;
-    contract.paymentMethod = method || null;
-    contract.installments = installments;
-    const perInstallment = Math.round(contract.value / installments);
-    const start = startDate ? new Date(`${startDate}T00:00:00`) : new Date();
-    c.payments = Array.from({ length: installments }, (_, i) => {
-      const due = new Date(start.getFullYear(), start.getMonth() + i, start.getDate());
-      // Last installment absorbs any rounding remainder so the schedule sums to the contract value exactly.
-      const amount = i === installments - 1 ? contract.value - perInstallment * (installments - 1) : perInstallment;
-      return { id: `p${id}-${Date.now()}-${i}`, dueDate: due.toISOString().slice(0, 10), amount, status: 'pending', paidAt: null };
+    const existingById = new Map((c.payments || []).map((p) => [p.id, p]));
+    const cleaned = (lines || []).filter((l) => l.amount > 0);
+    if (!cleaned.length) return null;
+    c.payments = cleaned.map((l, i) => {
+      const existing = l.id && existingById.get(l.id);
+      return {
+        id: existing ? existing.id : `p${id}-${Date.now()}-${i}`,
+        dueDate: l.dueDate || new Date().toISOString().slice(0, 10),
+        amount: Number(l.amount) || 0,
+        method: l.method || null,
+        label: l.label || null,
+        status: existing ? existing.status : 'pending',
+        paidAt: existing ? existing.paidAt : null,
+      };
     });
+    contract.value = cleaned.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    contract.installments = cleaned.length;
+    // Kept in sync so the existing "sold on card" NF-automation checks
+    // elsewhere (assistant/financial.js, assistant/client-workspace.js),
+    // which still read these flat fields, see the real methods in use.
+    const methods = [...new Set(cleaned.map((l) => l.method).filter(Boolean))];
+    contract.paymentMethods = methods;
+    contract.paymentMethod = methods[0] || null;
     save(db);
-    this.logActivity(id, 'payment_plan_set', `Plano de pagamento definido: ${installments}x via ${PAYMENT_METHOD_LABEL[method] || method}`);
+    this.logActivity(id, 'payment_plan_set', `Plano de pagamento definido: ${cleaned.length} pagamento(s), total R$ ${contract.value.toLocaleString('pt-BR')}`);
     return c.payments;
   },
-  // Manual, one-off control over the schedule — for cases the even-split
-  // generator above doesn't cover (uneven amounts, an extra ad-hoc charge,
-  // fixing a typo'd date).
-  addPayment(id, { dueDate, amount }) {
+  // Manual, one-off control over the schedule — for cases the generator
+  // above doesn't cover (uneven amounts, an extra ad-hoc charge, fixing a
+  // typo'd date).
+  addPayment(id, { dueDate, amount, method }) {
     const db = load();
     const c = client(db, id);
     if (!c.payments) c.payments = [];
-    const payment = { id: `p${id}-${Date.now()}`, dueDate, amount: Number(amount) || 0, status: 'pending', paidAt: null };
+    const payment = { id: `p${id}-${Date.now()}`, dueDate, amount: Number(amount) || 0, method: method || null, status: 'pending', paidAt: null };
     c.payments.push(payment);
     c.payments.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
     save(db);
@@ -3120,6 +3553,102 @@ export const MockDB = {
     save(db);
     return item;
   },
+  // --- Encontro scheduling requests. Nay proposes one or more candidate
+  // times (see ENCOUNTER_PREP_CHECKLIST for her prep checklist) -> client
+  // either picks one or, if none work, sends back an observation about her
+  // availability instead -> Nay confirms a final time -> real agendaItem.
+  // States: awaiting_client_response -> (client_selected_time |
+  // client_unavailable) -> ... -> confirmed | cancelled. A decline loops
+  // back to awaiting_client_response once Nay proposes new times, so the
+  // same request keeps its full history instead of spawning a new one.
+  getEncounterRequests(clientId) {
+    return load().encounterRequests.filter((r) => r.clientId === clientId);
+  },
+  listAllEncounterRequests() {
+    return load().encounterRequests;
+  },
+  // checklist: [{ label, done }]; proposedTimes: array of ISO strings.
+  requestEncounterMeeting(clientId, encounterNumber, checklist, proposedTimes) {
+    const db = load();
+    const req = {
+      id: `encreq${Date.now()}`, clientId, encounterNumber, checklist,
+      status: 'awaiting_client_response', proposedTimes: proposedTimes || [],
+      selectedTime: null, clientNote: null,
+      requestedAt: new Date().toISOString(), respondedAt: null, confirmedAgendaItemId: null,
+    };
+    db.encounterRequests.push(req);
+    save(db);
+    return req;
+  },
+  // Client picks one of Nay's suggested times.
+  selectEncounterMeetingTime(requestId, iso) {
+    const db = load();
+    const r = db.encounterRequests.find((r) => r.id === requestId);
+    if (!r) return null;
+    r.selectedTime = iso;
+    r.status = 'awaiting_nay_confirmation';
+    r.respondedAt = new Date().toISOString();
+    save(db);
+    return r;
+  },
+  // None of the suggested times work — client sends an observation about
+  // her real availability instead of a specific slot. Nay reads it and
+  // either proposes new times or confirms one directly.
+  declineEncounterMeetingTimes(requestId, note) {
+    const db = load();
+    const r = db.encounterRequests.find((r) => r.id === requestId);
+    if (!r) return null;
+    r.status = 'client_unavailable';
+    r.clientNote = note || '';
+    r.respondedAt = new Date().toISOString();
+    save(db);
+    return r;
+  },
+  // Nay re-proposes after a decline — keeps the same request (and the
+  // client's note, for context) rather than starting a new one.
+  proposeNewEncounterMeetingTimes(requestId, proposedTimes) {
+    const db = load();
+    const r = db.encounterRequests.find((r) => r.id === requestId);
+    if (!r) return null;
+    r.proposedTimes = proposedTimes || [];
+    r.selectedTime = null;
+    r.status = 'awaiting_client_response';
+    save(db);
+    return r;
+  },
+  // The one door into a real agendaItem for one of these requests — same
+  // "derive, don't duplicate" rule as everywhere else: once confirmed, the
+  // request just points at the agendaItem it created (confirmedAgendaItemId)
+  // rather than keeping its own separate copy of the schedule. isoOverride
+  // lets Nay confirm a time she picked herself (e.g. after reading a
+  // client_unavailable note) instead of the client's selectedTime.
+  confirmEncounterMeeting(requestId, isoOverride) {
+    const db = load();
+    const r = db.encounterRequests.find((r) => r.id === requestId);
+    const iso = isoOverride || (r && r.selectedTime);
+    if (!r || !iso) return null;
+    const def = ENCOUNTER_DEFS[r.encounterNumber - 1];
+    const assignedTo = r.encounterNumber === 3 ? 'assistant' : 'nay';
+    const item = this.createAgendaItem({
+      type: 'individual_meeting', title: `E${def.number} — ${def.name}`, date: iso,
+      relatedStudentId: r.clientId, topic: def.purpose, assignedTo, assistantPersona: assignedTo === 'assistant' ? 'ju' : null,
+    });
+    r.status = 'confirmed';
+    r.selectedTime = iso;
+    r.confirmedAgendaItemId = item.id;
+    save(db);
+    this.logActivity(r.clientId, 'encounter_scheduled', `${ENCOUNTER_LABEL[def.slug]} agendado para ${new Date(iso).toLocaleString('pt-BR')}.`);
+    return { request: r, agendaItem: item };
+  },
+  cancelEncounterRequest(requestId) {
+    const db = load();
+    const r = db.encounterRequests.find((r) => r.id === requestId);
+    if (!r) return null;
+    r.status = 'cancelled';
+    r.respondedAt = new Date().toISOString();
+    save(db);
+    return r;
+  },
   updateAgendaItem(id, patch) {
     const db = load();
     const item = db.agendaItems.find((a) => a.id === id);
@@ -3180,6 +3709,29 @@ export const MockDB = {
         topic: match ? match.topic : null,
       };
     });
+  },
+  // One definitive tally of every meeting type her tier allows — the E1-E8
+  // encontros (reusing getEncounterJourney, never a second count), Premium's
+  // 12 ad-hoc checkpoints, and the unlimited group encontros — so "how many
+  // did we actually do" reads identically on her Encontros page and on
+  // Nay's client profile. Nothing stored here that isn't already true of
+  // her agendaItems.
+  getMeetingsUsage(id = DEFAULT_CLIENT_ID) {
+    const db = load();
+    const c = client(db, id);
+    if (!c) return null;
+    const isPremium = c.profile.programSlug === 'persea-premium';
+    const items = db.agendaItems.filter((a) => a.relatedStudentId === id);
+    const tally = (type) => ({
+      completed: items.filter((a) => a.type === type && a.status === 'completed').length,
+      upcoming: items.filter((a) => a.type === type && a.status === 'upcoming').length,
+    });
+    const encounters = this.getEncounterJourney(id).filter((e) => !e.premiumOnly || isPremium);
+    return {
+      encounters: { completed: encounters.filter((e) => e.status === 'completed').length, total: encounters.length },
+      checkpoints: isPremium ? { ...tally('checkpoint'), total: CHECKPOINT_ALLOWANCE } : null,
+      groupMeetings: tally('group_meeting'),
+    };
   },
   // The real next meeting for this client, straight from the calendar Nay
   // actually schedules on (agenda.html) — this is what a client's own
@@ -3929,6 +4481,23 @@ export const MockDB = {
     const rec = db.businessValueAssessments[clientId];
     return { isPremium: true, status: rec ? rec.status : 'available', recordExists: !!rec };
   },
+  // Hard prerequisite for E5 (Nova Persea) — the Análise de Negócio has to
+  // be at least submitted before that encounter can happen; reuses the
+  // exact same access/status this client's Business activity already
+  // shows, never a second "is she ready" flag to keep in sync.
+  canScheduleE5(clientId) {
+    const va = this.getValueAnalysisAccess(clientId);
+    return { ready: !!va && ['submitted', 'in_analysis', 'published'].includes(va.status), status: va ? va.status : null };
+  },
+  // Nay has to authorize (approve) what the assistant built before E3 can
+  // be set up — Cartela de Cores and Guia de Produções are the two
+  // per-client deliverables with a review workflow today; Planejamento de
+  // Imagem and Ferramentas para Nova Imagem are shared templates only (see
+  // admin/templates.js), not yet per-client outputs with their own review.
+  canScheduleE3(clientId) {
+    const required = this.getImageGuides(clientId).filter((g) => ['paleta_cores', 'guia_looks_mensal'].includes(g.slug));
+    return { ready: required.length > 0 && required.every((g) => g.status === 'delivered'), guides: required };
+  },
   getValueAssessment(clientId) {
     const db = load();
     const c = db.clients[clientId];
@@ -4206,6 +4775,27 @@ export const MockDB = {
     c.profile.status = 'active';
     if (programSlug === 'persea-premium') c.profile.tier = 'premium';
     save(db);
+    return c.profile;
+  },
+  // Nay-driven, manual phase advancement — deliberately not automatic (see
+  // item 10's "don't over-engineer automatic unlocking" note in
+  // getClientJourney: finishing every activity in a phase doesn't unlock
+  // the next one by itself). This is the one real door into
+  // profile.phaseIndex; see admin/client-detail.js for the "Avançar Fase"
+  // control that calls it, and getEncounterJourney/getClientJourney for
+  // everywhere the resulting phase shows up for both her and the client.
+  setClientPhase(clientId, index) {
+    const db = load();
+    const c = db.clients[clientId];
+    if (!c) return null;
+    const phases = TIER_PHASES[c.profile.tier] || TIER_PHASES.essential;
+    const maxIndex = TIER_MAX_PHASE_INDEX[c.profile.tier] ?? (phases.length - 1);
+    const clamped = Math.max(0, Math.min(index, maxIndex));
+    const prevIndex = c.profile.phaseIndex;
+    c.profile.phaseIndex = clamped;
+    c.profile.status = 'active';
+    save(db);
+    if (clamped !== prevIndex) this.logActivity(clientId, 'phase_changed', `Fase avançada para "${phases[clamped]}" por Nay.`);
     return c.profile;
   },
   // Dev-only: nudges nearly every included activity to "completed" so the
@@ -4505,22 +5095,56 @@ export const MockDB = {
       .map((l) => ({ ...l, pipelineLabel: this.getLeadPipelineLabel(l) }))
       .sort((a, b) => (weight[a.onboardingStatus] ?? 9) - (weight[b.onboardingStatus] ?? 9));
   },
+  // The assistant's slice of the same pipeline — only from the point her
+  // job actually starts (cadastro received) onward, since contract prep and
+  // "Ativar Cliente" are her actions, not Nay's (see assistant/leads.js).
+  // Sorted so whoever is one click from activation floats to the top —
+  // same "crucial thing near the top" ordering used in getAssistantChecklist.
+  getAssistantOnboardingQueue() {
+    const weight = { ready_for_activation: 0, in_contract: 1, registration_completed: 2 };
+    return load().leads
+      .filter((l) => l.registrationCompletedAt && l.onboardingStatus !== 'client_active')
+      .map((l) => ({ ...l, pipelineLabel: this.getLeadPipelineLabel(l) }))
+      .sort((a, b) => (weight[a.onboardingStatus] ?? 9) - (weight[b.onboardingStatus] ?? 9));
+  },
   // Nay/assistant enter what was agreed on the sales call — the client
-  // never sees or edits these terms from her registration form.
-  agreeSale(id, { program, paymentMethod, installments, agreedAmount, firstDueDate, commercialNotes, responsibleId }) {
+  // never sees or edits these terms from her registration form. The
+  // registration link is generated right here, same click as closing the
+  // sale — Nay is usually still on the call/WhatsApp with the client at
+  // this exact moment, so there's no separate "now generate the link" step
+  // to come back for; the link is just already there, ready to copy.
+  // paymentMethods is always an array — clients often combine more than one
+  // (part on card, part on Pix), so this was never really a single-select
+  // fact. paymentMethod (singular) is kept alongside as the first entry,
+  // purely so existing single-method checks elsewhere (e.g. the "sold on
+  // card triggers NF automatically" rule) don't need to know about the
+  // array — see activateLead, which carries both onto the real contract.
+  // paymentLines is the same free-form model used everywhere else payment
+  // terms get entered (client onboarding, real contract) — any number of
+  // lines, each its own amount/method/optional date, in any combination or
+  // order. agreedAmount/installments/paymentMethod(s)/firstDueDate are kept
+  // as derived summary fields (sum, count, distinct methods, earliest date)
+  // purely so existing displays elsewhere (crm.js's pipeline card) don't
+  // need to know about the line list — never hand-entered directly anymore.
+  agreeSale(id, { program, paymentLines, commercialNotes, responsibleId }) {
     const db = load();
     const lead = db.leads.find((l) => l.id === id);
     if (!lead) return null;
+    const lines = (paymentLines || []).filter((l) => l.amount > 0);
+    const methods = [...new Set(lines.map((l) => l.method).filter(Boolean))];
+    const dates = lines.map((l) => l.dueDate).filter(Boolean).sort();
     lead.program = program || lead.program || null;
     lead.commercialTerms = {
-      paymentMethod: paymentMethod || null, installments: installments || null, agreedAmount: agreedAmount ?? null,
-      firstDueDate: firstDueDate || null, commercialNotes: commercialNotes || '', responsibleId: responsibleId || null,
+      paymentLines: lines, paymentMethods: methods, paymentMethod: methods[0] || null,
+      installments: lines.length || null, agreedAmount: lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) || null,
+      firstDueDate: dates[0] || null, commercialNotes: commercialNotes || '', responsibleId: responsibleId || null,
       saleAgreedAt: new Date().toISOString(),
     };
     lead.onboardingStatus = 'sale_agreed';
+    if (!lead.registrationToken) lead.registrationToken = `${id}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
     lead.updatedAt = new Date().toISOString();
     save(db);
-    this.logLeadHistory(id, 'sale_agreed', 'Venda fechada — condições comerciais registradas.');
+    this.logLeadHistory(id, 'sale_agreed', 'Condições comerciais registradas.');
     return lead;
   },
   // Idempotent — calling it again just returns the same link rather than
@@ -4646,10 +5270,21 @@ export const MockDB = {
     };
     c.onboarding.contract = {
       ...c.onboarding.contract, program: lead.program || null, value: ct.agreedAmount ?? null,
-      paymentMethod: ct.paymentMethod || null, installments: ct.installments || null,
+      paymentMethod: ct.paymentMethod || null, paymentMethods: ct.paymentMethods || [], installments: ct.installments || null,
       status: 'completed', signedFileName: lead.signedFileName || null,
       notes: ct.commercialNotes || c.onboarding.contract.notes,
     };
+    // Carries the exact payment lines agreed at the sale straight onto the
+    // client's own Plano de Pagamento (client-detail.js's Onboarding tab) —
+    // the whole point of capturing them as structured lines up front is
+    // that nobody has to re-type this schedule after activation.
+    if (ct.paymentLines?.length) {
+      c.payments = ct.paymentLines.map((l, i) => ({
+        id: `p${clientId}-${Date.now()}-${i}`, dueDate: l.dueDate || new Date().toISOString().slice(0, 10),
+        amount: Number(l.amount) || 0, method: l.method || null, label: l.label || null,
+        status: 'pending', paidAt: null,
+      }));
+    }
     c.activity.unshift({ type: 'lead_activated', text: 'Cliente ativada — onboarding comercial concluído.', at: new Date().toISOString() });
     save(db);
     const db2 = load();

@@ -115,8 +115,8 @@ function renderContractCard(o) {
     </div>
     <p class="text-xs text-white/30 mb-4">A assinatura acontece em uma plataforma externa. Assim que a Persea receber o contrato assinado, ele fica disponível aqui.</p>
     ${c.status === 'completed'
-      ? `<button id="view-contract" class="btn-ghost">Ver Contrato Assinado</button>`
-      : `<p class="text-xs" style="color:var(--muted);">Ainda não disponível — acompanhe o status acima.</p>`}
+      ? `<a href="contract.html" class="btn-ghost inline-block">Ver Contrato Assinado</a>`
+      : `<a href="contract.html" class="btn-text">Acompanhar contrato →</a>`}
   `, 'mb-6');
 }
 
@@ -215,9 +215,6 @@ function render() {
     render();
   });
 
-  document.getElementById('view-contract')?.addEventListener('click', () => {
-    toast('Simulando abertura do PDF do contrato assinado — sem arquivo real neste protótipo.');
-  });
 }
 
 render();

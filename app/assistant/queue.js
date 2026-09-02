@@ -4,12 +4,14 @@
 // of everything else assigned to her.
 import { MockDB, AGENDA_TYPE_LABEL, ASSISTANT_PERSONA_LABEL, PROGRAM_LABEL } from '../shared/mock-db.js';
 import { renderShell, card, formatDateTime, toast, openModal } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
 const AGENDA_TYPE_ICON = {
-  class: '🎓', individual_meeting: '👤', group_meeting: '👥',
+  class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
   online_event: '🌐', admin_task: '🗂️', deadline: '⏰', photo_review: '📸',
 };
 
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'queue.html', title: 'Painel' });
 const content = document.getElementById('app-content');
 
@@ -33,6 +35,33 @@ function renderNewClients() {
       <span class="text-xs" style="color:var(--muted);">${clients.length}</span>
     </div>
     <div class="divide-y" style="border-color:var(--line);">${clients.map(newClientRow).join('')}</div>
+  `, 'mb-8');
+}
+
+// The whole Cadastros queue, not just the ones ready to activate — a lead
+// who just submitted the registration form still needs the contract
+// prepped, and that's invisible if this card only lights up once she's
+// already at the finish line. Ready-to-activate ones still float to the
+// top and get the loudest treatment, same "crucial near the top" rule as
+// her checklist.
+function renderCadastrosAlert() {
+  const queue = MockDB.getAssistantOnboardingQueue();
+  if (!queue.length) return '';
+  const readyCount = queue.filter((l) => l.onboardingStatus === 'ready_for_activation').length;
+  return card(`
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm" style="color:var(--gold);">Cadastros Aguardando Você</p>
+      <a href="leads.html" class="btn-text">Abrir Cadastros →</a>
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">
+      ${queue.map((l) => `
+        <div class="flex items-center justify-between py-2.5">
+          <p class="text-sm">${l.fullName}</p>
+          <span class="badge ${l.onboardingStatus === 'ready_for_activation' ? 'badge-completed' : 'badge-progress'}">${l.pipelineLabel}</span>
+        </div>
+      `).join('')}
+    </div>
+    ${readyCount ? `<p class="text-xs mt-3" style="color:var(--gold);">${readyCount} pronta${readyCount === 1 ? '' : 's'} para ativação — contrato assinado, só falta ativar o acesso.</p>` : ''}
   `, 'mb-8');
 }
 
@@ -176,6 +205,7 @@ function render() {
       <p class="text-white/40 text-sm mb-1">Painel</p>
       <h1 class="text-3xl font-serif">Sua Visão Geral</h1>
     </div>
+    ${renderCadastrosAlert()}
     ${renderNewClients()}
     ${renderContentRecommendations()}
     ${card(`

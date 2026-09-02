@@ -5,9 +5,10 @@
 // getProgramProgress, so they can never disagree with each other.
 import { MockDB, getActiveClientId } from '../shared/mock-db.js';
 import {
-  renderShell, card, progressBar, formatDateTime, formatDate, toast,
-  initClientSwitcher, externalLinkAttrs, isValidHttpUrl, contentCardInner,
-  animateCount, initScrollReveal, enableTilt,
+  renderShell, card, formatDateTime, formatDate, toast,
+  initClientSwitcher, externalLinkAttrs, isValidHttpUrl,
+  initScrollReveal, enableTilt, renderPhaseTracker, wirePhaseTrackerNav,
+  renderEncounterRequestsCard, wireEncounterRequestForms,
 } from '../shared/ui.js';
 
 const MEETING_STATUS_LABEL = {
@@ -79,83 +80,46 @@ function renderOnboardingBanner() {
 }
 
 // --- Program summary --------------------------------------------------
-function renderProgramSummary() {
+// Same interactive, pulsing tracker as Seu Programa (see renderPhaseTracker
+// in ui.js) — brought onto the Painel too so "what phase am I in" is
+// visually obvious the moment she lands, not just once she clicks through.
+function renderJourneyTracker() {
   if (onboardingIncomplete) return '';
-  const program = MockDB.getClientProgram(activeClientId);
-  const progress = MockDB.getProgramProgress(activeClientId);
-  const phaseProgress = MockDB.getPhaseProgress(activeClientId);
-  return `
-    <div class="grid md:grid-cols-3 gap-6 mb-8">
-      <div class="reveal-scroll tilt-card">${card(`
-        <p class="text-xs text-white/30 mb-2">Seu programa</p>
-        <p class="text-xl font-serif mb-1">${program.name}</p>
-        <p class="text-xs text-white/30">${program.durationMonths ? `${program.durationMonths} meses` : 'Duração a confirmar'}</p>
-      `)}</div>
-      <div class="reveal-scroll tilt-card">${card(`
-        <p class="text-xs text-white/30 mb-2">Momento atual</p>
-        <p class="text-xl font-serif mb-1">${phaseProgress.phases[phaseProgress.currentIndex]}</p>
-        <p class="text-xs text-white/30">Fase ${phaseProgress.currentIndex + 1} de ${phaseProgress.phases.length}</p>
-      `)}</div>
-      <div class="reveal-scroll tilt-card">${card(`
-        <p class="text-xs text-white/30 mb-2">Progresso geral</p>
-        <p class="text-3xl font-serif mb-3"><span id="program-pct-counter">0</span>%</p>
-        ${progressBar(progress.pct)}
-      `)}</div>
-    </div>
-  `;
+  return `<div class="reveal">${renderPhaseTracker(MockDB.getPhaseProgress(activeClientId))}</div>`;
 }
 
-// --- Next action + Outras pendências -----------------------------------
+// --- Próxima Ação — the one headline next step, nothing else. The full
+// task-by-task breakdown already lives on Minha Jornada (current-phase
+// activity cards) — repeating that list here was pure duplication, so this
+// stays a single card, and disappears entirely once there's nothing
+// pending in her current phase (no "tudo em dia" filler either).
 function renderNextAction() {
   if (onboardingIncomplete) return '';
   const next = MockDB.getNextAction(activeClientId);
-  const others = MockDB.getOtherPendingItems(activeClientId);
-
-  const primary = next ? `
-    <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
-        <p class="text-sm text-white/50 mb-1">Próxima ação</p>
-        <p class="text-xl font-serif">${next.title}</p>
-      </div>
-      ${next.route ? `<a href="${next.route}" class="btn-primary" style="padding:10px 20px;font-size:13px;">${next.label}</a>`
-        : `<a href="program.html" class="btn-primary" style="padding:10px 20px;font-size:13px;">${next.label}</a>`}
-    </div>
-  ` : `
-    <p class="text-sm" style="color:var(--muted);">Tudo em dia! Nenhuma ação pendente da sua parte agora — Nay avisa por aqui assim que houver algo novo.</p>
-  `;
-
+  if (!next) return '';
   return `
-    <div class="reveal mb-6">${card(primary)}</div>
-    ${others.length ? `
-      <div class="reveal-scroll mb-8">
-        <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.12em;">Outras pendências</p>
-        <div class="divide-y" style="border-color:var(--line);">
-          ${others.map((o) => `
-            <a href="${o.route}" class="flex items-center justify-between py-2.5 hover:bg-white/5 -mx-2 px-2 rounded transition-colors">
-              <span class="text-sm">${o.title}</span>
-              <span class="text-xs text-white/30">${o.label}</span>
-            </a>
-          `).join('')}
+    <div class="reveal mb-8">${card(`
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <p class="text-sm text-white/50 mb-1">Próxima Ação</p>
+          <p class="text-xl font-serif">${next.title}</p>
         </div>
+        <a href="${next.route || 'program.html'}" class="btn-primary" style="padding:10px 20px;font-size:13px;">${next.label}</a>
       </div>
-    ` : ''}
+    `)}</div>
   `;
 }
 
-// --- Next meeting/class --------------------------------------------------
+// --- Scheduled meetings — anything Nay's already confirmed on the Agenda,
+// same agendaItems Encontros reads, never a separate schedule of its own.
 function renderNextMeeting() {
+  if (onboardingIncomplete) return '';
   const meeting = MockDB.getUpcomingMeetingForClient(activeClientId);
-  if (!meeting) {
-    return card(`
-      <p class="text-sm text-white/50 mb-2">Próximo encontro</p>
-      <p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado no momento — assim que Nay marcar algo novo, aparece por aqui.</p>
-      <a href="encontros.html" class="btn-text mt-3 inline-block">Ver Encontros</a>
-    `, 'mb-8');
-  }
+  if (!meeting) return '';
   const linkOk = isValidHttpUrl(meeting.onlineLink) && meeting.status === 'upcoming';
   return card(`
     <div class="flex items-center justify-between mb-3">
-      <p class="text-sm text-white/50">Próximo encontro</p>
+      <p class="text-sm text-white/50">Próximo Encontro</p>
       <a href="encontros.html" class="btn-text">Ver todos</a>
     </div>
     <p class="text-lg font-serif mb-1">${meeting.title}</p>
@@ -165,72 +129,6 @@ function renderNextMeeting() {
   `, 'mb-8');
 }
 
-// --- Recommended + available content --------------------------------------
-// Suppressed while the onboarding gate is up (see content.js/program.js) —
-// otherwise this widget would dangle direct Hubla links that route around
-// the very block the "Ver Conteúdos" button above them respects.
-function renderContentSections() {
-  if (MockDB.needsOnboardingCompletion(activeClientId)) return '';
-  const assignments = MockDB.getAssignmentsForClient(activeClientId).filter((a) => !a.completed).slice(0, 2);
-  const categories = MockDB.getContentCategories();
-  const shown = new Set();
-  const recommended = categories.slice(0, 3);
-  recommended.forEach((c) => shown.add(c.id));
-  const rest = categories.filter((c) => !shown.has(c.id));
-
-  return `
-    <div class="reveal-scroll mb-8">
-      <div class="flex items-center justify-between mb-4">
-        <p class="text-sm text-white/50">Conteúdo recomendado</p>
-        <a href="content.html" class="btn-text">Ver Conteúdos</a>
-      </div>
-      ${assignments.length ? `
-        <div class="grid md:grid-cols-2 gap-4 mb-5">
-          ${assignments.map((a) => card(`
-            <p class="text-xs" style="color:var(--gold);">Recomendado por Nay</p>
-            <p class="font-medium text-sm mt-1 mb-2">${a.resource.title}</p>
-            ${isValidHttpUrl(a.resource.hublaUrl) ? `<a ${externalLinkAttrs(a.resource.hublaUrl)} class="btn-ghost inline-block" style="padding:6px 12px; font-size:12px;">Abrir na Hubla ↗</a>` : ''}
-          `)).join('')}
-        </div>
-      ` : ''}
-      ${recommended.length ? `<div class="content-grid mb-3">${recommended.map((c) => `
-        <a ${externalLinkAttrs(c.hublaUrl)} class="content-card">${contentCardInner(c)}</a>
-      `).join('')}</div>` : ''}
-      <p class="text-xs text-white/20">Conteúdos abrem na Hubla, em uma nova aba.</p>
-    </div>
-    ${rest.length ? `
-      <div class="reveal-scroll mb-8">
-        <p class="text-sm text-white/50 mb-3">Também disponível</p>
-        <div class="flex flex-wrap gap-2">
-          ${rest.map((c) => `<a href="content.html" class="btn-ghost" style="padding:7px 14px; font-size:12px;">${c.title}</a>`).join('')}
-        </div>
-      </div>
-    ` : ''}
-  `;
-}
-
-// --- Recent progress -------------------------------------------------------
-function renderRecentProgress() {
-  const timeline = MockDB.getRecentProgressTimeline(activeClientId, 5);
-  if (!timeline.length) return '';
-  return `
-    <div class="reveal-scroll mb-8">
-      <p class="text-sm text-white/50 mb-4">Progresso recente</p>
-      <div class="space-y-3">
-        ${timeline.map((e) => `
-          <div class="flex items-start gap-3">
-            <div class="w-1.5 h-1.5 mt-2 rounded-full shrink-0" style="background:var(--terracotta);"></div>
-            <div>
-              <p class="text-sm">${e.text}</p>
-              <p class="text-xs text-white/20">${formatDateTime(e.at)}</p>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
 content.innerHTML = `
   ${onboardingIncomplete ? renderOnboardingBanner() : ''}
   <div class="mb-10 reveal" style="animation-delay:.02s;">
@@ -238,20 +136,19 @@ content.innerHTML = `
     <h1 class="text-3xl font-serif">${client.fullName}</h1>
   </div>
 
-  ${renderProgramSummary()}
+  ${renderJourneyTracker()}
   ${renderNextAction()}
   ${renderNextMeeting()}
-  ${renderContentSections()}
-  ${renderRecentProgress()}
 
+  ${renderEncounterRequestsCard(activeClientId)}
   <div class="reveal-scroll mt-2" id="meeting-request-card"></div>
 `;
 
 renderMeetingRequestCard();
 initScrollReveal();
 enableTilt();
-const counterEl = document.getElementById('program-pct-counter');
-if (counterEl) animateCount(counterEl, MockDB.getProgramProgress(activeClientId).pct);
+wirePhaseTrackerNav(content, { hrefBase: 'program.html' });
+wireEncounterRequestForms(content, () => location.reload());
 
 function renderMeetingRequestCard() {
   const mount = document.getElementById('meeting-request-card');

@@ -1,5 +1,6 @@
-import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE, PROGRAMS, PROGRAM_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_DEFS, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, NF_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_BADGE_CLASS, ARCHETYPE_VISUAL_SETS, ARCHETYPE_VISUAL_SET_LABEL, ASSISTANT_PERSONA_LABEL, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, progressBar, renderArchetypeRadar, archetypePortrait } from '../shared/ui.js';
+import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE, PROGRAMS, PROGRAM_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_DEFS, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, NF_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_BADGE_CLASS, ARCHETYPE_VISUAL_SETS, ARCHETYPE_VISUAL_SET_LABEL, ASSISTANT_PERSONA_LABEL, AGENDA_STATUS_LABEL, AGENDA_TYPE_LABEL, TIER_MAX_PHASE_INDEX, PREMIUM_ONLY_PHASE_INDEX, MENTOR_DELIVERABLE_STATUS_LABEL, MENTOR_DELIVERABLE_STATUS_BADGE_CLASS, ENCOUNTER_DEFS, BUSINESS_SURVEY_QUESTIONS, GUIDE_STATUS_LABEL, ENCOUNTER_PREP_CHECKLIST } from '../shared/mock-db.js';
+import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
   REVIEW_STATUSES, REVIEW_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
@@ -18,27 +19,36 @@ const whatsappBadge = (status) => `<span class="badge ${WHATSAPP_STATUS_CLASS[st
 const PAYMENT_STATUS_CLASS = { paid: 'badge-completed', pending: 'badge-progress', overdue: 'badge-locked' };
 const paymentBadge = (status) => `<span class="badge ${PAYMENT_STATUS_CLASS[status] || 'badge-locked'}">${PAYMENT_STATUS_LABEL[status] || status}</span>`;
 
-document.body.innerHTML = renderShell({ role: 'admin', active: 'clients.html' });
+// Same file, two doors: admin/client-detail.html and assistant/client-
+// workspace.html both load this exact script (the assistant page's own
+// client-workspace.js — checklist-style, no real visual structure — is
+// retired in favor of this, per the redesign request: same layout Nay
+// already has, not a second, differently-organized page to maintain).
+// Detected from the URL rather than threaded through as a parameter, since
+// nothing else about how this script is invoked differs between the two.
+const role = location.pathname.includes('/assistant/') ? 'assistant' : 'admin';
+const isAssistant = role === 'assistant';
+if (!(await requireProfile(role))) throw new Error('not authorized');
+document.body.innerHTML = renderShell({ role, active: isAssistant ? 'clients.html' : 'crm.html' });
 
 const clientId = new URLSearchParams(location.search).get('id') || DEFAULT_CLIENT_ID;
 const client = MockDB.getClient(clientId);
 const phaseProgress = MockDB.getPhaseProgress(clientId);
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
+// The visible tab row — Programa (client overview), one tab per encontro
+// (E1-E8, always all 8, same "get familiar with the names regardless of
+// tier" reasoning as the old flat encounter list), and Financeiro. Every
+// other old tab (Direção da Marca, Questionário, Editor de Pitch, Ficha de
+// Valor, Tarefas, etc.) still exists and still works — see RENDERERS below
+// — just reached from *inside* the relevant encontro brief now instead of
+// competing for space in the top row. Onboarding is the one exception:
+// still shown in the row while she's not yet fully onboarded (see
+// visibleTabs below), same as before.
 const TABS = [
   ['program', 'Programa'],
-  ['onboarding', 'Onboarding'],
+  ['e1', 'E1'], ['e2', 'E2'], ['e3', 'E3'], ['e4', 'E4'],
+  ['e5', 'E5'], ['e6', 'E6'], ['e7', 'E7'], ['e8', 'E8'],
   ['financial', 'Financeiro'],
-  ['brand-direction', 'Direção da Marca'],
-  ['questionnaire', 'Questionário'],
-  ['meeting', 'Reunião e Transcrição'],
-  ['playbook', 'Editor de Playbook'],
-  ['pitch', 'Editor de Pitch'],
-  ['assessment', 'Avaliação (legado)'],
-  ['archetype-quiz', 'Arquétipos'],
-  ['value-analysis', '✦ Ficha de Valor e Precificação (Premium)'],
-  ['homework', 'Tarefas'],
-  ['meeting-prep', 'Preparação de Reunião'],
-  ['activity', 'Atividade'],
 ];
 
 // Onboarding (contract, payment plan, closing notes, WhatsApp group setup)
@@ -54,15 +64,68 @@ function isOnboardingDone() {
 let activeTab = isOnboardingDone() ? 'program' : 'onboarding';
 const content = document.getElementById('app-content');
 
+// The one real control over profile.phaseIndex (see MockDB.setClientPhase)
+// — phase advancement is deliberately manual, not something finishing all
+// of a phase's activities triggers automatically, so Nay needs an actual
+// button for it, not just a read-only tracker above.
+function renderPhaseControl() {
+  const phases = phaseProgress.phases;
+  const maxIndex = TIER_MAX_PHASE_INDEX[phaseProgress.tier] ?? (phases.length - 1);
+  const atLast = phaseProgress.currentIndex >= maxIndex;
+  return card(`
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <p class="text-sm">Fase atual: <strong>${phaseProgress.currentIndex + 1} de ${phases.length} — ${phases[phaseProgress.currentIndex]}</strong></p>
+      <div class="flex items-center gap-2">
+        <select id="phase-select" class="field text-sm">
+          ${phases.map((name, i) => `<option value="${i}" ${i === phaseProgress.currentIndex ? 'selected' : ''} ${i > maxIndex ? 'disabled' : ''}>Fase ${i + 1} — ${name}${i === PREMIUM_ONLY_PHASE_INDEX && i > maxIndex ? ' (Premium)' : ''}</option>`).join('')}
+        </select>
+        <button id="set-phase" class="btn-ghost">Definir</button>
+        ${!atLast ? `<button id="advance-phase" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Avançar para a Próxima Fase →</button>` : ''}
+      </div>
+    </div>
+  `, 'mb-8');
+}
+
+// The context sidebar the assistant workspace already had — meetings,
+// upcoming encounters, Nay's private notes — kept front-and-center exactly
+// where it was liked, just now alongside the same tab structure Nay uses
+// instead of the old checklist-style main area. Admin doesn't get this
+// sidebar: her Programa tab and the "Recomendar algo" box above already
+// cover the same ground for her.
+function renderAssistantContextSidebar() {
+  const b = MockDB.getClientContextBundle(clientId);
+  const upcoming = MockDB.getAgendaItemsForClient(clientId).filter((a) => a.status === 'upcoming');
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Contexto da Cliente</p>
+    <div class="space-y-4 text-sm">
+      <div>
+        <p class="text-white/40 text-xs mb-1">Primeira Reunião</p>
+        ${b.firstMeeting
+          ? `<p>${formatDateTime(b.firstMeeting.date)} — ${b.firstMeeting.topic || b.firstMeeting.title}</p>`
+          : '<p class="text-white/20">Ainda não realizada.</p>'}
+      </div>
+      <div>
+        <p class="text-white/40 text-xs mb-1.5">Próximos Encontros</p>
+        ${upcoming.length
+          ? upcoming.slice(0, 3).map((a) => `<a href="agenda.html?item=${a.id}" class="block hover:underline">${AGENDA_TYPE_LABEL[a.type]} — ${formatDateTime(a.date)}</a>`).join('')
+          : '<p class="text-white/20">Nenhum encontro agendado.</p>'}
+      </div>
+      <div class="pt-3" style="border-top:1px solid var(--line);">
+        <p class="text-white/40 text-xs mb-1.5">Notas da Nay</p>
+        <p class="${b.privateNotes ? '' : 'text-white/20'}">${b.privateNotes || 'Nenhuma nota registrada.'}</p>
+      </div>
+    </div>
+  `, 'mb-6');
+}
+
 function shell(inner) {
   const done = isOnboardingDone();
-  // "Ficha de Valor e Precificação" is a premium-only private workspace —
-  // never shown for a standard-tier client, same reasoning as onboarding
-  // dropping off the row once it's settled.
-  let visibleTabs = done ? TABS.filter(([key]) => key !== 'onboarding') : TABS;
-  if (client.programSlug !== 'persea-premium') visibleTabs = visibleTabs.filter(([key]) => key !== 'value-analysis');
+  const visibleTabs = done ? TABS : [['onboarding', 'Onboarding'], ...TABS];
+  const mainContent = isAssistant
+    ? `<div class="workspace-layout"><div class="workspace-sidebar">${renderAssistantContextSidebar()}</div><div class="workspace-main"><div id="tab-content">${inner}</div></div></div>`
+    : `<div id="tab-content">${inner}</div>`;
   return `
-    <a href="clients.html" class="btn-text mb-4 inline-block">&larr; Todos os clientes</a>
+    <a href="${isAssistant ? 'clients.html' : 'crm.html'}" class="btn-text mb-4 inline-block">&larr; ${isAssistant ? 'Clientes' : 'Todos os clientes'}</a>
     <div class="mb-8 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-serif">${client.fullName}</h1>
@@ -78,6 +141,7 @@ function shell(inner) {
         <p class="text-sm" style="color:var(--terracotta);">⚠ Esta cliente ainda não preencheu as informações de cadastro — o contrato não pode ser preparado até isso acontecer.</p>
       `)}</div>
     ` : ''}
+    ${!isAssistant ? `
     <details class="mb-8">
       <summary class="text-sm cursor-pointer" style="color:var(--muted); list-style:none;">💬 Recomendar algo para a Assistente sobre ${client.fullName}</summary>
       <div class="mt-3">${card(`
@@ -87,17 +151,84 @@ function shell(inner) {
         </form>
       `)}</div>
     </details>
+    ` : ''}
     <div class="mb-8">${renderSocialLinks(MockDB.getSocialLinks(clientId))}</div>
 
     ${renderPhaseTracker(phaseProgress)}
+    ${renderPhaseControl()}
 
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
       ${visibleTabs.map(([key, label]) => `
         <button data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>
       `).join('')}
     </div>
-    <div id="tab-content">${inner}</div>
+    ${mainContent}
   `;
+}
+
+// Free-form payment-plan line editor — same model as the real contract's
+// Condições Comerciais builder (admin/contract.js), so both places behave
+// the same way: any number of lines, any amount/method/date combination,
+// no assumption of "entrada + equal installments." A blank row's status is
+// omitted (nothing to show yet); an existing row's status badge is
+// read-only here — marking paid happens in the Financeiro tab, not here.
+function paymentPlanLineRowHtml(p = {}) {
+  return `
+    <div class="flex items-center gap-2 py-2.5 flex-wrap plan-line-row" data-existing-id="${p.id || ''}">
+      <input type="number" min="0" step="0.01" class="field text-sm" style="width:110px;" data-line-amount placeholder="Valor R$" value="${p.amount ?? ''}" />
+      <select class="field text-sm" style="width:160px;" data-line-method>
+        <option value="">Forma —</option>
+        ${PAYMENT_METHODS.map((m) => `<option value="${m}" ${p.method === m ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}
+      </select>
+      <input type="date" class="field text-sm" style="width:150px;" data-line-date value="${p.dueDate || ''}" />
+      <input type="text" class="field text-sm" style="flex:1; min-width:110px;" data-line-label placeholder="Nota (opcional — ex.: Entrada)" value="${p.label || ''}" />
+      <div class="flex items-center gap-2 ml-auto">
+        ${p.status ? paymentBadge(p.status) : ''}
+        <button type="button" class="btn-text" data-remove-line>Remover</button>
+      </div>
+    </div>
+  `;
+}
+
+function wirePaymentPlanLines(tc, clientId, render) {
+  const linesEl = tc.querySelector('#plan-lines');
+  if (!linesEl) return;
+  const totalEl = tc.querySelector('#plan-lines-total');
+
+  function recalcTotal() {
+    let cents = 0;
+    linesEl.querySelectorAll('[data-line-amount]').forEach((input) => { cents += Math.round((parseFloat(input.value) || 0) * 100); });
+    totalEl.textContent = (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  linesEl.addEventListener('input', (e) => { if (e.target.matches('[data-line-amount]')) recalcTotal(); });
+  linesEl.addEventListener('click', (e) => {
+    if (!e.target.matches('[data-remove-line]')) return;
+    const row = e.target.closest('.plan-line-row');
+    if (linesEl.children.length > 1) row.remove();
+    else row.querySelectorAll('input, select').forEach((el) => { el.value = ''; });
+    recalcTotal();
+  });
+  tc.querySelector('#add-plan-line')?.addEventListener('click', () => {
+    linesEl.insertAdjacentHTML('beforeend', paymentPlanLineRowHtml());
+  });
+  recalcTotal();
+
+  tc.querySelector('#save-plan-lines')?.addEventListener('click', () => {
+    const lines = [...linesEl.querySelectorAll('.plan-line-row')].map((row) => ({
+      id: row.dataset.existingId || null,
+      amount: Math.round((parseFloat(row.querySelector('[data-line-amount]').value) || 0) * 100) / 100,
+      method: row.querySelector('[data-line-method]').value || null,
+      dueDate: row.querySelector('[data-line-date]').value || null,
+      label: row.querySelector('[data-line-label]').value.trim() || null,
+    })).filter((l) => l.amount > 0);
+    if (!lines.length) { toast('Adicione ao menos um pagamento com valor.', { tone: 'error' }); return; }
+    const hasPaid = MockDB.getPayments(clientId).some((p) => p.status === 'paid');
+    const removesAPaidLine = hasPaid && MockDB.getPayments(clientId).some((p) => p.status === 'paid' && !lines.some((l) => l.id === p.id));
+    if (removesAPaidLine && !confirm('Uma ou mais parcelas já pagas seriam removidas do plano ao salvar. Continuar mesmo assim?')) return;
+    MockDB.setPaymentLines(clientId, lines);
+    toast('Plano de pagamento salvo.');
+    render();
+  });
 }
 
 function renderOnboardingTab() {
@@ -143,7 +274,7 @@ function renderOnboardingTab() {
         <p class="text-sm text-white/50">Contrato</p>
         ${onboardingBadge(c.status)}
       </div>
-      <div class="grid sm:grid-cols-3 gap-4 text-sm mb-4">
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
         <div>
           <p class="text-white/40 text-xs mb-1">Programa</p>
           <select id="contract-program" class="field text-sm">
@@ -154,11 +285,18 @@ function renderOnboardingTab() {
         <div>
           <p class="text-white/40 text-xs mb-1">Modelo de Contrato</p>
           ${c.program === 'ascensao_imagem'
-            ? `<p class="field text-sm flex items-center">Pagamento único · R$ ${(c.value || 0).toLocaleString('pt-BR')}</p>`
+            ? `<p class="field text-sm flex items-center">Pagamento único</p>`
             : `<select id="contract-duration" class="field text-sm" ${c.program !== 'persea' ? 'disabled' : ''}>
                 <option value="">Não definido</option>
-                ${CONTRACT_DURATIONS.map((d) => `<option value="${d}" ${c.duration === d ? 'selected' : ''}>${CONTRACT_DURATION_LABEL[d]} · R$ ${CONTRACT_DURATION_VALUE[d].toLocaleString('pt-BR')}</option>`).join('')}
+                ${CONTRACT_DURATIONS.map((d) => `<option value="${d}" ${c.duration === d ? 'selected' : ''}>${CONTRACT_DURATION_LABEL[d]} · sugestão R$ ${CONTRACT_DURATION_VALUE[d].toLocaleString('pt-BR')}</option>`).join('')}
               </select>`}
+        </div>
+        <div>
+          <p class="text-white/40 text-xs mb-1">Valor Total Acordado (R$)</p>
+          <div class="flex gap-2">
+            <input id="contract-value" type="number" min="0" step="0.01" class="field text-sm" value="${c.value ?? ''}" placeholder="0,00" />
+            <button id="save-contract-value" class="btn-ghost">Salvar</button>
+          </div>
         </div>
         <div>
           <p class="text-white/40 text-xs mb-1">Avançar Status</p>
@@ -170,12 +308,10 @@ function renderOnboardingTab() {
           </div>
         </div>
       </div>
-      <p class="text-xs text-white/30 mb-4">Assinatura acontece em uma plataforma externa — este protótipo apenas rastreia o status, sem integração real.</p>
+      <p class="text-xs text-white/20 mb-4">O valor sugerido pelo programa/modelo é só um ponto de partida — ajuste livremente aqui para refletir o que foi realmente negociado com a cliente.</p>
+      <p class="text-xs text-white/30 mb-4">Os campos acima são o rascunho antigo (dados de exemplo). Geração real do contrato, envio para assinatura via Autentique e o arquivo assinado agora vivem no sistema novo — abra pelo botão abaixo.</p>
       <div class="flex items-center gap-3">
-        <button id="upload-signed-contract" class="btn-ghost" ${!['signed', 'completed'].includes(c.status) ? 'disabled' : ''}>
-          ${c.signedFileName ? 'Reenviar Contrato Assinado' : 'Simular Upload do Contrato Assinado'}
-        </button>
-        ${c.signedFileName ? `<span class="text-xs" style="color:var(--muted);">${c.signedFileName}</span>` : ''}
+        <a href="contract.html?legacy_id=${clientId}" class="btn-primary inline-block">Abrir Contrato (Sistema Real) ↗</a>
       </div>
     `, 'mb-6')}
 
@@ -189,63 +325,16 @@ function renderOnboardingTab() {
     `, 'mb-6')}
 
     ${card(`
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between mb-1">
         <p class="text-sm text-white/50">Plano de Pagamento</p>
-        ${c.installments ? `<span class="text-xs text-white/30">${c.installments}x de R$ ${Math.round(c.value / c.installments).toLocaleString('pt-BR')} · ${PAYMENT_METHOD_LABEL[c.paymentMethod] || '—'}</span>` : ''}
+        <p class="text-xs text-white/30">Total: <strong id="plan-lines-total" style="color:var(--gold);">R$ 0,00</strong></p>
       </div>
-      ${!c.value ? `
-        <p class="text-sm" style="color:var(--muted);">Defina o programa e o modelo de contrato acima para gerar o plano de pagamento.</p>
-      ` : `
-        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-3">
-          <div>
-            <p class="text-white/40 text-xs mb-1">Forma de Pagamento</p>
-            <select id="payment-method" class="field text-sm">
-              ${PAYMENT_METHODS.map((m) => `<option value="${m}" ${c.paymentMethod === m ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <p class="text-white/40 text-xs mb-1">Número de Parcelas</p>
-            <input id="payment-installments" type="number" min="1" max="24" class="field text-sm" value="${c.installments || 1}" />
-          </div>
-          <div>
-            <p class="text-white/40 text-xs mb-1">Data da 1ª Parcela</p>
-            <input id="payment-start-date" type="date" class="field text-sm" value="${payments[0]?.dueDate || new Date().toISOString().slice(0, 10)}" />
-          </div>
-          <div class="flex items-end">
-            <button id="generate-payment-plan" class="btn-ghost w-full">${c.installments ? 'Refazer Plano' : 'Gerar Plano'}</button>
-          </div>
-        </div>
-        <p class="text-xs text-white/20 mb-4">Valor total do contrato: R$ ${c.value.toLocaleString('pt-BR')}. Gerar o plano recalcula o cronograma abaixo — e na aba Financeiro — a partir da data escolhida, em parcelas mensais iguais.</p>
-        ${payments.length ? `
-          <div class="divide-y mb-4" style="border-color:var(--line);">
-            ${payments.map((p) => `
-              <div class="flex items-center gap-3 py-2.5 flex-wrap">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-white/30">R$</span>
-                  <input type="number" min="0" step="0.01" class="field text-sm" style="width:100px;" data-payment-amount="${p.id}" value="${p.amount}" />
-                  <span class="text-xs text-white/30">vencimento</span>
-                  <input type="date" class="field text-sm" style="width:152px;" data-payment-date="${p.id}" value="${p.dueDate}" />
-                </div>
-                <div class="flex items-center gap-3 ml-auto">
-                  ${paymentBadge(p.status)}
-                  <button data-remove-payment="${p.id}" class="btn-text">Remover</button>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        ` : '<p class="text-sm mb-4" style="color:var(--muted);">Nenhum plano de pagamento definido ainda.</p>'}
-        <div class="flex items-end gap-3 pt-4" style="border-top:1px solid var(--line);">
-          <div class="flex-1">
-            <p class="text-white/40 text-xs mb-1">Adicionar Parcela Avulsa — Data</p>
-            <input id="manual-payment-date" type="date" class="field text-sm" />
-          </div>
-          <div class="flex-1">
-            <p class="text-white/40 text-xs mb-1">Valor (R$)</p>
-            <input id="manual-payment-amount" type="number" min="0" step="0.01" class="field text-sm" placeholder="0,00" />
-          </div>
-          <button id="add-manual-payment" class="btn-ghost">+ Adicionar</button>
-        </div>
-      `}
+      <p class="text-xs text-white/20 mb-4">Registre cada pagamento combinado com a cliente — entrada, depósitos avulsos, parcelas — em qualquer combinação, valor, forma de pagamento e data. Não precisa ser um plano parcelado padrão: adicione quantas linhas forem necessárias, em qualquer ordem.</p>
+      <div id="plan-lines">${(payments.length ? payments : [{}]).map((p) => paymentPlanLineRowHtml(p)).join('')}</div>
+      <div class="flex items-center justify-between mt-2 mb-4">
+        <button type="button" id="add-plan-line" class="btn-text">+ Adicionar Pagamento</button>
+        <button type="button" id="save-plan-lines" class="btn-primary">Salvar Plano de Pagamento</button>
+      </div>
     `, 'mb-6')}
 
     ${card(`
@@ -274,32 +363,40 @@ function renderFinancialTab() {
   return `
     ${card(`
       <p class="text-sm text-white/50 mb-4">Programa &amp; Contrato</p>
-      <div class="grid sm:grid-cols-3 gap-4 text-sm">
+      <div class="grid sm:grid-cols-3 gap-4 text-sm mb-4">
         <div><p class="text-white/40 text-xs mb-1">Programa</p><p>${c.program ? PROGRAM_LABEL[c.program] : '—'}</p></div>
         <div><p class="text-white/40 text-xs mb-1">Modelo</p><p>${c.program === 'ascensao_imagem' ? 'Pagamento único' : (c.duration ? CONTRACT_DURATION_LABEL[c.duration] : '—')}</p></div>
         <div><p class="text-white/40 text-xs mb-1">Valor Total</p><p>${c.value ? `R$ ${c.value.toLocaleString('pt-BR')}` : '—'}</p></div>
       </div>
+      <a href="contract.html?legacy_id=${clientId}" class="btn-ghost inline-block">Abrir Contrato (Sistema Real) ↗</a>
     `, 'mb-6')}
     ${card(`
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-white/50">Pagamentos</p>
-        <span class="text-xs text-white/30">Recebido R$ ${paid.toLocaleString('pt-BR')} · A receber R$ ${pending.toLocaleString('pt-BR')}</span>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-white/30">Recebido R$ ${paid.toLocaleString('pt-BR')} · A receber R$ ${pending.toLocaleString('pt-BR')}</span>
+          <a href="payments.html?legacy_id=${clientId}" class="btn-text">Cobranças (SumUp) ↗</a>
+        </div>
       </div>
       ${payments.length ? `
         <div class="divide-y" style="border-color:var(--line);">
-          ${payments.map((p) => `
+          ${payments.map((p, i) => {
+            const desc = `Parcela ${i + 1}/${payments.length} — ${client.fullName}`;
+            const genLinkHref = `payments.html?legacy_id=${clientId}&open=charge&prefill_amount=${p.amount}&prefill_due=${p.dueDate}&prefill_desc=${encodeURIComponent(desc)}`;
+            return `
             <div class="py-3 ${p.reportedPaidAt && p.status !== 'paid' ? 'bg-white/5 -mx-2 px-2 rounded' : ''}">
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-sm">R$ ${p.amount.toLocaleString('pt-BR')}</p>
                   <p class="text-xs text-white/30 mt-0.5">
-                    Vencimento ${formatDate(p.dueDate)}${p.paidAt ? ` · Pago em ${formatDate(p.paidAt)}` : ''}
+                    Vencimento ${formatDate(p.dueDate)}${p.method ? ` · ${PAYMENT_METHOD_LABEL[p.method] || p.method}` : ''}${p.paidAt ? ` · Pago em ${formatDate(p.paidAt)}` : ''}
                     ${p.linkSentAt ? ` · Link enviado em ${formatDate(p.linkSentAt)}` : ''}
                     ${p.reportedPaidAt && p.status !== 'paid' ? ` · <span style="color:var(--gold);">Assistente reportou pagamento em ${formatDate(p.reportedPaidAt)}</span>` : ''}
                   </p>
                 </div>
                 <div class="flex items-center gap-3">
                   ${paymentBadge(p.status)}
+                  ${p.status !== 'paid' ? `<a href="${genLinkHref}" class="btn-primary">Gerar Link de Pagamento</a>` : ''}
                   ${p.status !== 'paid' ? `<button data-mark-paid="${p.id}" class="btn-ghost">${p.reportedPaidAt ? 'Confirmar recebimento' : 'Marcar como pago'}</button>` : ''}
                 </div>
               </div>
@@ -308,7 +405,8 @@ function renderFinancialTab() {
                 ${p.nf.status === 'requested' ? `<button data-issue-nf="${p.id}" class="btn-text">Emitir Nota Fiscal</button>` : ''}
               </div>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
       ` : '<p class="text-sm" style="color:var(--muted);">Nenhum pagamento registrado — defina o programa e o modelo de contrato na aba Onboarding.</p>'}
     `)}
@@ -1187,97 +1285,180 @@ function wireValueAnalysisTab() {
 // already used for the Business activity's premium_preview state below.
 const ENCOUNTER_STATUS_BADGE_CLASS = { not_scheduled: 'badge-locked', upcoming: 'badge-progress', completed: 'badge-completed', rescheduled: 'badge-locked', cancelled: 'badge-locked' };
 const ENCOUNTER_STATUS_LABEL = { not_scheduled: 'Não agendado', ...AGENDA_STATUS_LABEL };
-function encounterRow(e, isPremiumProgram) {
-  const locked = e.premiumOnly && !isPremiumProgram;
+// One row per activity or mentor deliverable inside a phase — same
+// building blocks the client's own "Sua Jornada" shows, just with
+// admin-facing actions (open the activity itself in a new tab) instead of
+// client CTAs. Individual encounter status lives in each E-tab's own
+// header instead (see renderEncounterTab) — no separate encounter row here.
+// Whatever the client actually sent/answered for this activity — read-only,
+// no separate page to open. Returns null when there's nothing to show yet
+// (not started, or this activity type doesn't carry client-authored
+// content), in which case the row stays a plain link+badge instead of an
+// expandable one. This is exactly the material Nay needs to be caught up
+// on before requesting a meeting (see renderScheduleRequestSection above).
+function activityAnswersPreview(a) {
+  if (a.slug === 'brand-extraction') {
+    const q = MockDB.getQuestionnaire(clientId);
+    if (!q.questions.some((qu) => qu.answer)) return null;
+    return `<div class="space-y-3 mt-2">${q.questions.map((qu) => `<div><p class="text-xs text-white/30 mb-0.5">${qu.text}</p><p class="text-sm">${qu.answer || '—'}</p></div>`).join('')}</div>`;
+  }
+  if (a.slug === 'business-survey') {
+    const survey = MockDB.getBusinessSurvey(clientId);
+    if (survey.status !== 'submitted') return null;
+    return `<div class="grid sm:grid-cols-2 gap-4 mt-2">${BUSINESS_SURVEY_QUESTIONS.map((q) => `<div><p class="text-xs text-white/30 mb-0.5">${q.label}</p><p class="text-sm">${survey.responses[q.key] || '—'}</p></div>`).join('')}</div>`;
+  }
+  if (a.slug === 'archetype-test') {
+    const results = MockDB.getArchetypeResults(clientId);
+    if (!results) return null;
+    return `<p class="text-sm mt-2"><span class="text-xs text-white/30 block mb-0.5">Arquétipos em destaque</span>${results.featured.map((f) => `${f.name} (${f.percentage}%)`).join(' · ')}</p>`;
+  }
+  if (a.slug === 'initial-images') {
+    const imgs = MockDB.getClientImages(clientId);
+    if (!imgs.images.length) return null;
+    return `
+      <div class="grid grid-cols-6 gap-2 mt-2">${imgs.images.slice(0, 12).map((img) => `<img src="${img.dataUrl}" alt="${img.fileName || ''}" style="width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:3px; border:1px solid var(--line);" />`).join('')}</div>
+      ${imgs.images.length > 12 ? `<p class="text-xs text-white/20 mt-1">+${imgs.images.length - 12} imagens</p>` : ''}
+    `;
+  }
+  if (a.slug === 'pitch') {
+    const pitches = MockDB.getPitches(clientId);
+    if (!pitches) return null;
+    return `<p class="text-sm mt-2"><span class="text-xs text-white/30 block mb-0.5">Pitch de 30s</span>${pitches.pitch_30s || '—'}</p>`;
+  }
+  return null;
+}
+function phaseActivityRow(a) {
+  const preview = activityAnswersPreview(a);
+  // Once there's a results view to expand in place, the title stops
+  // linking into the client's own page — admin should never need to open
+  // that page just to read an answer (see the login/RLS note this avoids).
+  // The link stays only for activities with no inline results yet.
+  const titleRow = `
+    <div class="flex items-center gap-2">
+      ${preview
+        ? `<span class="text-sm">${a.title}</span>`
+        : `<a href="${a.route ? `../client/${a.route}` : '#'}" ${a.route ? 'target="_blank" rel="noopener"' : ''} class="text-sm hover:underline">${a.title}</a>`}
+      ${a.access === 'premium_preview' ? '<span class="text-xs text-white/20">(preview)</span>' : ''}
+    </div>
+  `;
+  if (!preview) {
+    return `<div class="flex items-center justify-between py-2">${titleRow}<span class="badge ${a.badgeClass}">${a.statusLabel}</span></div>`;
+  }
   return `
-    <div class="flex items-center justify-between py-2.5 ${locked ? 'opacity-50' : ''}">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="text-xs" style="color:var(--muted); flex-shrink:0;">E${e.number}</span>
-        <div class="min-w-0">
-          <p class="text-sm truncate">${e.name}</p>
-          <p class="text-xs text-white/20">Fase ${e.phase + 1}${e.date ? ` · ${formatDateTime(e.date)}` : ''}${e.assignedTo ? ` · ${e.assignedTo === 'assistant' && e.assistantPersona ? ASSISTANT_PERSONA_LABEL[e.assistantPersona] : e.assignedTo === 'nay' ? 'Nay' : e.assignedTo}` : ''}</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2 flex-shrink-0">
-        ${e.premiumOnly ? '<span class="text-xs text-white/20">Premium</span>' : ''}
-        <span class="badge ${locked ? 'badge-locked' : ENCOUNTER_STATUS_BADGE_CLASS[e.status]}">${locked ? 'Somente Premium' : ENCOUNTER_STATUS_LABEL[e.status]}</span>
-        ${e.agendaItemId && !locked ? `<a href="agenda.html?item=${e.agendaItemId}" class="btn-text">Abrir</a>` : ''}
+    <details class="answer-row">
+      <summary>${titleRow}<span class="badge ${a.badgeClass}">${a.statusLabel}</span></summary>
+      ${preview}
+    </details>
+  `;
+}
+function phaseDeliverableRow(d) {
+  return `
+    <div class="flex items-center justify-between py-2">
+      <p class="text-sm">${d.label}</p>
+      <span class="badge ${MENTOR_DELIVERABLE_STATUS_BADGE_CLASS[d.status]}">${MENTOR_DELIVERABLE_STATUS_LABEL[d.status]}</span>
+    </div>
+  `;
+}
+// One card per phase — encontro(s), atividades da cliente, e entregáveis da
+// equipe, all kept inside the phase they actually belong to (E1/E2 -> Fase
+// 1, E3 -> Fase 2, E4 -> Fase 3, E5-E8 -> Fase 4), reusing the exact same
+// MockDB.getClientJourney the client's own Minha Jornada reads — never a
+// second, admin-only grouping that could drift from what she sees.
+// Programa — trimmed down to "who is this client" per the redesign: photo,
+// social links (already shown above the tabs, see shell()), a WHO/WHAT/WHY/
+// HOW summary Nay fills in from E1/E2, her private notes, and an
+// easy-to-reach deliverables list. Everything about the actual mentoring
+// progress (encounters, activities, gates) now lives on its own E1-E8 tab —
+// see renderEncounterTab — so this page never re-competes with those.
+function initials(name) {
+  return (name || '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+}
+function deliverableRow(label, status, url) {
+  const ok = isValidHttpUrl(url);
+  return `
+    <div class="flex items-center justify-between py-2.5">
+      <p class="text-sm">${label}</p>
+      <div class="flex items-center gap-3">
+        <span class="badge ${status === 'delivered' ? 'badge-completed' : status === 'in_review' ? 'badge-progress' : 'badge-locked'}">${GUIDE_STATUS_LABEL[status] || status}</span>
+        ${ok ? `<a ${externalLinkAttrs(url)} class="btn-text">Abrir ↗</a>` : ''}
       </div>
     </div>
   `;
 }
-function renderEncounterJourney(program) {
-  const journey = MockDB.getEncounterJourney(clientId);
-  const isPremiumProgram = program.slug === 'persea-premium';
-  return card(`
-    <div class="flex items-center justify-between mb-1">
-      <p class="text-sm text-white/50">Jornada de Encontros (E1–E8)</p>
-      <span class="text-xs" style="color:var(--muted);">${PROGRAM_LABEL_MAP[program.slug] || program.name}</span>
-    </div>
-    <p class="text-xs text-white/20 mb-3">Metodologia Nova Persea — E1–E4 formam a jornada completa da Essencial; Premium segue até E8. E7 e E8 são encontros adaptativos, sem pauta fixa.</p>
-    <div class="divide-y" style="border-color:var(--line);">
-      ${journey.map((e) => encounterRow(e, isPremiumProgram)).join('')}
-    </div>
-  `, 'mb-6');
-}
-
 function renderProgramTab() {
   const program = MockDB.getClientProgram(clientId);
-  const progress = MockDB.getProgramProgress(clientId);
-  const activities = MockDB.getProgramActivities(clientId);
-  const meeting = MockDB.getUpcomingMeetingForClient(clientId);
+  const summary = MockDB.getClientProfileSummary(clientId);
+  const notes = MockDB.getNotes(clientId);
+  const guides = MockDB.getImageGuides(clientId);
+  const kit = MockDB.getDigitalKit(clientId);
+  const links = MockDB.getPlaybookLinks(clientId);
   const history = MockDB.getProgramHistory(clientId);
   const myInterests = MockDB.getPremiumUpgradeInterests().filter((i) => i.clientId === clientId);
 
-  const awaitingClient = activities.filter((a) => a.access === 'included' && ['not_started', 'in_progress', 'novas_solicitadas'].includes(a.status));
-  const awaitingTeam = activities.filter((a) => a.access === 'included' && ['submitted', 'in_analysis'].includes(a.status));
-  const completed = activities.filter((a) => a.access === 'included' && ['completed', 'feedback_available'].includes(a.status));
-
   return `
     ${card(`
-      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <div>
-          <p class="text-sm text-white/50 mb-1">Programa</p>
-          <p class="text-xl font-serif">${program.name}</p>
-          ${program.positioning ? `<p class="text-xs mt-0.5" style="color:var(--gold);">${program.positioning} — ${program.supportingStatement || ''}</p>` : ''}
+      <div class="flex items-start gap-5 flex-wrap">
+        <div id="profile-photo-frame" style="width:96px; height:96px; border-radius:50%; overflow:hidden; flex-shrink:0; background:var(--bg2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center;">
+          ${isValidHttpUrl(summary.photoUrl) ? `<img id="profile-photo-img" src="${summary.photoUrl}" alt="${client.fullName}" style="width:100%; height:100%; object-fit:cover;" onerror="this.remove(); document.getElementById('profile-photo-fallback').style.display='flex';" />` : ''}
+          <span id="profile-photo-fallback" class="font-serif text-xl" style="color:var(--muted); ${isValidHttpUrl(summary.photoUrl) ? 'display:none;' : ''}">${initials(client.fullName)}</span>
+        </div>
+        <div class="flex-1 min-w-[220px]">
+          <p class="text-xl font-serif">${client.fullName}</p>
+          <p class="text-xs text-white/30 mt-0.5">${program.name}${program.positioning ? ` · ${program.positioning}` : ''}</p>
+          <form id="photo-form" class="flex items-center gap-2 mt-3">
+            <input name="photoUrl" id="photo-url-input" class="field text-sm" style="max-width:340px;" placeholder="Link da foto de perfil" value="${summary.photoUrl || ''}" />
+            <button type="submit" class="btn-ghost">Salvar</button>
+          </form>
+          <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar — precisa ser um link direto para a imagem, não uma página.</p>
         </div>
         <a href="../client/program.html?asClient=1" target="_blank" rel="noopener" class="btn-ghost">Pré-visualizar como cliente ↗</a>
       </div>
-      <div class="grid sm:grid-cols-4 gap-4 text-sm">
-        <div><p class="text-xs text-white/30 mb-1">Duração</p><p>${program.durationMonths ? `${program.durationMonths} meses` : 'A confirmar'}</p></div>
-        <div><p class="text-xs text-white/30 mb-1">Progresso</p><p>${progress.pct}% (${progress.completedCount}/${progress.totalIncluded})</p></div>
-        <div><p class="text-xs text-white/30 mb-1">Próxima atividade</p><p>${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia'}</p></div>
-        <div><p class="text-xs text-white/30 mb-1">Acesso Premium</p><p>${program.slug === 'persea-premium' ? 'Sim' : 'Não'}</p></div>
-      </div>
-      ${progressBarRow(progress.pct)}
     `, 'mb-6')}
 
-    <div class="grid md:grid-cols-3 gap-4 mb-6">
-      ${card(`<p class="text-xs text-white/30 mb-1">Aguardando a cliente</p><p class="text-2xl font-serif">${awaitingClient.length}</p>`)}
-      ${card(`<p class="text-xs text-white/30 mb-1">Aguardando a equipe</p><p class="text-2xl font-serif">${awaitingTeam.length}</p>`)}
-      ${card(`<p class="text-xs text-white/30 mb-1">Concluídas</p><p class="text-2xl font-serif">${completed.length}</p>`)}
-    </div>
-
     ${card(`
-      <p class="text-sm text-white/50 mb-3">Próximo encontro</p>
-      ${meeting ? `<p class="text-sm">${meeting.title} — ${formatDateTime(meeting.date)}</p>` : '<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado.</p>'}
-      <a href="agenda.html" class="btn-text mt-2 inline-block">Abrir Agenda</a>
-    `, 'mb-6')}
-
-    ${renderEncounterJourney(program)}
-
-    ${card(`
-      <p class="text-sm text-white/50 mb-4">Atividades</p>
-      <div class="divide-y" style="border-color:var(--line);">
-        ${activities.map((a) => `
-          <div class="flex items-center justify-between py-2.5">
-            <div class="flex items-center gap-2">
-              <a href="${a.route ? `../client/${a.route}` : '#'}" ${a.route ? 'target="_blank" rel="noopener"' : ''} class="text-sm hover:underline">${a.title}</a>
-              ${a.access === 'premium_preview' ? '<span class="text-xs text-white/20">(preview)</span>' : ''}
-            </div>
-            <span class="badge ${a.badgeClass}">${a.statusLabel}</span>
+      <p class="text-sm text-white/50 mb-1">Quem é ${client.fullName.split(' ')[0]}</p>
+      <p class="text-xs text-white/20 mb-4">Preenchido a partir do E1 e do E2 — o resumo que qualquer pessoa da equipe precisa para entender esta cliente rapidamente.</p>
+      <form id="summary-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">QUEM ela é</label>
+          <textarea name="who" rows="2" class="field text-sm">${summary.who}</textarea>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">O QUE ela vende</label>
+            <textarea name="what" rows="2" class="field text-sm">${summary.what}</textarea>
           </div>
-        `).join('')}
+          <div>
+            <label class="text-xs text-white/40 block mb-1">POR QUE ela vende</label>
+            <textarea name="why" rows="2" class="field text-sm">${summary.why}</textarea>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">COMO ela vende</label>
+          <textarea name="how" rows="2" class="field text-sm">${summary.how}</textarea>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar Resumo</button>
+        </div>
+      </form>
+    `, 'mb-6')}
+
+    ${card(`
+      <p class="text-sm text-white/50 mb-3">Notas Internas</p>
+      <p class="text-xs text-white/20 mb-3">Visível para Nay e para a assistente — nunca para a cliente.</p>
+      <form id="notes-form" class="space-y-3">
+        <textarea name="notes" rows="4" class="field text-sm">${notes || ''}</textarea>
+        <div class="flex justify-end"><button type="submit" class="btn-ghost">Salvar Notas</button></div>
+      </form>
+    `, 'mb-6')}
+
+    ${card(`
+      <p class="text-sm text-white/50 mb-3">Entregáveis</p>
+      <div class="divide-y" style="border-color:var(--line);">
+        ${guides.map((g) => deliverableRow(g.label, g.status, g.fileUrl)).join('')}
+        ${deliverableRow('Kit Digital', kit.status, kit.fileUrl)}
+        ${deliverableRow('Playbook de Marca Pessoal', links.personalPlaybookUrl ? 'delivered' : 'not_started', links.personalPlaybookUrl)}
+        ${deliverableRow('Business Playbook', links.businessPlaybookUrl ? 'delivered' : 'not_started', links.businessPlaybookUrl)}
       </div>
     `, 'mb-6')}
 
@@ -1313,10 +1494,322 @@ function renderProgramTab() {
     `)}
   `;
 }
-function progressBarRow(pct) {
-  return `<div class="mt-4">${progressBar(pct)}</div>`;
-}
 const PROGRAM_LABEL_MAP = Object.fromEntries(PROGRAM_DEFS.map((p) => [p.slug, p.name]));
+
+// --- Encontro briefs (E1-E8) — what replaced the old flat tab row. Each
+// tab is the encounter's purpose (ENCOUNTER_DEFS), its schedule, and
+// whatever belongs to its phase (getClientJourney), plus a small
+// encounter-specific block for the handful of E's with a real prerequisite
+// or a deliverable prompt. Legacy admin workspaces (Direção da Marca,
+// Editor de Pitch, Ficha de Valor, etc.) aren't gone — see RENDERERS below
+// — they're just reached from inside the relevant brief now (data-tab
+// buttons below reuse the exact same tab-switching wiring as the row above).
+// --- E3 image tools — everything the assistant produces day-to-day for
+// this encounter (color palette, production guide, mood board, image
+// planning tools) lives here, editable only for her (see
+// ASSISTANT_EDITABLE_TABS). Ported from the old assistant/client-
+// workspace.js checklist rather than rebuilt, since the review-queue
+// workflow (submit -> Nay approves/requests changes -> delivered) already
+// worked correctly there.
+function reviewNoteHtml(item) {
+  if (!item.review) return '';
+  if (item.review.status === 'pending') return '<p class="text-xs mt-1" style="color:var(--gold);">Aguardando revisão da Nay</p>';
+  if (item.review.status === 'changes_requested') return `<p class="text-xs mt-1" style="color:var(--terracotta);">Nay pediu ajustes: ${item.review.nayNote}</p>`;
+  return '';
+}
+function guideRow(g) {
+  return `
+    <div class="flex items-center justify-between py-2.5">
+      <div>
+        <p class="text-sm">${g.label}</p>
+        ${reviewNoteHtml(g)}
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="badge ${g.status === 'delivered' ? 'badge-completed' : g.status === 'in_review' ? 'badge-progress' : 'badge-locked'}">${GUIDE_STATUS_LABEL[g.status]}</span>
+        ${g.status !== 'delivered' && g.status !== 'in_review' ? `<button data-submit-guide="${g.slug}" data-guide-label="${g.label}" class="btn-text">Enviar para revisão</button>` : ''}
+        ${g.status === 'in_review' && g.review && g.review.status === 'changes_requested' ? `<button data-submit-guide="${g.slug}" data-guide-label="${g.label}" class="btn-text">Reenviar</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function openSubmitReviewModal(type, refSlug, title) {
+  const { el, close } = openModal({
+    title: `Enviar para revisão — ${title}`,
+    bodyHtml: `
+      <form id="review-form" class="space-y-4">
+        <div><label class="text-xs text-white/40 block mb-1">Arquivo (PDF ou imagem)</label><input type="file" name="file" accept="application/pdf,image/*" class="field" /></div>
+        <div><label class="text-xs text-white/40 block mb-1">Ou link do arquivo <span class="text-white/20">(se já estiver hospedado em outro lugar)</span></label><input name="fileUrl" class="field" placeholder="https://..." /></div>
+        <div><label class="text-xs text-white/40 block mb-1">Link editável no Canva <span class="text-white/20">(opcional)</span></label><input name="canvaUrl" class="field" placeholder="https://www.canva.com/design/..." /></div>
+        <div><label class="text-xs text-white/40 block mb-1">Resumo <span class="text-white/20">(para referência futura)</span></label><textarea name="summary" rows="2" class="field"></textarea></div>
+        <div><label class="text-xs text-white/40 block mb-1">Nota para a Nay <span class="text-white/20">(opcional)</span></label><textarea name="note" rows="2" class="field"></textarea></div>
+        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar para revisão</button>
+      </form>
+    `,
+  });
+  el.querySelector('#review-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const file = fd.get('file');
+    if (file && file.size > 8 * 1024 * 1024) { toast('Arquivo passa de 8MB — use o link em vez do upload.', { tone: 'error' }); return; }
+    const fileUrl = file && file.size ? await fileToDataUrl(file) : fd.get('fileUrl');
+    if (!fileUrl) { toast('Envie um arquivo ou informe um link.', { tone: 'error' }); return; }
+    MockDB.submitForReview(clientId, { type, refSlug, title, note: fd.get('note') || '', fileUrl, summary: fd.get('summary') || '', canvaUrl: fd.get('canvaUrl') || '' });
+    close();
+    toast('Enviado para revisão da Nay.');
+    render();
+  });
+}
+function renderAssistantImageTools() {
+  const guides = MockDB.getImageGuides(clientId);
+  const kit = MockDB.getDigitalKit(clientId);
+  const reminder = MockDB.getPhotoReminder(clientId);
+  const notes = MockDB.getWhatsappNotes(clientId);
+  const productionGuide = guides.find((g) => g.slug === 'guia_looks_mensal');
+  const moodGuide = guides.find((g) => g.slug === 'moodboard_ensaio');
+  const otherGuides = guides.filter((g) => g.slug !== 'guia_looks_mensal' && g.slug !== 'moodboard_ensaio');
+  return `
+    ${card(`
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-sm text-white/50">Projeto de Imagem</p>
+        <span class="badge ${client.imageProjectStatus === 'created' ? 'badge-completed' : 'badge-locked'}">${client.imageProjectStatus === 'created' ? 'Criado' : 'Não criado'}</span>
+      </div>
+      <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pela cliente.</p>
+      <div class="flex items-center gap-3 flex-wrap">
+        ${client.imageProjectStatus !== 'created' ? '<button id="create-image-project" class="btn-ghost">Criar projeto</button>' : ''}
+        <button id="remind-photos" class="btn-text">🔔 Lembrar cliente de enviar fotos</button>
+      </div>
+      ${reminder.sentAt ? `<p class="text-xs mt-2" style="color:var(--muted);">Último lembrete enviado em ${formatDateTime(reminder.sentAt)}.</p>` : ''}
+    `, 'mb-6')}
+    ${productionGuide ? card(`<p class="text-sm text-white/50 mb-1">Guia de Produções <span class="text-white/20 text-xs">(cartela de cores e looks do mês)</span></p>${guideRow(productionGuide)}`, 'mb-6') : ''}
+    ${moodGuide ? card(`<p class="text-sm text-white/50 mb-1">Mood Fotográfico</p>${guideRow(moodGuide)}`, 'mb-6') : ''}
+    ${otherGuides.length ? card(`<p class="text-sm text-white/50 mb-4">Ferramentas para Nova Imagem</p><div class="divide-y" style="border-color:var(--line);">${otherGuides.map(guideRow).join('')}</div>`, 'mb-6') : ''}
+    ${card(`
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-sm text-white/50">Kit Digital</p>
+        <span class="badge ${kit.status === 'delivered' ? 'badge-completed' : kit.status === 'in_review' ? 'badge-progress' : 'badge-locked'}">${GUIDE_STATUS_LABEL[kit.status]}</span>
+      </div>
+      ${reviewNoteHtml(kit)}
+      ${kit.status !== 'delivered' && kit.status !== 'in_review' ? '<button id="submit-kit" class="btn-text">Enviar para revisão</button>' : ''}
+      ${kit.status === 'in_review' && kit.review && kit.review.status === 'changes_requested' ? '<button id="submit-kit" class="btn-text">Reenviar</button>' : ''}
+    `, 'mb-6')}
+    ${card(`
+      <p class="text-sm text-white/50 mb-4">Notas para a Nay <span class="text-white/20 text-xs">(sobre a imagem desta cliente — nunca visível para ela)</span></p>
+      <form id="e3-note-form" class="flex items-start gap-2 mb-4">
+        <textarea name="note" rows="2" class="field" placeholder="Ex.: cliente prefere tons mais neutros do que o padrão da paleta." required></textarea>
+        <button type="submit" class="btn-ghost" style="white-space:nowrap;">Registrar</button>
+      </form>
+      ${notes.length ? `
+        <div class="space-y-2">
+          ${notes.map((n) => `<div class="text-sm" style="border-left:2px solid var(--line); padding-left:10px;"><p class="text-white/70">${n.text}</p><p class="text-xs text-white/20 mt-0.5">${formatDateTime(n.at)}</p></div>`).join('')}
+        </div>
+      ` : '<p class="text-xs text-white/20">Nenhuma nota registrada ainda.</p>'}
+    `)}
+  `;
+}
+
+function renderEncounterExtra(n) {
+  if (n === 1) {
+    return card(`
+      <p class="text-sm text-white/50 mb-3">Depois Deste Encontro</p>
+      <p class="text-xs text-white/20 mb-3">Preencha o resumo de QUEM ela é e POR QUE vende na aba Programa, e monte o mural de inspiração dela na Direção da Marca.</p>
+      <div class="flex items-center gap-3">
+        <button type="button" data-tab="program" class="btn-ghost">Abrir Programa</button>
+        <button type="button" data-tab="brand-direction" class="btn-ghost">Abrir Direção da Marca</button>
+      </div>
+    `, 'mb-6');
+  }
+  if (n === 2) {
+    const survey = MockDB.getBusinessSurvey(clientId);
+    return card(`
+      <p class="text-sm text-white/50 mb-3">Pesquisa de Precificação</p>
+      ${survey.status === 'submitted' ? `
+        <div class="grid sm:grid-cols-2 gap-4 text-sm mb-3">
+          ${BUSINESS_SURVEY_QUESTIONS.map((q) => `<div><p class="text-xs text-white/30 mb-1">${q.label}</p><p>${survey.responses[q.key] || '—'}</p></div>`).join('')}
+        </div>
+        <p class="text-xs text-white/20">Respondido em ${formatDateTime(survey.submittedAt)}</p>
+      ` : '<p class="text-sm" style="color:var(--muted);">A cliente ainda não respondeu.</p>'}
+      <div class="flex items-center gap-3 mt-4">
+        <button type="button" data-tab="pitch" class="btn-ghost">Abrir Editor de Pitch</button>
+      </div>
+    `, 'mb-6');
+  }
+  if (n === 3) {
+    const gate = MockDB.canScheduleE3(clientId);
+    const gateCard = card(`
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-white/50">Autorização de Entregáveis</p>
+        <span class="badge ${gate.ready ? 'badge-completed' : 'badge-locked'}">${gate.ready ? 'Liberado para agendar' : 'Aguardando aprovação'}</span>
+      </div>
+      <p class="text-xs text-white/20 mb-3">Cartela de Cores e Guia de Produções precisam estar aprovados por Nay antes deste encontro poder ser marcado — Planejamento de Imagem e Ferramentas para Nova Imagem são modelos compartilhados (ver Templates), ainda sem revisão por cliente.</p>
+      <div class="divide-y mb-3" style="border-color:var(--line);">
+        ${gate.guides.map((g) => `<div class="flex items-center justify-between py-2"><p class="text-sm">${g.label}</p><span class="badge ${g.status === 'delivered' ? 'badge-completed' : 'badge-progress'}">${g.status === 'delivered' ? 'Aprovado' : GUIDE_STATUS_LABEL[g.status]}</span></div>`).join('')}
+      </div>
+      ${!gate.ready ? '<a href="assistente.html?section=revisoes" class="btn-text">Ver Revisões Pendentes →</a>' : ''}
+      <p class="text-xs text-white/20 mt-4">Por padrão, o E3 é conduzido pela assistente — atribua a ela ao agendar este encontro na Agenda.</p>
+    `, 'mb-6');
+    // The real day-to-day tools for this encounter — color palette,
+    // production guide, image planning — live only in the assistant view,
+    // where she actually produces and uploads them. Admin keeps the
+    // approval-gate summary above, unchanged.
+    return isAssistant ? gateCard + renderAssistantImageTools() : gateCard;
+  }
+  if (n === 4) {
+    const links = MockDB.getPlaybookLinks(clientId);
+    const kit = MockDB.getDigitalKit(clientId);
+    return card(`
+      <p class="text-sm text-white/50 mb-3">Playbook de Marca Pessoal</p>
+      <p class="text-xs text-white/20 mb-3">Montado por Nay fora do sistema — cole o link aqui para apresentar neste encontro.</p>
+      <form id="personal-playbook-form" class="flex items-center gap-2 mb-2">
+        <input name="url" class="field text-sm" placeholder="https://..." value="${links.personalPlaybookUrl || ''}" />
+        <button type="submit" class="btn-ghost">Salvar</button>
+        ${isValidHttpUrl(links.personalPlaybookUrl) ? `<a ${externalLinkAttrs(links.personalPlaybookUrl)} class="btn-text">Abrir ↗</a>` : ''}
+      </form>
+      ${links.personalPlaybookDeliveredAt ? `<p class="text-xs" style="color:var(--gold);">Enviado em ${formatDateTime(links.personalPlaybookDeliveredAt)}</p>` : '<p class="text-xs text-white/20">Ainda não enviado — a cliente precisa ver isso antes/durante o E4.</p>'}
+      <div class="pt-4 mt-4" style="border-top:1px solid var(--line);">
+        <div class="flex items-center justify-between">
+          <p class="text-sm text-white/50">Kit Digital</p>
+          <span class="badge ${kit.status === 'delivered' ? 'badge-completed' : kit.status === 'in_review' ? 'badge-progress' : 'badge-locked'}">${GUIDE_STATUS_LABEL[kit.status]}</span>
+        </div>
+      </div>
+    `, 'mb-6');
+  }
+  if (n === 5) {
+    const gate = MockDB.canScheduleE5(clientId);
+    return card(`
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-white/50">Análise de Negócio — Pré-requisito Obrigatório</p>
+        <span class="badge ${gate.ready ? 'badge-completed' : 'badge-locked'}">${gate.ready ? 'Liberado para agendar' : 'Bloqueado'}</span>
+      </div>
+      <p class="text-xs text-white/20 mb-3">${gate.ready ? 'A cliente já preencheu a Análise de Negócio — pode seguir com o E5.' : 'O E5 não deve ser agendado até a cliente preencher a Análise de Negócio (Ficha de Valor).'}</p>
+      <button type="button" data-tab="value-analysis" class="btn-ghost">Abrir Ficha de Valor</button>
+    `, 'mb-6');
+  }
+  if (n === 6) {
+    const links = MockDB.getPlaybookLinks(clientId);
+    return card(`
+      <p class="text-sm text-white/50 mb-3">Business Playbook</p>
+      <p class="text-xs text-white/20 mb-3">Análise de negócio + pontos de foco para a cliente perseguir — cole o link aqui para apresentar neste encontro.</p>
+      <form id="business-playbook-form" class="flex items-center gap-2 mb-2">
+        <input name="url" class="field text-sm" placeholder="https://..." value="${links.businessPlaybookUrl || ''}" />
+        <button type="submit" class="btn-ghost">Salvar</button>
+        ${isValidHttpUrl(links.businessPlaybookUrl) ? `<a ${externalLinkAttrs(links.businessPlaybookUrl)} class="btn-text">Abrir ↗</a>` : ''}
+      </form>
+      ${links.businessPlaybookDeliveredAt ? `<p class="text-xs" style="color:var(--gold);">Enviado em ${formatDateTime(links.businessPlaybookDeliveredAt)}</p>` : '<p class="text-xs text-white/20">Ainda não enviado.</p>'}
+    `, 'mb-6');
+  }
+  return '';
+}
+// Nay's side of the negotiation — request (with her prep checklist) ->
+// client proposes a time (client/dashboard.js + encontros.js) -> Nay
+// confirms, which is the one moment a real agendaItem gets created (see
+// MockDB.confirmEncounterMeeting). Nothing to show once it's actually
+// scheduled — the header above already covers that.
+// Up to 3 candidate slots for Nay to type in when requesting or
+// re-proposing — plain datetime inputs, empty ones just get dropped.
+function timeSlotInputs(namePrefix) {
+  return `
+    <div class="space-y-2">
+      ${[0, 1, 2].map((i) => `<input type="datetime-local" name="${namePrefix}${i}" class="field text-sm" />`).join('')}
+    </div>
+    <p class="text-xs text-white/20 mt-1">Ofereça até 3 horários — a cliente escolhe um, ou avisa se nenhum funciona.</p>
+  `;
+}
+function renderScheduleRequestSection(n, enc) {
+  if (enc.agendaItemId) return '';
+  const openReq = MockDB.getEncounterRequests(clientId)
+    .find((r) => r.encounterNumber === n && !['confirmed', 'cancelled'].includes(r.status));
+
+  if (openReq && openReq.status === 'awaiting_client_response') {
+    return card(`
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-sm text-white/50">Solicitação de Agendamento</p>
+        <span class="badge badge-progress">Aguardando resposta da cliente</span>
+      </div>
+      <p class="text-xs text-white/20 mb-3">Horários oferecidos: ${openReq.proposedTimes.map((t) => formatDateTime(t)).join(' · ')}</p>
+      <button type="button" data-cancel-request="${openReq.id}" class="btn-text">Cancelar Solicitação</button>
+    `, 'mb-6');
+  }
+  if (openReq && openReq.status === 'awaiting_nay_confirmation') {
+    return card(`
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-white/50">Horário Escolhido pela Cliente</p>
+        <span class="badge badge-progress">Aguardando sua confirmação</span>
+      </div>
+      <p class="text-sm mb-4">${formatDateTime(openReq.selectedTime)}</p>
+      <div class="flex items-center gap-3">
+        <button type="button" data-confirm-request="${openReq.id}" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Confirmar Agendamento</button>
+        <button type="button" data-cancel-request="${openReq.id}" class="btn-text">Recusar</button>
+      </div>
+    `, 'mb-6');
+  }
+  if (openReq && openReq.status === 'client_unavailable') {
+    return card(`
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm text-white/50">Nenhum Horário Funcionou</p>
+        <span class="badge badge-locked">Aguardando novos horários</span>
+      </div>
+      <p class="text-xs text-white/30 mb-1">Observação da cliente</p>
+      <p class="text-sm mb-4">${openReq.clientNote || '—'}</p>
+      <form id="repropose-meeting-form" data-request="${openReq.id}">
+        ${timeSlotInputs('slot')}
+        <button type="submit" class="btn-primary mt-3" style="padding:9px 18px;font-size:12.5px;">Enviar Novos Horários</button>
+      </form>
+    `, 'mb-6');
+  }
+  const checklist = ENCOUNTER_PREP_CHECKLIST[n] || [];
+  return card(`
+    <p class="text-sm text-white/50 mb-3">Solicitar Agendamento</p>
+    <p class="text-xs text-white/20 mb-3">Confirme o que você já tem pronto e ofereça horários para a cliente escolher.</p>
+    <form id="request-meeting-form" data-encounter="${n}" class="space-y-2">
+      ${checklist.map((label) => `
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="item" value="${label}" checked /> ${label}
+        </label>
+      `).join('')}
+      <div class="pt-3 mt-3" style="border-top:1px solid var(--line);">${timeSlotInputs('slot')}</div>
+      <button type="submit" class="btn-primary mt-3" style="padding:9px 18px;font-size:12.5px;">Solicitar Agendamento</button>
+    </form>
+  `, 'mb-6');
+}
+function renderEncounterTab(n) {
+  const def = ENCOUNTER_DEFS[n - 1];
+  const program = MockDB.getClientProgram(clientId);
+  const isPremiumProgram = program.slug === 'persea-premium';
+  const locked = def.premiumOnly && !isPremiumProgram;
+  const journey = MockDB.getClientJourney(clientId);
+  const journeyPhase = journey ? journey.phases[def.phase] : null;
+  const enc = (MockDB.getEncounterJourney(clientId) || []).find((e) => e.number === n) || {};
+
+  return `
+    ${card(`
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <p class="text-lg font-serif">E${def.number} — ${def.name}</p>
+        <span class="badge ${locked ? 'badge-locked' : ENCOUNTER_STATUS_BADGE_CLASS[enc.status]}">${locked ? 'Somente Premium' : ENCOUNTER_STATUS_LABEL[enc.status]}</span>
+      </div>
+      <p class="text-xs text-white/20 mb-3">Fase ${def.phase + 1}${journeyPhase ? ` — ${journeyPhase.name}` : ''}</p>
+      <p class="text-sm text-white/50 mb-4 max-w-2xl">${def.purpose}</p>
+      <div class="flex items-center gap-3 flex-wrap">
+        <p class="text-sm">${enc.date ? formatDateTime(enc.date) : 'Ainda não agendado'}${enc.assignedTo ? ` · ${enc.assignedTo === 'assistant' && enc.assistantPersona ? ASSISTANT_PERSONA_LABEL[enc.assistantPersona] : enc.assignedTo === 'nay' ? 'Nay' : enc.assignedTo}` : ''}</p>
+        ${enc.agendaItemId ? `<a href="agenda.html?item=${enc.agendaItemId}" class="btn-text">Abrir na Agenda</a>` : `<a href="agenda.html" class="btn-text">Ir para Agenda →</a>`}
+      </div>
+    `, 'mb-6')}
+    ${renderScheduleRequestSection(n, enc)}
+    ${renderEncounterExtra(n)}
+    ${journeyPhase && (journeyPhase.activities.length || journeyPhase.mentorDeliverables.length) ? card(`
+      <p class="text-sm text-white/50 mb-3">O Que Pertence à Fase ${def.phase + 1}</p>
+      ${journeyPhase.activities.length ? `<div class="divide-y mb-1" style="border-color:var(--line);">${journeyPhase.activities.map(phaseActivityRow).join('')}</div>` : ''}
+      ${journeyPhase.mentorDeliverables.length ? `<div class="divide-y" style="border-color:var(--line);">${journeyPhase.mentorDeliverables.map(phaseDeliverableRow).join('')}</div>` : ''}
+    `, 'mb-6') : ''}
+  `;
+}
 
 const RENDERERS = {
   program: renderProgramTab,
@@ -1333,6 +1826,8 @@ const RENDERERS = {
   homework: renderHomeworkTab,
   'meeting-prep': renderMeetingPrepTab,
   activity: renderActivityTab,
+  e1: () => renderEncounterTab(1), e2: () => renderEncounterTab(2), e3: () => renderEncounterTab(3), e4: () => renderEncounterTab(4),
+  e5: () => renderEncounterTab(5), e6: () => renderEncounterTab(6), e7: () => renderEncounterTab(7), e8: () => renderEncounterTab(8),
 };
 
 function wireTabEvents() {
@@ -1413,58 +1908,39 @@ function wireTabEvents() {
     toast('Redes sociais atualizadas.');
     render();
   });
-  tc.querySelectorAll('[data-remove-payment]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      MockDB.removePayment(clientId, btn.dataset.removePayment);
-      toast('Parcela removida.');
-      render();
-    });
-  });
-  tc.querySelectorAll('[data-payment-date]').forEach((input) => {
-    input.addEventListener('change', () => {
-      if (!input.value) return;
-      MockDB.updatePayment(clientId, input.dataset.paymentDate, { dueDate: input.value });
-      toast('Data da parcela atualizada.');
-      render();
-    });
-  });
-  tc.querySelectorAll('[data-payment-amount]').forEach((input) => {
-    input.addEventListener('change', () => {
-      const amount = Number(input.value);
-      if (!input.value || Number.isNaN(amount) || amount < 0) return;
-      MockDB.updatePayment(clientId, input.dataset.paymentAmount, { amount });
-      toast('Valor da parcela atualizado.');
-      render();
-    });
-  });
-  tc.querySelector('#add-manual-payment')?.addEventListener('click', () => {
-    const dueDate = tc.querySelector('#manual-payment-date').value;
-    const amount = tc.querySelector('#manual-payment-amount').value;
-    if (!dueDate || !amount) { toast('Informe data e valor da parcela.', { tone: 'error' }); return; }
-    MockDB.addPayment(clientId, { dueDate, amount });
-    toast('Parcela adicionada.');
+  tc.querySelector('#save-contract-value')?.addEventListener('click', () => {
+    const value = Number(tc.querySelector('#contract-value').value) || null;
+    MockDB.setContractValue(clientId, value);
+    toast('Valor total acordado salvo.');
     render();
   });
-  tc.querySelector('#generate-payment-plan')?.addEventListener('click', () => {
-    const method = tc.querySelector('#payment-method').value;
-    const installments = Number(tc.querySelector('#payment-installments').value) || 1;
-    const startDate = tc.querySelector('#payment-start-date').value || undefined;
-    const hasPaid = MockDB.getPayments(clientId).some((p) => p.status === 'paid');
-    if (hasPaid && !confirm('Já existem parcelas pagas registradas para esta cliente. Gerar um novo plano substitui todo o cronograma atual. Continuar?')) return;
-    MockDB.setPaymentPlan(clientId, { method, installments, startDate });
-    toast('Plano de pagamento gerado.');
+  wirePaymentPlanLines(tc, clientId, render);
+  tc.querySelector('#create-image-project')?.addEventListener('click', () => {
+    MockDB.setImageProjectStatus(clientId, 'created');
+    toast('Projeto de imagens criado.');
+    render();
+  });
+  tc.querySelector('#remind-photos')?.addEventListener('click', () => {
+    MockDB.sendPhotoReminder(clientId, 'A equipe está aguardando suas fotos para seguir com o Projeto de Imagem, o Guia de Produções e o Mood Fotográfico.');
+    toast('Lembrete enviado à cliente.');
+    render();
+  });
+  tc.querySelector('#submit-kit')?.addEventListener('click', () => openSubmitReviewModal('digital_kit', null, 'Kit Digital'));
+  tc.querySelectorAll('[data-submit-guide]').forEach((btn) => {
+    btn.addEventListener('click', () => openSubmitReviewModal('image_guide', btn.dataset.submitGuide, btn.dataset.guideLabel));
+  });
+  tc.querySelector('#e3-note-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = new FormData(e.target).get('note');
+    if (!text || !text.trim()) return;
+    MockDB.addWhatsappNote(clientId, text.trim());
+    toast('Nota registrada.');
     render();
   });
   tc.querySelector('#update-contract-status')?.addEventListener('click', () => {
     const status = tc.querySelector('#contract-status').value;
     MockDB.advanceContractStatus(clientId, status);
     toast('Status do contrato atualizado.');
-    render();
-  });
-  tc.querySelector('#upload-signed-contract')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Enviando…';
-    await MockDB.uploadSignedContract(clientId, `contrato-${clientId}-assinado.pdf`);
-    toast('Contrato assinado enviado — visível no perfil da cliente.');
     render();
   });
   tc.querySelector('#update-whatsapp-status')?.addEventListener('click', () => {
@@ -1549,10 +2025,58 @@ function wireTabEvents() {
   });
 }
 
+// Tabs the assistant can actually change something on — everything else
+// (Programa, E1, E2, E4-E8) is hers to read, not edit, so those stay
+// visible for context without her being able to touch commercial/program
+// decisions, scheduling requests, playbook links, etc. that are Nay's
+// calls to make. E3 is the one encounter she runs day-to-day (image
+// guides, production tools), so it — along with Onboarding and Financeiro
+// — stays fully editable.
+const ASSISTANT_EDITABLE_TABS = new Set(['onboarding', 'financial', 'e3']);
+
+// Blunt but reliable: rather than threading a read-only flag through every
+// render function above (dozens of forms/buttons across encounter briefs,
+// sub-tabs like Direção da Marca, Ficha de Valor, etc.), just disable every
+// interactive control after the fact for a locked tab. Links and <details>
+// stay live, so "she can view but not edit" holds even for read-only tabs
+// that link into deeper sub-pages — those inherit the same lockdown when
+// opened, since activeTab drives this check regardless of how she got there.
+// One deliberate carve-out: Notas Internas on Programa stays editable even
+// though the rest of that tab is locked — a shared note both Nay and the
+// assistant can read and add to is exactly what's wanted there, not
+// something worth its own separate mechanism from the rest of the lockdown.
+function applyReadOnlyLockdown() {
+  if (!isAssistant || ASSISTANT_EDITABLE_TABS.has(activeTab)) return;
+  const tc = document.getElementById('tab-content');
+  if (!tc) return;
+  // [data-tab] buttons are internal navigation shortcuts (e.g. "Abrir
+  // Direção da Marca" from inside an encounter brief), not edits — leave
+  // those live so browsing between read-only sub-pages still works.
+  tc.querySelectorAll('input, select, textarea, button:not([data-tab])').forEach((el) => {
+    if (el.closest('#notes-form')) return;
+    el.disabled = true;
+  });
+  tc.querySelectorAll('form').forEach((f) => {
+    if (f.id === 'notes-form') return;
+    f.addEventListener('submit', (e) => e.preventDefault());
+  });
+}
+
 function render() {
   content.innerHTML = shell(RENDERERS[activeTab]());
+  applyReadOnlyLockdown();
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { deliverablePreviewShown = false; activeTab = btn.dataset.tab; render(); });
+  });
+  content.querySelector('#advance-phase')?.addEventListener('click', () => {
+    MockDB.setClientPhase(clientId, phaseProgress.currentIndex + 1);
+    toast('Fase avançada.');
+    location.reload();
+  });
+  content.querySelector('#set-phase')?.addEventListener('click', () => {
+    MockDB.setClientPhase(clientId, Number(content.querySelector('#phase-select').value));
+    toast('Fase atualizada.');
+    location.reload();
   });
   content.querySelector('#recommend-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1561,6 +2085,88 @@ function render() {
     MockDB.sendAssistantMessage({ from: 'nay', clientId, text: text.trim(), route: `client-workspace.html?id=${clientId}` });
     toast('Recomendação enviada para a Assistente.');
     render();
+  });
+  content.querySelector('#photo-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    MockDB.setClientProfileSummary(clientId, { ...MockDB.getClientProfileSummary(clientId), photoUrl: new FormData(e.target).get('photoUrl') });
+    toast('Foto atualizada.');
+    render();
+  });
+  // Live preview — the face shows up the moment she pastes a valid link,
+  // before she even clicks Salvar, instead of only after a save+reload.
+  content.querySelector('#photo-url-input')?.addEventListener('input', (e) => {
+    const frame = document.getElementById('profile-photo-frame');
+    const fallback = document.getElementById('profile-photo-fallback');
+    if (!frame || !fallback) return;
+    document.getElementById('profile-photo-img')?.remove();
+    if (!isValidHttpUrl(e.target.value)) { fallback.style.display = ''; return; }
+    const img = document.createElement('img');
+    img.id = 'profile-photo-img';
+    img.src = e.target.value;
+    img.alt = client.fullName;
+    img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+    img.onerror = () => { img.remove(); fallback.style.display = ''; };
+    img.onload = () => { fallback.style.display = 'none'; };
+    frame.appendChild(img);
+  });
+  content.querySelector('#summary-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    MockDB.setClientProfileSummary(clientId, { ...MockDB.getClientProfileSummary(clientId), who: fd.get('who'), what: fd.get('what'), why: fd.get('why'), how: fd.get('how') });
+    toast('Resumo salvo.');
+    render();
+  });
+  content.querySelector('#notes-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    MockDB.saveNotes(clientId, new FormData(e.target).get('notes'));
+    toast('Notas salvas.');
+    render();
+  });
+  content.querySelector('#personal-playbook-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    MockDB.setPersonalPlaybookUrl(clientId, new FormData(e.target).get('url'));
+    toast('Link do Playbook de Marca Pessoal salvo.');
+    render();
+  });
+  content.querySelector('#business-playbook-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    MockDB.setBusinessPlaybookUrl(clientId, new FormData(e.target).get('url'));
+    toast('Link do Business Playbook salvo.');
+    render();
+  });
+  content.querySelector('#request-meeting-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const n = Number(form.dataset.encounter);
+    const checklist = Array.from(form.querySelectorAll('input[name="item"]')).map((el) => ({ label: el.value, done: el.checked }));
+    const times = [0, 1, 2].map((i) => new FormData(form).get(`slot${i}`)).filter(Boolean).map((d) => new Date(d).toISOString());
+    if (!times.length) { toast('Ofereça pelo menos um horário.', { tone: 'error' }); return; }
+    MockDB.requestEncounterMeeting(clientId, n, checklist, times);
+    toast('Solicitação enviada — aguardando a cliente escolher um horário.');
+    render();
+  });
+  content.querySelector('#repropose-meeting-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const times = [0, 1, 2].map((i) => new FormData(form).get(`slot${i}`)).filter(Boolean).map((d) => new Date(d).toISOString());
+    if (!times.length) { toast('Ofereça pelo menos um horário.', { tone: 'error' }); return; }
+    MockDB.proposeNewEncounterMeetingTimes(form.dataset.request, times);
+    toast('Novos horários enviados à cliente.');
+    render();
+  });
+  content.querySelectorAll('[data-confirm-request]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      MockDB.confirmEncounterMeeting(btn.dataset.confirmRequest);
+      toast('Encontro confirmado e agendado.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-cancel-request]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      MockDB.cancelEncounterRequest(btn.dataset.cancelRequest);
+      toast('Solicitação cancelada.');
+      render();
+    });
   });
   wireTabEvents();
 

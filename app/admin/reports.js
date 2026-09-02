@@ -9,7 +9,9 @@
 // whole page) — Nay asked to be able to narrow down and take reports with her.
 import { MockDB, PROGRAMS, PROGRAM_LABEL } from '../shared/mock-db.js';
 import { renderShell, card, formatDate, downloadCSV } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
 
+if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'reports.html', title: 'Relatórios' });
 const content = document.getElementById('app-content');
 const brl = (n) => `R$ ${n.toLocaleString('pt-BR')}`;

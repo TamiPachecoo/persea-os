@@ -6,7 +6,7 @@
 // enforced (see mock-db.js), not this screen; this screen just reacts to
 // what they return.
 import { MockDB, getActiveClientId } from '../shared/mock-db.js';
-import { renderShell, card, toast, initClientSwitcher, formatDate } from '../shared/ui.js';
+import { renderShell, card, toast, initClientSwitcher, formatDate, isLocalDev } from '../shared/ui.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
   FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES,
@@ -457,8 +457,12 @@ function renderPublished(assessment) {
 
 // --- Removable dev-only preview panel — jumps the *active* client through
 // every state this feature needs to be previewable in, without needing 12
-// separate seeded clients. Never wired into any production-shaped action. ---
+// separate seeded clients. Never wired into any production-shaped action.
+// Gated to localhost only — see isLocalDev — so it can never render (and
+// therefore never be interacted with, since wireDevPanel finds nothing to
+// wire) on a hosted preview or production URL. ---
 function renderDevPanel() {
+  if (!isLocalDev()) return '';
   const client = MockDB.getClient(clientId);
   return `
     <div class="dev-preview-panel">

@@ -7,7 +7,7 @@
 import { MockDB, getActiveClientId, ARCHETYPE_VISUAL_SET_LABEL } from '../shared/mock-db.js';
 import {
   renderShell, card, toast, initClientSwitcher, formatDate,
-  renderArchetypeRadar, archetypePortrait, archetypeIntensityBar, initScrollReveal,
+  renderArchetypeRadar, archetypePortrait, archetypeIntensityBar, initScrollReveal, isLocalDev,
 } from '../shared/ui.js';
 
 const clientId = getActiveClientId();
@@ -15,7 +15,9 @@ document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', 
 initClientSwitcher();
 
 // Dev-only preview controls — see arquetipos.js's identical panel for why.
+// Gated to localhost only, see isLocalDev.
 function renderDevPanel() {
+  if (!isLocalDev()) return '';
   return `
     <div class="dev-preview-panel max-w-4xl mx-auto">
       <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Controles da demonstração (dev, removível)</p>
