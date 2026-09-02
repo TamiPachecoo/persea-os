@@ -7,7 +7,7 @@
 import { MockDB, getActiveClientId, TIER_PHASES } from '../shared/mock-db.js';
 import {
   renderShell, card, progressBar, toast, formatDate,
-  initClientSwitcher, isValidHttpUrl, externalLinkAttrs, lockedStateCard, isLocalDev,
+  initClientSwitcher, isValidHttpUrl, externalLinkAttrs, lockedStateCard, isNonProduction,
 } from '../shared/ui.js';
 
 const clientId = getActiveClientId();
@@ -216,9 +216,9 @@ function renderPlaybookBonus() {
   `;
 }
 
-// Gated to localhost only, see isLocalDev.
+// Gated to non-production (local dev + demo/staging) — see isNonProduction in shared/environment.js.
 function renderDevPanel() {
-  if (!isLocalDev()) return '';
+  if (!isNonProduction()) return '';
   const client = MockDB.getClient(clientId);
   const options = [
     ['persea-essential', 'Persea Essencial'], ['persea-premium', 'Persea Premium'],

@@ -9,6 +9,7 @@
 
 import { blankAssessmentAnswers, blankOffer, blankFixedCost, blankVariableCost, blankReference } from './value-analysis-schema.js';
 import { deriveEffectiveStatus } from './date-utils.js';
+import { isProductionEnvironment } from './environment.js';
 
 const STORAGE_KEY = 'persea_mock_db_v38';
 export const DEFAULT_CLIENT_ID = 'client-1';
@@ -2014,10 +2015,41 @@ const RECORDING_SEED_SNAPSHOT = Object.fromEntries(
     .map((a) => [a.id, structuredClone({ status: a.status, recording: a.recording })]),
 );
 
+// Production Audit — Final Production-Readiness Pass, section 3/20:
+// production must start clean, never falling back to the rich demo fixture
+// set. Keeps genuine shared business configuration (tenant settings,
+// template library, content categories, the shared resource library —
+// none of that is client/lead-specific demo data) and empties every
+// per-lead/per-client/per-transaction collection, so an admin page on
+// app.naymurta.com genuinely shows zero clients/leads rather than Marina,
+// Júlia, etc. — same codebase, same seed shape, just started empty.
+//
+// Known, deliberately out-of-scope-for-this-pass limitation: the
+// client-facing pages (dashboard, program, financial, questionnaire...)
+// identify "which client is this" purely via getActiveClientId()'s
+// localStorage convenience, with zero binding to the real logged-in
+// Supabase profile — there is currently no path that puts a real activated
+// client into MockDB.clients at all (the real activation flow writes to
+// Supabase via ensureRealClientForLead, not here). Emptying clients here is
+// still correct — it stops fake demo clients from ever appearing as if
+// real — but it means those client-facing pages have no working path for
+// an actual production client yet either; that is a real, separate
+// architecture gap, not something this seed change can fix, and is
+// reported as a launch risk rather than silently left to crash confusingly.
+function productionEmptySeed() {
+  return {
+    ...structuredClone(SEED),
+    businessValueAssessments: {}, priceHistory: [], premiumUpgradeInterests: [],
+    expenses: [], leads: [], groupDynamics: [], resourceAssignments: [],
+    agendaItems: [], encounterRequests: [], pendingReviews: [], assistantMessages: [],
+    clients: {},
+  };
+}
+
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    const seeded = structuredClone(SEED);
+    const seeded = isProductionEnvironment() ? productionEmptySeed() : structuredClone(SEED);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
     return seeded;
   }

@@ -11,7 +11,7 @@ import {
 } from '../shared/mock-db.js';
 import {
   renderShell, card, toast, badgeFromMaps, formatDateTime, isValidHttpUrl, externalLinkAttrs,
-  renderRecordingBlock, wireCopyLinkButtons, openRecordingLinksModal, isLocalDev,
+  renderRecordingBlock, wireCopyLinkButtons, openRecordingLinksModal, isNonProduction,
 } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 
@@ -42,11 +42,12 @@ function renderSyncPanel(m) {
   `, 'mb-6');
 }
 
-// Gated to localhost only — see isLocalDev — so this demo-state simulator
-// can never render (or be interacted with) on a hosted preview or
-// production URL.
+// Gated to non-production (local dev + demo/staging, see isNonProduction in
+// shared/environment.js) — this demo-state simulator is exactly the kind of
+// exploration tool the staging environment is meant to offer, but must
+// never render (or be interacted with) once app.naymurta.com is real.
 function renderDevControls(m) {
-  if (!isLocalDev()) return '';
+  if (!isNonProduction()) return '';
   return `
     <div class="dev-preview-panel">
       <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Controles da demonstração (dev, removível)</p>

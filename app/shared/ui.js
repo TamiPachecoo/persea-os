@@ -3,15 +3,21 @@
 // accents, Playfair Display headline type over Poppins body type.
 
 import { MockDB, getActiveClientId, setActiveClientId, PREMIUM_ONLY_PHASE_INDEX, ENCOUNTER_DEFS, ENCOUNTER_LABEL } from './mock-db.js';
+import { isLocalDevelopment, isDemoEnvironment, isProductionEnvironment, isNonProduction } from './environment.js';
 
-// Gate for the handful of removable dev-only controls scattered through the
-// prototype (state-forcing panels on value-analysis, recording-detail,
-// etc.) — real auth (requireProfile) is what actually protects a page;
-// this only decides whether a *convenience* shortcut renders at all, so
-// none of them show up on a hosted preview or production URL, only on a
-// developer's own machine.
+export { isDemoEnvironment, isProductionEnvironment, isNonProduction };
+
+// Kept as its original name/behavior (real auth is what actually protects a
+// page — this only decides whether a *convenience* shortcut renders at
+// all) for the handful of things that must stay local-only specifically:
+// a destructive action (app/index.html's "reset sample data" button) has
+// no place on a shared demo link even though demo otherwise welcomes
+// exploration. For state-simulator convenience controls that SHOULD also
+// render on the shared demo/staging URL (the whole point of staging is a
+// rich, explorable mock experience — see shared/environment.js), use
+// isNonProduction() instead, imported directly from shared/environment.js.
 export function isLocalDev() {
-  return /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  return isLocalDevelopment();
 }
 
 // Production Audit Remediation Pass (Low — second registration link):
@@ -206,7 +212,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
             <nav class="hidden md:flex items-center gap-1">${navHtml}</nav>
           </div>
           <div class="flex items-center gap-4">
-            ${role === 'client' && isLocalDev() ? renderClientSwitcher() : ''}
+            ${role === 'client' && isNonProduction() ? renderClientSwitcher() : ''}
             <span class="text-[10px] uppercase tracking-[.2em]" style="color:var(--muted);">Visão ${ROLE_LABEL[role] || role}</span>
             <a href="../index.html" class="btn-text">Trocar perfil</a>
           </div>

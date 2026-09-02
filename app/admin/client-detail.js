@@ -1827,12 +1827,16 @@ function renderEncounterExtra(n) {
   }
   if (n === 5) {
     const gate = MockDB.canScheduleE5(clientId);
+    // Final Production-Readiness Pass decision: warning + admin override,
+    // not a hard block — "Bloqueado" falsely implied scheduling was
+    // actually prevented, when nothing ever enforced that. The prerequisite
+    // rule itself (Análise de Negócio submitted) is unchanged.
     return card(`
       <div class="flex items-center justify-between mb-3">
         <p class="text-sm text-white/50">Análise de Negócio — Pré-requisito Obrigatório</p>
-        <span class="badge ${gate.ready ? 'badge-completed' : 'badge-locked'}">${gate.ready ? 'Liberado para agendar' : 'Bloqueado'}</span>
+        <span class="badge ${gate.ready ? 'badge-completed' : 'badge-locked'}">${gate.ready ? 'Liberado para agendar' : 'Pré-requisito pendente'}</span>
       </div>
-      <p class="text-xs text-white/20 mb-3">${gate.ready ? 'A cliente já preencheu a Análise de Negócio — pode seguir com o E5.' : 'O E5 não deve ser agendado até a cliente preencher a Análise de Negócio (Ficha de Valor).'}</p>
+      <p class="text-xs text-white/20 mb-3">${gate.ready ? 'A cliente já preencheu a Análise de Negócio — pode seguir com o E5.' : 'A cliente ainda não preencheu a Análise de Negócio (Ficha de Valor). O ideal é aguardar, mas Nay pode agendar mesmo assim ao solicitar o encontro abaixo — é só confirmar quando avisada do pendente.'}</p>
       <button type="button" data-tab="value-analysis" class="btn-ghost">Abrir Ficha de Valor</button>
     `, 'mb-6');
   }
@@ -2320,6 +2324,22 @@ function render() {
     const checklist = Array.from(form.querySelectorAll('input[name="item"]')).map((el) => ({ label: el.value, done: el.checked }));
     const times = [0, 1, 2].map((i) => new FormData(form).get(`slot${i}`)).filter(Boolean).map((d) => new Date(d).toISOString());
     if (!times.length) { toast('Ofereça pelo menos um horário.', { tone: 'error' }); return; }
+    // Final Production-Readiness Pass, decision on E3/E5: warning + admin
+    // override, not a hard block — the existing canScheduleE3/E5 prerequisite
+    // logic is unchanged, this only adds a confirmation step when Admin
+    // (specifically — not a new capability for the assistant, whose
+    // pre-existing E3 scheduling access is untouched either way) tries to
+    // schedule past it. Cancel leaves everything exactly as it was; the
+    // override itself is recorded as a lightweight client-history event
+    // (reusing logActivity, not a new audit framework) rather than silently
+    // let through.
+    if (role === 'admin') {
+      const gate = n === 3 ? MockDB.canScheduleE3(clientId) : n === 5 ? MockDB.canScheduleE5(clientId) : { ready: true };
+      if (!gate.ready) {
+        if (!confirm('Este encontro possui pré-requisitos pendentes. Deseja agendar mesmo assim?')) return;
+        MockDB.logActivity(clientId, 'prerequisite_override', `Encontro E${n} solicitado com pré-requisito pendente — decisão de Nay.`);
+      }
+    }
     MockDB.requestEncounterMeeting(clientId, n, checklist, times);
     toast('Solicitação enviada — aguardando a cliente escolher um horário.');
     render();

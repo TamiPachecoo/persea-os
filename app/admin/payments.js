@@ -178,6 +178,13 @@ async function openNewChargeModal(clients, prefill, onDone) {
           </select>
         </div>
         <div id="program-hint" class="text-xs" style="color:var(--muted);"></div>
+        <div id="payment-line-field" hidden>
+          <label class="text-xs text-white/40 block mb-1">Parcela do plano (opcional)</label>
+          <select name="payment_line_id" class="field">
+            <option value="">Cobrança avulsa — não vincular a uma parcela</option>
+          </select>
+          <p class="text-xs text-white/20 mt-1">Vincular à parcela certa evita depender de bater valor/data para saber o que essa cobrança quita.</p>
+        </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Descrição</label>
           <input name="description" class="field" placeholder="Ex.: Parcela 2 — Persea Premium" value="${prefill?.description || ''}" />
@@ -205,6 +212,36 @@ async function openNewChargeModal(clients, prefill, onDone) {
     `,
   });
 
+  // Production Audit — section 10 (payment → installment relationship):
+  // lets Nay pick the exact contract_payment_lines row this charge is for,
+  // instead of the two systems (planned obligations vs SumUp charges)
+  // staying unlinked and only reconcilable by eyeballing amount/date.
+  // Picking a line auto-fills amount/due date/description; still optional
+  // — plenty of real charges are one-off and not tied to a specific line.
+  async function loadPaymentLines(clientId) {
+    const lineField = el.querySelector('#payment-line-field');
+    const lineSelect = el.querySelector('[name="payment_line_id"]');
+    lineField.hidden = true;
+    lineSelect.innerHTML = '<option value="">Cobrança avulsa — não vincular a uma parcela</option>';
+    const { data: contract } = await supabase.from('contracts').select('id').eq('client_id', clientId).maybeSingle();
+    if (!contract) return;
+    const [{ data: lines }, { data: linkedPayments }] = await Promise.all([
+      supabase.from('contract_payment_lines').select('id, seq, amount_cents, method, due_date, label').eq('contract_id', contract.id).order('seq'),
+      supabase.from('payments').select('payment_line_id').eq('contract_id', contract.id).not('payment_line_id', 'is', null),
+    ]);
+    if (!lines?.length) return;
+    const linkedIds = new Set((linkedPayments || []).map((p) => p.payment_line_id));
+    lineField.hidden = false;
+    lines.forEach((l) => {
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.dataset.amountCents = l.amount_cents;
+      opt.dataset.dueDate = l.due_date || '';
+      const already = linkedIds.has(l.id);
+      opt.textContent = `Parcela ${l.seq + 1} — ${brl(l.amount_cents)}${l.due_date ? ' — vence ' + formatDate(l.due_date) : ''}${l.label ? ' — ' + l.label : ''}${already ? ' (já tem cobrança vinculada)' : ''}`;
+      lineSelect.appendChild(opt);
+    });
+  }
   el.querySelector('[name="client_id"]').addEventListener('change', async (e) => {
     const hint = el.querySelector('#program-hint');
     hint.textContent = '';
@@ -213,6 +250,13 @@ async function openNewChargeModal(clients, prefill, onDone) {
     if (contract?.program) {
       hint.textContent = `Programa: ${contract.program}${contract.duration ? ' / ' + contract.duration : ''}${contract.value_cents ? ' · Valor do contrato: ' + brl(contract.value_cents) : ''}`;
     }
+    loadPaymentLines(e.target.value);
+  });
+  el.querySelector('[name="payment_line_id"]').addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (!opt.value) return;
+    if (opt.dataset.amountCents) el.querySelector('[name="amount"]').value = (Number(opt.dataset.amountCents) / 100).toFixed(2);
+    if (opt.dataset.dueDate) el.querySelector('[name="due_date"]').value = opt.dataset.dueDate;
   });
 
   el.querySelector('#new-charge-form').addEventListener('submit', async (e) => {
@@ -230,7 +274,8 @@ async function openNewChargeModal(clients, prefill, onDone) {
 
     const { data, error } = await supabase.functions.invoke('sumup-create-checkout', {
       body: {
-        client_id: clientId, contract_id: contract?.id || null, description: fd.get('description') || null,
+        client_id: clientId, contract_id: contract?.id || null, payment_line_id: fd.get('payment_line_id') || null,
+        description: fd.get('description') || null,
         amount_cents: amountCents, currency: fd.get('currency'), due_date: fd.get('due_date') || null,
         internal_note: fd.get('internal_note') || null,
       },
@@ -301,8 +346,99 @@ function openDetailModal(payment, onDone) {
   }
 }
 
+// Production Audit — Final Production-Readiness Pass, sections 11-15: the
+// merchant-history reconciliation queue. Only shown on the tenant-wide view
+// (not a per-client scope) since an unmatched transaction hasn't been
+// associated with any client yet — that's the whole point.
+async function loadUnmatchedTransactions() {
+  const { data, error } = await supabase.from('sumup_transactions').select('*').is('matched_payment_id', null).order('occurred_at', { ascending: false });
+  if (error) { toast(error.message, { tone: 'error' }); return []; }
+  return data;
+}
+
+function renderUnmatchedSection(unmatched) {
+  return card(`
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm text-white/50">Pagamentos SumUp não vinculados${unmatched.length ? ` (${unmatched.length})` : ''}</p>
+    </div>
+    <p class="text-xs text-white/20 mb-4">Transações observadas na conta SumUp da Nay que não correspondem a um link de pagamento gerado pelo PERSEA — podem ser cobranças feitas na maquininha, por outro link, etc. Não contam em nenhum total até serem vinculadas explicitamente a uma cliente.</p>
+    ${unmatched.length ? `
+      <div class="divide-y" style="border-color:var(--line);">
+        ${unmatched.map((t) => `
+          <div class="flex items-center justify-between gap-4 py-3 flex-wrap">
+            <div>
+              <p class="text-sm">${brl(t.amount_cents, t.currency)} ${t.payment_type ? `· ${t.payment_type}` : ''}${t.card_type ? ` · ${t.card_type}` : ''}</p>
+              <p class="text-xs text-white/30 mt-0.5">${formatDateTime(t.occurred_at)} · ref. ${t.sumup_transaction_id}</p>
+            </div>
+            <button data-reconcile="${t.id}" class="btn-ghost">Vincular</button>
+          </div>
+        `).join('')}
+      </div>
+    ` : '<p class="text-sm" style="color:var(--muted);">Nenhuma pendente.</p>'}
+  `, 'mb-6');
+}
+
+function openReconcileModal(tx, clients, onDone) {
+  const { el, close } = openModal({
+    title: 'Vincular Pagamento SumUp',
+    bodyHtml: `
+      <div class="text-sm mb-4">
+        <p>${brl(tx.amount_cents, tx.currency)} — ${formatDateTime(tx.occurred_at)}</p>
+        <p class="text-xs text-white/30 mt-0.5">${tx.payment_type || '—'}${tx.card_type ? ` · ${tx.card_type}` : ''} · ref. ${tx.sumup_transaction_id}</p>
+      </div>
+      <div class="mb-4">
+        <label class="text-xs text-white/40 block mb-1">Cliente</label>
+        <select name="client_id" required class="field">
+          <option value="">Selecione...</option>
+          ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
+        </select>
+      </div>
+      <div id="reconcile-line-field" hidden class="mb-4">
+        <label class="text-xs text-white/40 block mb-1">Parcela do plano (opcional)</label>
+        <select name="payment_line_id" class="field"><option value="">Não vincular a uma parcela específica</option></select>
+      </div>
+      <button id="reconcile-confirm" class="btn-primary block w-full text-center" style="padding-top:10px;padding-bottom:10px;">Confirmar Vínculo</button>
+    `,
+  });
+  let resolvedContractId = null;
+  el.querySelector('[name="client_id"]').addEventListener('change', async (e) => {
+    const lineField = el.querySelector('#reconcile-line-field');
+    const lineSelect = el.querySelector('[name="payment_line_id"]');
+    lineField.hidden = true;
+    lineSelect.innerHTML = '<option value="">Não vincular a uma parcela específica</option>';
+    resolvedContractId = null;
+    if (!e.target.value) return;
+    const { data: contract } = await supabase.from('contracts').select('id').eq('client_id', e.target.value).maybeSingle();
+    if (!contract) return;
+    resolvedContractId = contract.id;
+    const { data: lines } = await supabase.from('contract_payment_lines').select('id, seq, amount_cents, due_date, label').eq('contract_id', contract.id).order('seq');
+    if (!lines?.length) return;
+    lineField.hidden = false;
+    lines.forEach((l) => {
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = `Parcela ${l.seq + 1} — ${brl(l.amount_cents)}${l.due_date ? ' — vence ' + formatDate(l.due_date) : ''}${l.label ? ' — ' + l.label : ''}`;
+      lineSelect.appendChild(opt);
+    });
+  });
+  el.querySelector('#reconcile-confirm').addEventListener('click', async () => {
+    const clientId = el.querySelector('[name="client_id"]').value;
+    if (!clientId) { toast('Selecione uma cliente.', { tone: 'error' }); return; }
+    const paymentLineId = el.querySelector('[name="payment_line_id"]')?.value || null;
+    const { data, error } = await supabase.functions.invoke('sumup-reconcile-transaction', {
+      body: { transaction_id: tx.id, client_id: clientId, contract_id: resolvedContractId, payment_line_id: paymentLineId },
+    });
+    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); return; }
+    close();
+    toast('Pagamento vinculado — Financeiro atualizado.');
+    onDone();
+  });
+}
+
 async function render() {
-  const [payments, clients] = await Promise.all([loadPayments(), loadClients()]);
+  const [payments, clients, unmatched] = await Promise.all([
+    loadPayments(), loadClients(), filterClientId ? Promise.resolve([]) : loadUnmatchedTransactions(),
+  ]);
   const scopedClient = filterClientId ? clients.find((c) => c.id === filterClientId) : null;
 
   // Opening a client's scoped view should answer "what do I charge her
@@ -320,8 +456,12 @@ async function render() {
         <h1 class="text-3xl font-serif">${scopedClient ? `Pagamentos — ${scopedClient.full_name}` : 'Pagamentos'}</h1>
         ${scopedClient ? `<a href="payments.html" class="btn-text">Ver todas as clientes →</a>` : ''}
       </div>
-      <button id="new-charge" class="btn-primary">+ Nova Cobrança</button>
+      <div class="flex items-center gap-3">
+        ${!scopedClient ? `<button id="sync-sumup" class="btn-ghost">Sincronizar SumUp</button>` : ''}
+        <button id="new-charge" class="btn-primary">+ Nova Cobrança</button>
+      </div>
     </div>
+    ${!scopedClient ? renderUnmatchedSection(unmatched) : ''}
     ${nextPending ? card(`
       <p class="text-sm text-white/50 mb-2">Próxima cobrança pendente</p>
       <div class="flex items-center justify-between flex-wrap gap-4">
@@ -340,6 +480,20 @@ async function render() {
   `;
 
   document.getElementById('new-charge').addEventListener('click', () => openNewChargeModal(clients, effectivePrefill, render));
+  document.getElementById('sync-sumup')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Sincronizando...';
+    const { data, error } = await supabase.functions.invoke('sumup-sync-transactions', { body: {} });
+    e.target.disabled = false; e.target.textContent = 'Sincronizar SumUp';
+    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); return; }
+    toast(`${data.novas} novas · ${data.ja_existentes} já existentes · ${data.vinculadas} vinculadas · ${data.nao_vinculadas} não vinculadas`);
+    render();
+  });
+  content.querySelectorAll('[data-reconcile]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tx = unmatched.find((t) => t.id === btn.dataset.reconcile);
+      openReconcileModal(tx, clients, render);
+    });
+  });
   content.querySelectorAll('[data-detail]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const payment = payments.find((p) => p.id === btn.dataset.detail);

@@ -9,7 +9,7 @@
 import {
   MockDB, getActiveClientId, ARCHETYPE_QUIZ_SECTIONS, ARCHETYPE_SCALE_LABELS,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, initClientSwitcher, isLocalDev } from '../shared/ui.js';
+import { renderShell, card, toast, initClientSwitcher, isNonProduction } from '../shared/ui.js';
 
 const clientId = getActiveClientId();
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Teste de Arquétipos' });
@@ -22,9 +22,9 @@ let showMissingWarning = false;
 // Dev-only preview controls — no real auth/profile data yet to drive these
 // states naturally. Removable wholesale once that's connected; see
 // MockDB.devSimulateArchetype*/devSetArchetypeGender (mock-db.js).
-// Gated to localhost only, see isLocalDev.
+// Gated to non-production (local dev + demo/staging) — see isNonProduction in shared/environment.js.
 function renderDevPanel() {
-  if (!isLocalDev()) return '';
+  if (!isNonProduction()) return '';
   return `
     <div class="dev-preview-panel max-w-2xl mx-auto">
       <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Controles da demonstração (dev, removível)</p>
