@@ -3,8 +3,9 @@
 // and net. Per-client payment detail/actions live on that client's own
 // Financeiro tab (client-detail.html); this page is the overview.
 import { MockDB, PROGRAMS, PROGRAM_LABEL, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABEL, PAYMENT_STATUS_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, openModal } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, openModal, brl } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'financial.html', title: 'Financeiro' });
@@ -12,14 +13,48 @@ const content = document.getElementById('app-content');
 
 const PAYMENT_STATUS_CLASS = { paid: 'badge-completed', pending: 'badge-progress', overdue: 'badge-locked' };
 const paymentBadge = (status) => `<span class="badge ${PAYMENT_STATUS_CLASS[status] || 'badge-locked'}">${PAYMENT_STATUS_LABEL[status] || status}</span>`;
-const brl = (n) => `R$ ${n.toLocaleString('pt-BR')}`;
+
+// Production Audit Remediation Pass (Critical 2): the KPIs below this point
+// (renderKPIs, renderForecast, renderByProgram, renderClientBilling) are all
+// sourced from MockDB — a per-browser, non-persistent prototype pipeline,
+// not the real payment record. Real, confirmed SumUp payments live in
+// Supabase's payments table (see admin/payments.js) and previously had no
+// presence at all on this tenant-wide screen, which is exactly the "two
+// systems, neither clearly authoritative" gap the audit flagged. This
+// fetches the real, is_demo-safe totals (same rule as admin/payments.js's
+// computeKPIs — mock rows and any is_demo client's rows never count as
+// real revenue) and renders them first, clearly labeled, so a glance at
+// this page can never mistake demonstration data for real revenue.
+async function loadRealKPIs() {
+  const { data, error } = await supabase.from('payments').select('amount_cents, status, provider, clients(is_demo)');
+  if (error) return { error: error.message };
+  const real = (data || []).filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
+  const recebido = real.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
+  const aReceber = real.filter((p) => ['pending', 'overdue'].includes(p.status)).reduce((s, p) => s + p.amount_cents, 0);
+  return { recebido, aReceber };
+}
+function renderRealKPIs({ recebido, aReceber, error }) {
+  const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return card(`
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Receita Real — Sistema Supabase (SumUp)</p>
+      <a href="payments.html" class="btn-text">Ver todas as cobranças ↗</a>
+    </div>
+    ${error ? `<p class="text-xs" style="color:var(--terracotta);">Não foi possível carregar os totais reais: ${error}</p>` : `
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><p class="text-2xl font-serif">${brlCents(recebido)}</p><p class="text-white/40 text-xs mt-1">Recebido (confirmado)</p></div>
+        <div><p class="text-2xl font-serif">${brlCents(aReceber)}</p><p class="text-white/40 text-xs mt-1">A Receber (pendente/em atraso)</p></div>
+      </div>
+    `}
+  `, 'mb-8');
+}
 
 function renderKPIs(summary) {
   return `
     <div class="grid md:grid-cols-3 gap-6 mb-6">
-      ${card(`<p class="text-sm text-white/50 mb-2">Recebido</p><p class="text-2xl font-serif">${brl(summary.totalPaid)}</p>`)}
-      ${card(`<p class="text-sm text-white/50 mb-2">A Receber</p><p class="text-2xl font-serif">${brl(summary.totalPending)}</p>`)}
-      ${card(`<p class="text-sm text-white/50 mb-2">Em Atraso</p><p class="text-2xl font-serif" style="color:var(--terracotta);">${brl(summary.totalOverdue)}</p>`)}
+      ${card(`<p class="text-sm text-white/50 mb-2">Recebido (demo)</p><p class="text-2xl font-serif">${brl(summary.totalPaid)}</p>`)}
+      ${card(`<p class="text-sm text-white/50 mb-2">A Receber (demo)</p><p class="text-2xl font-serif">${brl(summary.totalPending)}</p>`)}
+      ${card(`<p class="text-sm text-white/50 mb-2">Em Atraso (demo)</p><p class="text-2xl font-serif" style="color:var(--terracotta);">${brl(summary.totalOverdue)}</p>`)}
     </div>
     <div class="grid md:grid-cols-2 gap-6 mb-8">
       ${card(`<p class="text-sm text-white/50 mb-2">Despesas</p><p class="text-2xl font-serif">${brl(summary.totalExpenses)}</p>`)}
@@ -159,10 +194,15 @@ function openExpenseModal() {
   });
 }
 
-function render() {
+async function render() {
   const summary = MockDB.getFinancialSummary();
+  const realKPIs = await loadRealKPIs();
   content.innerHTML = `
-    <div class="mb-6"><a href="payments.html" class="btn-primary inline-block">Cobranças (SumUp) — Sistema Real ↗</a></div>
+    ${renderRealKPIs(realKPIs)}
+    <div class="mb-3">
+      <p class="text-xs uppercase" style="color:var(--muted); letter-spacing:.08em;">↓ Pipeline de Demonstração</p>
+      <p class="text-xs text-white/20 mt-1 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
+    </div>
     ${renderKPIs(summary)}
     ${renderForecast()}
     ${renderByProgram(summary)}

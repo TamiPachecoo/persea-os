@@ -221,7 +221,7 @@ function renderDevPanel() {
   if (!isLocalDev()) return '';
   const client = MockDB.getClient(clientId);
   const options = [
-    ['persea-essential', 'Persea Essencial'], ['persea-premium', 'Persea Premium'], ['ascensao-imagem', 'Ascensão de Imagem'],
+    ['persea-essential', 'Persea Essencial'], ['persea-premium', 'Persea Premium'],
   ];
   return `
     <div class="dev-preview-panel">

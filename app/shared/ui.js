@@ -14,6 +14,34 @@ export function isLocalDev() {
   return /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 }
 
+// Production Audit Remediation Pass (Low — second registration link):
+// admin/lead-detail.js and admin/crm.js both build the client-facing
+// cadastro link, but only lead-detail.js had the localhost-HTTPS fix (a
+// local dev server run over http still needs http in the generated link,
+// or the client page's own fetches/redirects can mismatch); crm.js
+// reimplemented the same thing without it. One shared helper now, used by
+// both, so this can't drift apart again. `currentPathname` is
+// location.pathname from whichever admin page is calling this, e.g.
+// '/admin/crm.html' or '/admin/lead-detail.html'.
+export function buildRegistrationLink(token, currentPathname) {
+  const origin = isLocalDev() ? `http://${location.host}` : location.origin;
+  const path = currentPathname.replace(/admin\/(crm|lead-detail)\.html/, 'client/registration.html');
+  return `${origin}${path}?token=${token}`;
+}
+
+// Production Audit Remediation Pass (Low — currency formatting): the
+// pattern `` `R$ ${n.toLocaleString('pt-BR')}` `` doesn't force two decimal
+// places — a whole-number amount like 500 renders as "R$ 500", not
+// "R$ 500,00", inconsistent with every other amount on the same screen.
+// One shared formatter (style:'currency' always shows exactly two
+// decimals) instead of every file defining its own — several already had
+// their own local `brl` const with this exact bug baked in. Takes a plain
+// reais number (500, 1250.5), not cents — display formatting only, kept
+// separate from how amounts are actually stored/computed.
+export function brl(n) {
+  return (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 export function formatDate(iso) {
   return new Date(iso).toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
 }

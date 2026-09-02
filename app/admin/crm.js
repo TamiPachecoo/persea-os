@@ -10,7 +10,7 @@ import {
   LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL, VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL,
   PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_LABEL_BY_SLUG, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDate, openModal } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
@@ -373,7 +373,7 @@ function render() {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
         const lead = MockDB.getLead(btn.dataset.copyLink);
-        const link = `${location.origin}${location.pathname.replace('admin/crm.html', 'client/registration.html')}?token=${lead.registrationToken}`;
+        const link = buildRegistrationLink(lead.registrationToken, location.pathname);
         try { await navigator.clipboard.writeText(link); toast('Link copiado — cole no WhatsApp da cliente.'); }
         catch { toast('Não foi possível copiar automaticamente.', { tone: 'error' }); }
         MockDB.markRegistrationSent(lead.id);

@@ -10,10 +10,24 @@
 // for the same lead (e.g. the assistant navigates back and clicks the
 // button twice) finds the client it already created instead of duplicating
 // rows or erroring.
+//
+// Production Audit Remediation Pass (Critical/High 5): the check-then-insert
+// below is not atomic by itself — two near-simultaneous calls could both
+// pass the lookup before either has inserted. The real backstop is a DB
+// UNIQUE constraint on clients.legacy_id (clients_legacy_id_key, already
+// present in the schema — legacy_id is the explicit source_lead_id-style
+// relationship this app uses, so no new column was needed). That makes a
+// true duplicate impossible at the database level regardless of what the
+// application does; the loser of the race gets a 23505 unique-violation
+// instead of a second row. insertClient() below catches exactly that case
+// and re-fetches the winner's row instead of surfacing a raw DB error, so
+// a race is transparently idempotent rather than a failure.
 import { supabase } from './supabase-client.js';
 
 function mapProgram(programSlug) {
-  if (programSlug === 'ascensao-imagem') return { program: 'ascensao_imagem', duration: null, tier: 'premium' };
+  // Ascensão de Imagem removed (Production Audit Remediation Pass, High 8) —
+  // only Persea Essencial/Premium remain, so any unrecognized slug now
+  // falls back to Premium/anual, same as before.
   if (programSlug === 'persea-essential') return { program: 'persea', duration: 'semestral', tier: 'essential' };
   return { program: 'persea', duration: 'anual', tier: 'premium' }; // persea-premium, and any unrecognized fallback
 }
@@ -41,7 +55,17 @@ export async function ensureRealClientForLead(lead) {
     program_slug: lead.program || 'persea-essential', access_status: 'pending',
     is_demo: lead.id.startsWith('demo-'),
   }).select('id').single();
-  if (clientErr) return { error: clientErr.message };
+  if (clientErr) {
+    // 23505 = unique_violation. Someone else's call won the race for this
+    // exact legacy_id between our lookup above and this insert — re-fetch
+    // instead of treating it as a real failure, so a genuine race stays
+    // idempotent rather than surfacing a confusing DB error to the assistant.
+    if (clientErr.code === '23505') {
+      const { data: winner } = await supabase.from('clients').select('id').eq('legacy_id', lead.id).maybeSingle();
+      if (winner) return { clientId: winner.id, created: false };
+    }
+    return { error: clientErr.message };
+  }
 
   const valueCents = Math.round((ct.agreedAmount || 0) * 100) || null;
   const { data: contract, error: contractErr } = await supabase.from('contracts').insert({

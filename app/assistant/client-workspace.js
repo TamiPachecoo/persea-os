@@ -10,7 +10,7 @@ import {
   HUBLA_STATUS_LABEL, PAYMENT_STATUS_LABEL, NF_STATUS_LABEL, PAYMENT_METHOD_LABEL,
   IMAGE_STATUS_LABEL, AGENDA_TYPE_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, formatDateTime, openModal, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, formatDateTime, openModal, isValidHttpUrl, externalLinkAttrs, brl } from '../shared/ui.js';
 
 const NF_BADGE_CLASS = { not_requested: 'badge-locked', requested: 'badge-progress', issued: 'badge-completed' };
 
@@ -140,7 +140,7 @@ function openSubmitReviewModal(type, refSlug, title) {
 
 function openSendLinkModal(payment) {
   const { el, close } = openModal({
-    title: `Enviar link de pagamento — R$ ${payment.amount.toLocaleString('pt-BR')}`,
+    title: `Enviar link de pagamento — ${brl(payment.amount)}`,
     bodyHtml: `
       <form id="link-form" class="space-y-4">
         <div>
@@ -230,7 +230,7 @@ function renderChecklist(client) {
           <div class="space-y-2 mb-4">
             ${needsLink.map((p) => `
               <div class="flex items-center justify-between text-sm">
-                <span>R$ ${p.amount.toLocaleString('pt-BR')} · vencimento ${formatDate(p.dueDate)}</span>
+                <span>${brl(p.amount)} · vencimento ${formatDate(p.dueDate)}</span>
                 <button data-send-link="${p.id}" class="btn-text">Enviar link</button>
               </div>
             `).join('')}
@@ -241,7 +241,7 @@ function renderChecklist(client) {
           <div class="space-y-2 mb-4">
             ${canReport.map((p) => `
               <div class="flex items-center justify-between text-sm">
-                <span>R$ ${p.amount.toLocaleString('pt-BR')} · vencimento ${formatDate(p.dueDate)}</span>
+                <span>${brl(p.amount)} · vencimento ${formatDate(p.dueDate)}</span>
                 <button data-report-received="${p.id}" class="btn-text">Reportar recebido</button>
               </div>
             `).join('')}
@@ -250,7 +250,7 @@ function renderChecklist(client) {
         ${needsConfirmation.length ? `
           <p class="text-xs uppercase mb-2" style="color:var(--muted); letter-spacing:.1em;">Aguardando confirmação da Nay</p>
           <div class="space-y-1">
-            ${needsConfirmation.map((p) => `<p class="text-sm text-white/50">R$ ${p.amount.toLocaleString('pt-BR')} — reportado em ${formatDate(p.reportedPaidAt)}</p>`).join('')}
+            ${needsConfirmation.map((p) => `<p class="text-sm text-white/50">${brl(p.amount)} — reportado em ${formatDate(p.reportedPaidAt)}</p>`).join('')}
           </div>
         ` : ''}
         ${!needsLink.length && !canReport.length && !needsConfirmation.length ? '<p class="text-sm" style="color:var(--gold);">Tudo em dia.</p>' : ''}
@@ -264,7 +264,7 @@ function renderChecklist(client) {
           <div class="space-y-2">
             ${payments.map((p) => `
               <div class="flex items-center justify-between text-sm">
-                <span>R$ ${p.amount.toLocaleString('pt-BR')} · vencimento ${formatDate(p.dueDate)}</span>
+                <span>${brl(p.amount)} · vencimento ${formatDate(p.dueDate)}</span>
                 <div class="flex items-center gap-2">
                   <span class="badge ${NF_BADGE_CLASS[p.nf.status]}" style="font-size:10px;">${NF_STATUS_LABEL[p.nf.status]}</span>
                   ${p.nf.status !== 'issued' && (p.nf.status === 'requested' || soldOnCard) ? `<button data-issue-nf="${p.id}" class="btn-text">Emitir</button>` : ''}

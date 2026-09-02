@@ -15,7 +15,7 @@
 // Real cross-account isolation requires a real backend (Supabase RLS keyed
 // on the token), which is out of scope here — see the delivery report.
 import { MockDB, PROGRAM_LABEL_BY_SLUG } from '../shared/mock-db.js';
-import { renderParticles } from '../shared/ui.js';
+import { renderParticles, toast } from '../shared/ui.js';
 
 const token = new URLSearchParams(location.search).get('token') || '';
 
@@ -106,8 +106,9 @@ function formView(lead) {
               ${field('RG', 'rg', info.rg, { required: false })}
             </div>
             <div id="company-field" style="display:${isPJ ? 'block' : 'none'};">
-              ${field('Nome da empresa', 'companyName', info.companyName, { required: false })}
-              ${field('CNPJ', 'cnpj', info.cnpj, { required: false, placeholder: '00.000.000/0000-00' })}
+              <p class="text-xs mb-3" style="color:var(--muted);">Pessoa Jurídica exige razão social e CNPJ para o contrato.</p>
+              ${field('Nome da empresa', 'companyName', info.companyName, { required: isPJ })}
+              ${field('CNPJ', 'cnpj', info.cnpj, { required: isPJ, placeholder: '00.000.000/0000-00' })}
             </div>
             <div class="grid sm:grid-cols-3 gap-4">
               ${field('Profissão', 'profession', info.profession)}
@@ -147,9 +148,20 @@ function formView(lead) {
     </div>
   `;
 
-  document.getElementById('party-type').addEventListener('change', (e) => {
-    document.getElementById('company-field').style.display = e.target.value === 'PJ' ? 'block' : 'none';
-  });
+  // Production Audit Remediation Pass (High 6): companyName/cnpj toggle
+  // `required` together with visibility, not just visibility alone — a
+  // required-but-hidden (display:none) field breaks native HTML5 form
+  // validation silently in most browsers (it can't focus an invisible
+  // control to report the error), so relying on `required` while
+  // display:none did nothing in practice. Submit-time validation below is
+  // the real backstop either way.
+  function syncCompanyFieldRequired(isPJNow) {
+    document.getElementById('company-field').style.display = isPJNow ? 'block' : 'none';
+    document.querySelector('input[name="companyName"]').required = isPJNow;
+    document.querySelector('input[name="cnpj"]').required = isPJNow;
+  }
+  document.getElementById('party-type').addEventListener('change', (e) => { syncCompanyFieldRequired(e.target.value === 'PJ'); });
+  syncCompanyFieldRequired(isPJ);
   root.querySelector('input[name="cpf"]').addEventListener('input', (e) => { e.target.value = maskCpf(e.target.value); });
   root.querySelector('input[name="cnpj"]').addEventListener('input', (e) => { e.target.value = maskCnpj(e.target.value); });
   root.querySelector('input[name="whatsapp"]').addEventListener('input', (e) => { e.target.value = maskPhone(e.target.value); });
@@ -159,6 +171,16 @@ function formView(lead) {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = Object.fromEntries(fd.entries());
+    // Explicit, visible check — not just the `required` attribute above —
+    // since this is the one place PJ data can still get lost (an old saved
+    // draft, a browser that mishandles required-on-toggle, someone
+    // resubmitting via devtools). Blocks submission rather than letting the
+    // contract silently fall back to PF wording later (see
+    // shared/contract-merge.js's assembleContratanteLine).
+    if (payload.partyType === 'PJ' && (!payload.companyName?.trim() || !payload.cnpj?.trim())) {
+      toast('Pessoa Jurídica exige nome da empresa e CNPJ preenchidos.', { tone: 'error' });
+      return;
+    }
     MockDB.submitRegistration(token, payload);
     confirmationView(payload.fullName);
   });

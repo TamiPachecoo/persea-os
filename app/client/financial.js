@@ -10,7 +10,7 @@ import {
 } from '../shared/mock-db.js';
 import {
   renderShell, card, toast, formatDate, initClientSwitcher, isValidHttpUrl, externalLinkAttrs,
-  isValidAssetSrc, assetLinkAttrs,
+  isValidAssetSrc, assetLinkAttrs, brl,
 } from '../shared/ui.js';
 
 const clientId = getActiveClientId();
@@ -22,7 +22,6 @@ const PAYMENT_STATUS_CLASS = { paid: 'badge-completed', pending: 'badge-progress
 const NF_STATUS_CLASS = { not_requested: 'badge-locked', requested: 'badge-progress', issued: 'badge-completed' };
 const paymentBadge = (s) => `<span class="badge ${PAYMENT_STATUS_CLASS[s] || 'badge-locked'}">${PAYMENT_STATUS_LABEL[s] || s}</span>`;
 const nfBadge = (s) => `<span class="badge ${NF_STATUS_CLASS[s] || 'badge-locked'}">${NF_STATUS_LABEL[s] || s}</span>`;
-const brl = (n) => `R$ ${n.toLocaleString('pt-BR')}`;
 
 function paymentRow(p) {
   const canPay = p.status !== 'paid' && isValidHttpUrl(p.sumupLinkUrl);
@@ -72,7 +71,7 @@ function render() {
         <p class="text-sm text-white/50 mb-4">Programa &amp; Contrato</p>
         <div class="grid sm:grid-cols-3 gap-4 text-sm mb-4">
           <div><p class="text-white/40 text-xs mb-1">Programa</p><p>${PROGRAM_LABEL[c.program] || '—'}</p></div>
-          <div><p class="text-white/40 text-xs mb-1">Modelo</p><p>${c.program === 'ascensao_imagem' ? 'Pagamento único' : (c.duration ? CONTRACT_DURATION_LABEL[c.duration] : '—')}</p></div>
+          <div><p class="text-white/40 text-xs mb-1">Modelo</p><p>${c.duration ? CONTRACT_DURATION_LABEL[c.duration] : '—'}</p></div>
           <div><p class="text-white/40 text-xs mb-1">Valor Total</p><p>${c.value ? brl(c.value) : '—'}</p></div>
         </div>
         <div class="flex items-center justify-between">

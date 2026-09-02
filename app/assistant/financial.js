@@ -4,7 +4,7 @@
 // Nota Fiscal for a payment and have it land on the client's own profile —
 // see MockDB.issueInvoice, which now accepts a real uploaded file.
 import { MockDB, NF_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, isValidAssetSrc, assetLinkAttrs } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, isValidAssetSrc, assetLinkAttrs, brl } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 
 if (!(await requireProfile('assistant'))) throw new Error('not authorized');
@@ -45,7 +45,7 @@ function paymentRow({ client, contract, payment: p }) {
       <div>
         <a href="client-workspace.html?id=${client.id}" class="text-sm font-medium hover:underline">${client.fullName}</a>
         <p class="text-xs text-white/30 mt-0.5">
-          R$ ${p.amount.toLocaleString('pt-BR')} · vencimento ${formatDate(p.dueDate)}
+          ${brl(p.amount)} · vencimento ${formatDate(p.dueDate)}
           ${methods.length ? ` · ${methods.map((m) => PAYMENT_METHOD_LABEL[m]).join(' + ')}` : ''}
           <span class="badge ${PAYMENT_BADGE_CLASS[p.status]}" style="font-size:9px; margin-left:6px;">${PAYMENT_STATUS_LABEL[p.status]}</span>
         </p>

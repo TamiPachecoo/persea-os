@@ -1,6 +1,7 @@
 import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE, PROGRAMS, PROGRAM_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_DEFS, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, NF_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_BADGE_CLASS, ARCHETYPE_VISUAL_SETS, ARCHETYPE_VISUAL_SET_LABEL, ASSISTANT_PERSONA_LABEL, AGENDA_STATUS_LABEL, AGENDA_TYPE_LABEL, TIER_MAX_PHASE_INDEX, PREMIUM_ONLY_PHASE_INDEX, MENTOR_DELIVERABLE_STATUS_LABEL, MENTOR_DELIVERABLE_STATUS_BADGE_CLASS, ENCOUNTER_DEFS, BUSINESS_SURVEY_QUESTIONS, GUIDE_STATUS_LABEL, ENCOUNTER_PREP_CHECKLIST } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal, renderRecordingBlock } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal, renderRecordingBlock, brl } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
   REVIEW_STATUSES, REVIEW_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
@@ -155,7 +156,7 @@ function shell(inner) {
     <div class="mb-8">${renderSocialLinks(MockDB.getSocialLinks(clientId))}</div>
 
     ${renderPhaseTracker(phaseProgress)}
-    ${renderPhaseControl()}
+    ${!isAssistant ? renderPhaseControl() : ''}
 
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
       ${visibleTabs.map(([key, label]) => `
@@ -225,8 +226,115 @@ function wirePaymentPlanLines(tc, clientId, render) {
     const hasPaid = MockDB.getPayments(clientId).some((p) => p.status === 'paid');
     const removesAPaidLine = hasPaid && MockDB.getPayments(clientId).some((p) => p.status === 'paid' && !lines.some((l) => l.id === p.id));
     if (removesAPaidLine && !confirm('Uma ou mais parcelas já pagas seriam removidas do plano ao salvar. Continuar mesmo assim?')) return;
-    MockDB.setPaymentLines(clientId, lines);
+    const result = MockDB.setPaymentLines(clientId, lines);
+    if (result?.error === 'plan_frozen') {
+      toast('Plano já assinado — use "Renegociar Plano" para alterá-lo.', { tone: 'error' });
+      return;
+    }
     toast('Plano de pagamento salvo.');
+    render();
+  });
+}
+
+// Production Audit Remediation Pass (High 7/8): once signed, the plan is a
+// contractual baseline — read-only here (no inputs at all, so there's
+// nothing to accidentally edit-and-save), with the one sanctioned way to
+// change it being the admin-only "Renegociar Plano" action, which versions
+// instead of overwriting (see MockDB.renegotiatePaymentPlan). Assistant
+// never sees the renegotiate button, even though 'onboarding' is one of
+// her editable tabs for everything else — this one action is carved out
+// admin-only regardless of tab-level lockdown.
+// Production Audit Remediation Pass (Medium — "Valor Total Acordado"): if
+// Nay's explicit agreed total and the plan's calculated line sum disagree,
+// surface it plainly instead of silently letting one win. Never auto-
+// resolves — Admin sees both numbers and the exact difference and decides
+// which one is right (fix the plan, or update the agreed value).
+function renderAgreedValueDiscrepancy(c, payments) {
+  if (c.agreedValue == null) return '';
+  const planTotal = payments.reduce((s, p) => s + p.amount, 0);
+  if (Math.abs(planTotal - c.agreedValue) < 0.01) return '';
+  const diff = planTotal - c.agreedValue;
+  return card(`
+    <p class="text-sm mb-1" style="color:var(--terracotta);">⚠ Valor acordado e plano de pagamento não batem</p>
+    <p class="text-xs text-white/40">Valor acordado: ${brl(c.agreedValue)} · Plano atual soma: ${brl(planTotal)} · Diferença: R$ ${Math.abs(diff).toLocaleString('pt-BR')} ${diff > 0 ? '(plano acima do acordado)' : '(plano abaixo do acordado)'}</p>
+  `, 'mb-4');
+}
+
+function renderSignedPaymentPlan(payments) {
+  const versions = MockDB.getPaymentPlanVersions(clientId);
+  const total = payments.reduce((s, p) => s + p.amount, 0);
+  return card(`
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm text-white/50">Plano de Pagamento — Assinado</p>
+      <p class="text-xs text-white/30">Total: <strong style="color:var(--gold);">${brl(total)}</strong></p>
+    </div>
+    <p class="text-xs text-white/20 mb-4">Este plano faz parte do contrato assinado e não pode ser editado diretamente — só renegociado, o que preserva a versão original.${versions.length ? ` Versão atual: ${versions.length + 1}.` : ''}</p>
+    <div class="divide-y mb-4" style="border-color:var(--line);">
+      ${payments.map((p) => `
+        <div class="flex items-center justify-between py-2.5 text-sm">
+          <div>
+            <p>${brl(p.amount)}${p.label ? ` — ${p.label}` : ''}</p>
+            <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(p.dueDate)}${p.method ? ` · ${PAYMENT_METHOD_LABEL[p.method] || p.method}` : ''}</p>
+          </div>
+          ${paymentBadge(p.status)}
+        </div>
+      `).join('')}
+    </div>
+    ${versions.length ? `
+      <details class="mb-4">
+        <summary class="text-xs cursor-pointer" style="color:var(--muted); list-style:none;">Histórico de versões (${versions.length})</summary>
+        <div class="mt-2 space-y-2">
+          ${versions.map((v) => `
+            <div class="text-xs" style="color:var(--muted);">
+              Versão ${v.version} — ${v.lines.length} pagamento(s), total ${brl(v.totalValue)} · alterada em ${formatDateTime(v.changedAt)} por ${v.changedBy}${v.reason ? ` — ${v.reason}` : ''}${v.aditivoNeeded ? ' · <span style="color:var(--gold);">Aditivo contratual necessário</span>' : ''}
+            </div>
+          `).join('')}
+        </div>
+      </details>
+    ` : ''}
+    ${!isAssistant ? `<button type="button" id="renegotiate-plan" class="btn-ghost">Renegociar Plano</button>` : ''}
+  `, 'mb-6');
+}
+
+function openRenegotiateModal(payments, render) {
+  const { el, close } = openModal({
+    title: 'Renegociar Plano de Pagamento',
+    bodyHtml: `
+      <p class="text-xs text-white/30 mb-4">O plano original assinado é preservado como uma versão anterior — isto cria uma nova versão, não apaga a antiga.</p>
+      <div id="renegotiate-lines">${payments.map((p) => paymentPlanLineRowHtml(p)).join('')}</div>
+      <button type="button" id="renegotiate-add-line" class="btn-text mb-4">+ Adicionar Pagamento</button>
+      <div class="mb-4">
+        <label class="text-xs text-white/40 block mb-1">Motivo da renegociação</label>
+        <textarea id="renegotiate-reason" rows="2" class="field text-sm" placeholder="Ex.: Cliente pediu para adiar a parcela 3 por dificuldades financeiras."></textarea>
+      </div>
+      <label class="flex items-center gap-2 text-xs text-white/40 mb-4"><input type="checkbox" id="renegotiate-aditivo" /> Aditivo contratual necessário</label>
+      <button type="button" id="renegotiate-save" class="btn-primary block w-full text-center" style="padding-top:10px;padding-bottom:10px;">Salvar Nova Versão</button>
+    `,
+  });
+  el.querySelector('#renegotiate-add-line').addEventListener('click', () => {
+    el.querySelector('#renegotiate-lines').insertAdjacentHTML('beforeend', paymentPlanLineRowHtml());
+  });
+  el.querySelector('#renegotiate-lines').addEventListener('click', (e) => {
+    if (!e.target.matches('[data-remove-line]')) return;
+    const rows = el.querySelectorAll('.plan-line-row');
+    const row = e.target.closest('.plan-line-row');
+    if (rows.length > 1) row.remove();
+  });
+  el.querySelector('#renegotiate-save').addEventListener('click', () => {
+    const lines = [...el.querySelectorAll('.plan-line-row')].map((row) => ({
+      id: row.dataset.existingId || null,
+      amount: Math.round((parseFloat(row.querySelector('[data-line-amount]').value) || 0) * 100) / 100,
+      method: row.querySelector('[data-line-method]').value || null,
+      dueDate: row.querySelector('[data-line-date]').value || null,
+      label: row.querySelector('[data-line-label]').value.trim() || null,
+    })).filter((l) => l.amount > 0);
+    if (!lines.length) { toast('Adicione ao menos um pagamento com valor.', { tone: 'error' }); return; }
+    const reason = el.querySelector('#renegotiate-reason').value.trim();
+    const aditivoNeeded = el.querySelector('#renegotiate-aditivo').checked;
+    const result = MockDB.renegotiatePaymentPlan(clientId, lines, { reason, actorRole: role, actorName: role === 'admin' ? 'Nay' : 'Assistente', aditivoNeeded });
+    if (!result.ok) { toast('Não foi possível renegociar o plano.', { tone: 'error' }); return; }
+    close();
+    toast(`Plano renegociado — versão ${result.version} criada.`);
     render();
   });
 }
@@ -284,17 +392,15 @@ function renderOnboardingTab() {
         </div>
         <div>
           <p class="text-white/40 text-xs mb-1">Modelo de Contrato</p>
-          ${c.program === 'ascensao_imagem'
-            ? `<p class="field text-sm flex items-center">Pagamento único</p>`
-            : `<select id="contract-duration" class="field text-sm" ${c.program !== 'persea' ? 'disabled' : ''}>
-                <option value="">Não definido</option>
-                ${CONTRACT_DURATIONS.map((d) => `<option value="${d}" ${c.duration === d ? 'selected' : ''}>${CONTRACT_DURATION_LABEL[d]} · sugestão R$ ${CONTRACT_DURATION_VALUE[d].toLocaleString('pt-BR')}</option>`).join('')}
-              </select>`}
+          <select id="contract-duration" class="field text-sm" ${c.program !== 'persea' ? 'disabled' : ''}>
+            <option value="">Não definido</option>
+            ${CONTRACT_DURATIONS.map((d) => `<option value="${d}" ${c.duration === d ? 'selected' : ''}>${CONTRACT_DURATION_LABEL[d]} · sugestão R$ ${CONTRACT_DURATION_VALUE[d].toLocaleString('pt-BR')}</option>`).join('')}
+          </select>
         </div>
         <div>
           <p class="text-white/40 text-xs mb-1">Valor Total Acordado (R$)</p>
           <div class="flex gap-2">
-            <input id="contract-value" type="number" min="0" step="0.01" class="field text-sm" value="${c.value ?? ''}" placeholder="0,00" />
+            <input id="contract-value" type="number" min="0" step="0.01" class="field text-sm" value="${c.agreedValue ?? ''}" placeholder="0,00" />
             <button id="save-contract-value" class="btn-ghost">Salvar</button>
           </div>
         </div>
@@ -324,7 +430,8 @@ function renderOnboardingTab() {
       </div>
     `, 'mb-6')}
 
-    ${card(`
+    ${renderAgreedValueDiscrepancy(c, payments)}
+    ${c.status === 'completed' ? renderSignedPaymentPlan(payments) : card(`
       <div class="flex items-center justify-between mb-1">
         <p class="text-sm text-white/50">Plano de Pagamento</p>
         <p class="text-xs text-white/30">Total: <strong id="plan-lines-total" style="color:var(--gold);">R$ 0,00</strong></p>
@@ -353,6 +460,41 @@ function renderOnboardingTab() {
   `;
 }
 
+// Production Audit Remediation Pass (Critical 2): fired-and-forgotten after
+// the Financeiro tab renders (see render() below) — fills #real-financial-
+// summary with the real Supabase numbers for this client, if she has a real
+// client record (matched by legacy_id, same lookup admin/payments.js uses).
+// Kept separate from renderFinancialTab (which stays synchronous) rather
+// than restructuring the whole render pipeline to be async, since this is
+// the one tab that needs a network round-trip. Most existing seed clients
+// have no Supabase counterpart yet (only ones that went through the real
+// activate/registration flow do) — that fact is surfaced explicitly rather
+// than silently showing nothing or, worse, mock numbers relabeled as real.
+async function hydrateRealFinancialSummary() {
+  const el = document.getElementById('real-financial-summary');
+  if (!el) return;
+  const { data: realClient } = await supabase.from('clients').select('id').eq('legacy_id', clientId).maybeSingle();
+  if (!realClient) {
+    el.innerHTML = card(`<p class="text-xs" style="color:var(--terracotta);">⚠ Esta cliente ainda não tem registro real no Supabase — os valores de Pagamentos abaixo são só demonstração local, não um pagamento persistente.</p>`, 'mb-6');
+    return;
+  }
+  const [{ data: contract }, { data: payments }] = await Promise.all([
+    supabase.from('contracts').select('value_cents').eq('client_id', realClient.id).maybeSingle(),
+    supabase.from('payments').select('amount_cents, status').eq('client_id', realClient.id),
+  ]);
+  const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const recebido = (payments || []).filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
+  const aReceber = (payments || []).filter((p) => ['pending', 'overdue'].includes(p.status)).reduce((s, p) => s + p.amount_cents, 0);
+  el.innerHTML = card(`
+    <p class="text-sm text-white/50 mb-3">Financeiro Real — Sistema Supabase</p>
+    <div class="grid sm:grid-cols-3 gap-4 text-sm">
+      <div><p class="text-white/40 text-xs mb-1">Valor Contratado</p><p>${contract?.value_cents ? brlCents(contract.value_cents) : '—'}</p></div>
+      <div><p class="text-white/40 text-xs mb-1">Recebido</p><p>${brlCents(recebido)}</p></div>
+      <div><p class="text-white/40 text-xs mb-1">A Receber</p><p>${brlCents(aReceber)}</p></div>
+    </div>
+  `, 'mb-6');
+}
+
 function renderFinancialTab() {
   const o = MockDB.getOnboarding(clientId);
   const c = o.contract;
@@ -365,19 +507,21 @@ function renderFinancialTab() {
       <p class="text-sm text-white/50 mb-4">Programa &amp; Contrato</p>
       <div class="grid sm:grid-cols-3 gap-4 text-sm mb-4">
         <div><p class="text-white/40 text-xs mb-1">Programa</p><p>${c.program ? PROGRAM_LABEL[c.program] : '—'}</p></div>
-        <div><p class="text-white/40 text-xs mb-1">Modelo</p><p>${c.program === 'ascensao_imagem' ? 'Pagamento único' : (c.duration ? CONTRACT_DURATION_LABEL[c.duration] : '—')}</p></div>
-        <div><p class="text-white/40 text-xs mb-1">Valor Total</p><p>${c.value ? `R$ ${c.value.toLocaleString('pt-BR')}` : '—'}</p></div>
+        <div><p class="text-white/40 text-xs mb-1">Modelo</p><p>${c.duration ? CONTRACT_DURATION_LABEL[c.duration] : '—'}</p></div>
+        <div><p class="text-white/40 text-xs mb-1">Valor Total</p><p>${c.value ? `${brl(c.value)}` : '—'}</p></div>
       </div>
       <a href="contract.html?legacy_id=${clientId}" class="btn-ghost inline-block">Abrir Contrato (Sistema Real) ↗</a>
     `, 'mb-6')}
+    <div id="real-financial-summary"></div>
     ${card(`
       <div class="flex items-center justify-between mb-4">
-        <p class="text-sm text-white/50">Pagamentos</p>
+        <p class="text-sm text-white/50">Pagamentos (demonstração)</p>
         <div class="flex items-center gap-3">
-          <span class="text-xs text-white/30">Recebido R$ ${paid.toLocaleString('pt-BR')} · A receber R$ ${pending.toLocaleString('pt-BR')}</span>
+          <span class="text-xs text-white/30">Recebido ${brl(paid)} (demo) · A receber ${brl(pending)} (demo)</span>
           <a href="payments.html?legacy_id=${clientId}" class="btn-text">Cobranças (SumUp) ↗</a>
         </div>
       </div>
+      <p class="text-xs text-white/20 mb-4">Os valores acima vêm dos dados de demonstração locais (MockDB) — veja o resumo real acima (se existir) ou "Cobranças (SumUp)" para os pagamentos efetivamente registrados no Supabase.</p>
       ${payments.length ? `
         <div class="divide-y" style="border-color:var(--line);">
           ${payments.map((p, i) => {
@@ -387,7 +531,7 @@ function renderFinancialTab() {
             <div class="py-3 ${p.reportedPaidAt && p.status !== 'paid' ? 'bg-white/5 -mx-2 px-2 rounded' : ''}">
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="text-sm">R$ ${p.amount.toLocaleString('pt-BR')}</p>
+                  <p class="text-sm">${brl(p.amount)}</p>
                   <p class="text-xs text-white/30 mt-0.5">
                     Vencimento ${formatDate(p.dueDate)}${p.method ? ` · ${PAYMENT_METHOD_LABEL[p.method] || p.method}` : ''}${p.paidAt ? ` · Pago em ${formatDate(p.paidAt)}` : ''}
                     ${p.linkSentAt ? ` · Link enviado em ${formatDate(p.linkSentAt)}` : ''}
@@ -1937,6 +2081,10 @@ function wireTabEvents() {
     render();
   });
   wirePaymentPlanLines(tc, clientId, render);
+  tc.querySelector('#renegotiate-plan')?.addEventListener('click', () => {
+    if (isAssistant) return; // defense-in-depth — button is already !isAssistant-gated in renderSignedPaymentPlan
+    openRenegotiateModal(MockDB.getPayments(clientId), render);
+  });
   tc.querySelector('#create-image-project')?.addEventListener('click', () => {
     MockDB.setImageProjectStatus(clientId, 'created');
     toast('Projeto de imagens criado.');
@@ -2087,16 +2235,25 @@ function applyReadOnlyLockdown() {
 function render() {
   content.innerHTML = shell(RENDERERS[activeTab]());
   applyReadOnlyLockdown();
+  if (activeTab === 'financial') hydrateRealFinancialSummary();
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { deliverablePreviewShown = false; activeTab = btn.dataset.tab; render(); });
   });
+  // Critical 3 fix: renderPhaseControl() is never rendered for the assistant
+  // now (see shell() above), so these listeners normally have nothing to
+  // attach to — the isAssistant check here is defense-in-depth in case
+  // either handler is ever wired from another spot. The real backstop is
+  // inside MockDB.setClientPhase itself, which now refuses to run for a
+  // non-admin actor regardless of caller.
   content.querySelector('#advance-phase')?.addEventListener('click', () => {
-    MockDB.setClientPhase(clientId, phaseProgress.currentIndex + 1);
+    if (isAssistant) return;
+    MockDB.setClientPhase(clientId, phaseProgress.currentIndex + 1, role);
     toast('Fase avançada.');
     location.reload();
   });
   content.querySelector('#set-phase')?.addEventListener('click', () => {
-    MockDB.setClientPhase(clientId, Number(content.querySelector('#phase-select').value));
+    if (isAssistant) return;
+    MockDB.setClientPhase(clientId, Number(content.querySelector('#phase-select').value), role);
     toast('Fase atualizada.');
     location.reload();
   });

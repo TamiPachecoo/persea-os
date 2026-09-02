@@ -6,6 +6,7 @@
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { card, toast, openModal, formatDate, formatDateTime } from '../shared/ui.js';
+import { deriveEffectiveStatus } from '../shared/date-utils.js';
 
 const content = document.getElementById('app-content');
 
@@ -64,11 +65,15 @@ let autoOpened = false;
 const brl = (cents, currency = 'BRL') => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency });
 
 async function loadPayments() {
-  let query = supabase.from('payments').select('*, clients(id, full_name, program_slug)').order('created_at', { ascending: false });
+  let query = supabase.from('payments').select('*, clients(id, full_name, program_slug, is_demo)').order('created_at', { ascending: false });
   if (filterClientId) query = query.eq('client_id', filterClientId);
   const { data, error } = await query;
   if (error) { toast(error.message, { tone: 'error' }); return []; }
-  return data;
+  // Production Audit Remediation Pass (Medium — real "Em Atraso"): derived
+  // at read time, same rule as MockDB's getPayments — the stored status
+  // stays 'pending' until actually paid; overdue is only ever a computed
+  // view, recalculated on every load, never a manually-set flag.
+  return (data || []).map((p) => ({ ...p, status: deriveEffectiveStatus(p.status, p.due_date) }));
 }
 
 async function loadClients() {
@@ -77,9 +82,13 @@ async function loadClients() {
 }
 
 function computeKPIs(payments) {
-  // Mock rows are excluded from real financial totals by design — they
-  // exist purely to test the flow, never to be confused with real revenue.
-  const real = payments.filter((p) => p.provider === 'sumup');
+  // Mock rows AND any is_demo client's rows are excluded from real
+  // financial totals by design — they exist purely to test the flow, never
+  // to be confused with real revenue. Checking is_demo too (not just
+  // provider==='sumup') is a second safety net: a seeded/demo row can end
+  // up tagged provider='sumup' from old test data without ever having gone
+  // through a real checkout — this catches that case even if it recurs.
+  const real = payments.filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
   const recebido = real.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
   const aReceber = real.filter((p) => ['pending', 'overdue'].includes(p.status)).reduce((s, p) => s + p.amount_cents, 0);
   return { recebido, aReceber };

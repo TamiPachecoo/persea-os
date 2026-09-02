@@ -11,7 +11,7 @@ import {
   PROGRAM_DEFS, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, ONBOARDING_STAGE_LABEL,
   LEAD_ONBOARDING_STATUS_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, formatDateTime, openModal, renderSocialLinks } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, formatDateTime, openModal, renderSocialLinks, buildRegistrationLink } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
@@ -150,15 +150,11 @@ function registrationSummary(info) {
 }
 function renderRegistrationCard(lead) {
   if (!lead.onboardingStatus || !lead.registrationToken) return '';
-  // location.origin inherits whatever protocol this admin page itself
-  // happened to load under — if the browser auto-upgraded localhost to
-  // https (Chrome's "Always use secure connections", a stale HSTS entry),
-  // the copied link silently breaks with ERR_SSL_PROTOCOL_ERROR, since the
-  // local dev server only ever speaks plain HTTP. Force http:// for
-  // localhost/127.0.0.1 specifically — real deployed hosts keep https.
-  const isLocalDev = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const origin = isLocalDev ? `http://${location.host}` : location.origin;
-  const link = `${origin}${location.pathname.replace('admin/lead-detail.html', 'client/registration.html')}?token=${lead.registrationToken}`;
+  // buildRegistrationLink (shared/ui.js) handles the localhost-HTTPS fix —
+  // see its own comment. Production Audit Remediation Pass, Low: this used
+  // to be duplicated inline here and reimplemented (without the fix)
+  // separately in admin/crm.js; now both call the one shared helper.
+  const link = buildRegistrationLink(lead.registrationToken, location.pathname);
   return card(`
     <p class="text-sm text-white/50 mb-1">Cadastro</p>
     <p class="text-xs text-white/20 mb-4">Link pronto assim que a venda é fechada — copie e mande direto no WhatsApp com o cliente.</p>
@@ -213,25 +209,18 @@ function renderHistoryCard(lead) {
   `, 'mb-6');
 }
 
-// --- Legacy quick-path — preserved, just demoted below the new flow. -----
-function renderLegacyConvertCard(lead) {
-  if (lead.convertedToClientId) return '';
-  return card(`
-    <details>
-      <summary class="text-sm cursor-pointer" style="color:var(--muted); list-style:none;">⚙ Converter em Cliente diretamente (pula o fluxo de cadastro/contrato)</summary>
-      <div class="mt-4">
-        <p class="text-xs text-white/20 mb-4">Cria o perfil de cliente em onboarding sem exigir cadastro ou contrato assinado — use só em casos excepcionais; o caminho normal é Ativar Cliente acima.</p>
-        <div class="flex items-center gap-3">
-          <select id="convert-tier" class="field text-sm" style="max-width:180px;">
-            <option value="essential">Jornada Essential</option>
-            <option value="premium">Jornada Premium</option>
-          </select>
-          <button id="convert-lead" class="btn-ghost">Converter em Cliente</button>
-        </div>
-      </div>
-    </details>
-  `, 'mb-6');
-}
+// --- Legacy quick-path — REMOVED from production (Audit Remediation Pass,
+// Step 1 / Critical 1). This used to render a "Converter em Cliente
+// diretamente" shortcut that skipped cadastro/contrato entirely, calling
+// MockDB.convertLeadToClient directly with no state gate. The only
+// production path into db.clients is now MockDB.activateLead (see
+// renderActivationCard below), which requires onboardingStatus ===
+// 'ready_for_activation' (contract signed + onboarding complete) and is
+// idempotent. convertLeadToClient itself now enforces that same
+// precondition internally (see mock-db.js), so even a direct call from
+// anywhere else can no longer create a client outside the real flow. The
+// function body is intentionally left removed rather than hidden — there
+// is no UI element left that can trigger it.
 
 function renderInfoForm(lead) {
   return card(`
@@ -363,7 +352,6 @@ function render() {
     ${renderContractCard(lead)}
     ${renderActivationCard(lead)}
     ${renderHistoryCard(lead)}
-    ${renderLegacyConvertCard(lead)}
     ${renderInfoForm(lead)}
     ${renderInteractions(lead)}
   `;
@@ -403,13 +391,6 @@ function render() {
   });
 
   content.querySelector('#new-interaction')?.addEventListener('click', openInteractionModal);
-
-  content.querySelector('#convert-lead')?.addEventListener('click', () => {
-    const tier = content.querySelector('#convert-tier').value;
-    const clientId = MockDB.convertLeadToClient(leadId, { tier });
-    toast('Lead convertida em cliente!');
-    location.href = `client-detail.html?id=${clientId}`;
-  });
 }
 
 render();

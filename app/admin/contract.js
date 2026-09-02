@@ -283,7 +283,17 @@ async function render() {
         : `<p class="text-sm" style="color:var(--terracotta);">Nenhum modelo de contrato cadastrado para ${contract.program}${contract.duration ? ' / ' + contract.duration : ''}.</p>`}
     `);
     document.getElementById('generate')?.addEventListener('click', async () => {
-      const body = mergeContractTemplate(template, { contract, partyInfo, clientFullName: client.full_name });
+      // Production Audit Remediation Pass (High 6): assembleContratanteLine
+      // now throws instead of silently generating PF wording for an
+      // incomplete PJ cadastro — surface that here instead of letting it
+      // crash the page uncaught.
+      let body;
+      try {
+        body = mergeContractTemplate(template, { contract, partyInfo, clientFullName: client.full_name });
+      } catch (e) {
+        toast(e.message, { tone: 'error' });
+        return;
+      }
       const { error } = await supabase.from('contracts').update({ body_text: body, template_id: template.id, status: 'contract_prepared' }).eq('id', contract.id);
       if (error) { toast(error.message, { tone: 'error' }); return; }
       toast('Contrato gerado — revise, baixe e envie para assinatura externa.');

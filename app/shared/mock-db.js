@@ -8,6 +8,7 @@
 // once, each progressing through the journey independently.
 
 import { blankAssessmentAnswers, blankOffer, blankFixedCost, blankVariableCost, blankReference } from './value-analysis-schema.js';
+import { deriveEffectiveStatus } from './date-utils.js';
 
 const STORAGE_KEY = 'persea_mock_db_v38';
 export const DEFAULT_CLIENT_ID = 'client-1';
@@ -45,14 +46,14 @@ export const TIER_MAX_PHASE_INDEX = { premium: 3, essential: 2 };
 
 // --- Program Hub ------------------------------------------------------------
 // The real enrollment model, replacing the old tier(premium/essential) +
-// onboarding.contract.program(persea/ascensao_imagem) duality with one
-// explicit field: profile.programSlug. `tier` is kept on the client record
-// only for the pre-existing phase-ladder widget (TIER_PHASES above) — it no
-// longer gates anything (see getProgramActivityAccess). One known data
-// inconsistency this surfaced: client-6 has tier:'premium' but her real
-// contract product is Ascensão de Imagem — programSlug (derived from her
-// actual contract) is authoritative, so she correctly sees Business as a
-// Premium preview despite the stale tier value. Flagged, not silently fixed.
+// onboarding.contract.program duality with one explicit field:
+// profile.programSlug, the sole authority for program identity/access
+// everywhere in this file. `tier` is kept on the client record only for
+// the pre-existing phase-ladder widget (TIER_PHASES above) — it no longer
+// gates anything real (getClientJourney's premiumLocked check used to read
+// tier instead of programSlug; fixed per the Production Audit Remediation
+// Pass, which also removed the one client record whose tier/programSlug
+// had drifted apart — see High 8).
 export const PROGRAM_DEFS = [
   {
     slug: 'persea-essential', name: 'Persea Essencial', durationMonths: 6, displayOrder: 1,
@@ -64,15 +65,9 @@ export const PROGRAM_DEFS = [
     description: 'A jornada completa da Persea, incluindo o acompanhamento estratégico e comercial aprofundado do módulo Business.',
     positioning: 'Ensinar + Guiar', supportingStatement: 'Nay acompanha decisões e aplicações.',
   },
-  {
-    // Duration intentionally null — never invented. Set it via
-    // MockDB.setProgramDuration once Nay confirms a real value.
-    slug: 'ascensao-imagem', name: 'Ascensão de Imagem', durationMonths: null, displayOrder: 3,
-    description: 'Um programa focado em imagem pessoal, da extração de marca ao pitch, com prévias das experiências Premium.',
-    // Not part of the Nova Persea E1-E8 methodology — a separate, simpler
-    // product, so it deliberately has no positioning tagline here.
-    positioning: null, supportingStatement: null,
-  },
+  // Ascensão de Imagem removed (Production Audit Remediation Pass, High 8) —
+  // business decision: it is no longer part of the system. The two current
+  // products are Persea Essencial and Persea Premium only.
 ];
 export const PROGRAM_LABEL_BY_SLUG = Object.fromEntries(PROGRAM_DEFS.map((p) => [p.slug, p.name]));
 
@@ -247,10 +242,7 @@ export const PROGRAM_ACTIVITY_ACCESS = {
     'brand-extraction': 'included', 'archetype-test': 'included', 'business-survey': 'included', 'activity-guide': 'included', 'initial-images': 'included',
     'brand-direction': 'included', pitch: 'included', content: 'included', business: 'included',
   },
-  'ascensao-imagem': {
-    'brand-extraction': 'included', 'archetype-test': 'included', 'business-survey': 'included', 'activity-guide': 'included', 'initial-images': 'included',
-    'brand-direction': 'premium_preview', pitch: 'included', content: 'included', business: 'premium_preview',
-  },
+  // Ascensão de Imagem removed (Production Audit Remediation Pass, High 8).
 };
 
 // E2's short pricing survey — deliberately surface-level (4 short
@@ -520,12 +512,11 @@ export const CONTRACT_DURATIONS = ['semestral', 'anual'];
 export const CONTRACT_DURATION_LABEL = { semestral: 'Semestral', anual: 'Anual' };
 export const CONTRACT_DURATION_VALUE = { semestral: 18000, anual: 32000 };
 
-// Two real products (confirmed by Nay) — Persea keeps the duration-based
-// pricing above; Ascensão de Imagem is a simpler single, one-time product.
-// Fixed list, not tenant-configurable, per this pass's scope.
-export const PROGRAMS = ['ascensao_imagem', 'persea'];
-export const PROGRAM_LABEL = { ascensao_imagem: 'Ascensão de Imagem', persea: 'Persea' };
-export const PROGRAM_VALUE = { ascensao_imagem: 6000 }; // placeholder pricing, same convention as CONTRACT_DURATION_VALUE
+// One real product line (Persea) — Ascensão de Imagem removed (Production
+// Audit Remediation Pass, High 8; business decision — no longer part of
+// the system). Fixed list, not tenant-configurable, per this pass's scope.
+export const PROGRAMS = ['persea'];
+export const PROGRAM_LABEL = { persea: 'Persea' };
 
 export const PAYMENT_STATUSES = ['paid', 'pending', 'overdue'];
 export const PAYMENT_STATUS_LABEL = { paid: 'Pago', pending: 'Pendente', overdue: 'Em Atraso' };
@@ -1055,19 +1046,23 @@ const SEED = {
     },
     {
       id: 'lead3', fullName: 'Fernanda Buono', email: 'fernanda.buono@example.com', phone: '(31) 90000-1003',
-      source: 'referral', vipGroupStatus: 'not_in_group', stage: 'proposta_enviada', interestedProgram: 'ascensao_imagem',
+      source: 'referral', vipGroupStatus: 'not_in_group', stage: 'proposta_enviada', interestedProgram: 'persea',
       socialLinks: { instagram: 'https://instagram.com/fernandabuono', tiktok: '', linkedin: '', facebook: '' },
-      notes: 'Indicada pela Renata Costa. Já teve reunião de diagnóstico, proposta do Ascensão de Imagem enviada por email.',
+      notes: 'Indicada pela Renata Costa. Já teve reunião de diagnóstico, proposta da Persea Premium enviada por email.',
       interactions: [
         { id: 'li2', date: '2026-08-05T11:00:00', summary: 'Reunião de diagnóstico — quer resolver a imagem pessoal antes de aumentar a exposição em palestras.' },
         { id: 'li3', date: '2026-08-08T16:30:00', summary: 'Proposta comercial enviada por email, aguardando retorno.' },
       ],
       convertedToClientId: null, convertedAt: null,
       // Demo: registration completed, contract already signed — this is
-      // the "Ativar Cliente" state (see admin/lead-detail.js).
-      program: 'ascensao-imagem', onboardingStatus: 'ready_for_activation',
+      // the "Ativar Cliente" state (see admin/lead-detail.js). Was seeded
+      // as the retired Ascensão de Imagem program; repointed to Persea
+      // Premium (Production Audit Remediation Pass, High 8) rather than
+      // deleted, since this is a lead exercising the activation flow, not
+      // demo client/financial data.
+      program: 'persea-premium', onboardingStatus: 'ready_for_activation',
       commercialTerms: {
-        paymentMethods: ['pix'], paymentMethod: 'pix', installments: 1, agreedAmount: 6000, firstDueDate: '2026-08-20',
+        paymentMethods: ['pix'], paymentMethod: 'pix', installments: 1, agreedAmount: 32000, firstDueDate: '2026-08-20',
         commercialNotes: 'Pagamento único via Pix, à vista com 5% de desconto já aplicado.', responsibleId: 'nay', saleAgreedAt: '2026-08-12T10:00:00',
       },
       registrationToken: 'lead3-demo9876zyxw4321', registrationCompletedAt: '2026-08-14T19:20:00', registrationSentAt: '2026-08-12T11:00:00',
@@ -1205,11 +1200,8 @@ const SEED = {
       title: 'Guia de Estilo — Júlia', note: 'Primeira versão a partir da Direção da Marca.', fileUrl: 'https://example.com/guides/guia-estilo-julia.pdf',
       status: 'pending', createdAt: '2026-08-15T11:00:00', resolvedAt: null, nayNote: '',
     },
-    {
-      id: 'rev3', clientId: 'client-6', type: 'image_guide', refSlug: 'paleta_cores',
-      title: 'Paleta de Cores — Débora', note: '', fileUrl: 'https://example.com/guides/paleta-debora.pdf',
-      status: 'pending', createdAt: '2026-08-17T10:00:00', resolvedAt: null, nayNote: '',
-    },
+    // rev3 (client-6 / Débora Lima) removed with her demo client record —
+    // see Production Audit Remediation Pass, High 8.
   ],
   // Nay <-> Assistant inbox — a flat, timestamped feed rather than threaded
   // chat, matching the "one running log" convention used elsewhere (activity
@@ -1218,17 +1210,11 @@ const SEED = {
   // message shows on the assistant's Painel regardless. See
   // getAssistantMessages/sendAssistantMessage/markAssistantMessageRead.
   assistantMessages: [
-    {
-      id: 'am1', from: 'nay', clientId: 'client-6', text: 'Antes de montar o Guia de Looks da Débora, dá uma olhada na gravação do diagnóstico inicial dela (Agenda, 05/08) — ela foi bem específica sobre não gostar de estampas.',
-      route: 'agenda.html', at: '2026-08-17T09:10:00', read: false,
-    },
+    // am1/am3 (client-6 / Débora Lima) removed with her demo client record —
+    // see Production Audit Remediation Pass, High 8.
     {
       id: 'am2', from: 'nay', clientId: 'client-5', text: 'Camila confirmou a reunião de fechamento pra dia 22 — se ela assinar lá, já pode subir o contrato autenticado no mesmo dia.',
       route: 'client-workspace.html?id=client-5', at: '2026-08-15T16:40:00', read: true,
-    },
-    {
-      id: 'am3', from: 'assistant', clientId: 'client-6', text: 'Feito — assisti a gravação e já ajustei o briefing do guia para evitar estampas. Devo ter a primeira versão pronta até quinta.',
-      route: null, at: '2026-08-17T09:45:00', read: true,
     },
   ],
   clients: {
@@ -1933,83 +1919,13 @@ const SEED = {
       moodLog: [],
     },
 
-    'client-6': {
-      profile: { id: 'client-6', fullName: 'Débora Lima', email: 'debora@example.com', status: 'onboarding', tier: 'premium', phaseIndex: 0, programSlug: 'ascensao-imagem', gender: 'feminino' },
-      onboarding: {
-        clientInfo: {
-          submitted: true, fullName: 'Débora Lima', partyType: 'PJ', cpf: '678.901.234-55', cnpj: '23.456.789/0001-01', companyName: 'Débora Lima Imagem',
-          address: 'Rua Exemplo, 600, Buritis, Belo Horizonte/MG', email: 'debora@example.com', whatsapp: '(31) 90000-0006',
-        },
-        contract: { program: 'ascensao_imagem', duration: null, status: 'completed', value: 6000, signedFileName: 'contrato-client-6-assinado.pdf', notes: '', paymentMethod: 'pix', installments: 1 },
-        whatsappGroup: { status: 'added' },
-      },
-      payments: [
-        { id: 'p6-1', dueDate: '2026-08-05', amount: 6000, status: 'paid', paidAt: '2026-08-05T10:00:00' , sumupLinkUrl: 'https://pay.sumup.com/b2c/persea-debora-1', linkSentAt: '2026-08-02T10:00:00', reportedPaidAt: '2026-08-05T09:45:00', nf: { status: 'issued', requestedAt: '2026-08-05T10:30:00', issuedAt: '2026-08-06T09:00:00', fileName: 'nf-client-6-p1.pdf' } },
-      ],
-      brandDirection: {
-        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
-        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
-      },
-      brandIdeas: '',
-      guideAcknowledged: false,
-      images: [],
-      imagesStatus: 'aguardando_envio',
-      imagesNote: '',
-      photoReminder: { sentAt: null, note: '' },
-      whatsappNotes: [],
-      contentActivity: { status: 'not_started', submission: '', feedback: '', updatedAt: null },
-      imageProjectStatus: 'created',
-      imageGuides: [{ slug: 'paleta_cores', fileUrl: null, note: '' }, { slug: 'estilo', fileUrl: null, note: '' }, { slug: 'moodboard_ensaio', fileUrl: null, note: '' }, { slug: 'guia_looks_mensal', fileUrl: null, note: '' }],
-      digitalKit: { fileUrl: null },
-      hublaAccess: { status: 'not_granted', grantedAt: null },
-      programHistory: [{ programSlug: 'ascensao-imagem', changedAt: null, changedBy: 'seed' }],
-      journey: {
-        programName: 'Identidade',
-        steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'locked' },
-          { key: 'meeting_1', title: 'Reunião 1', status: 'locked' },
-          { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
-          { key: 'assessment', title: 'Teste de Arquétipos', status: 'locked' },
-          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
-          { key: 'homework', title: 'Tarefas', status: 'locked' },
-        ],
-        upcomingMeeting: { title: 'Reunião 1 — a agendar', date: '2026-08-19T10:00:00' },
-      },
-      questionnaire: {
-        title: 'Extração de Marca',
-        questions: [
-          { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
-          { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
-          { id: 'q3', text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', type: 'long_text', answer: '' },
-          { id: 'q4', text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', type: 'scale', answer: '' },
-        ],
-        status: 'in_progress',
-      },
-      questionnaireAnalysis: {
-        version: 0, generatedAt: null, executiveSummary: 'Ainda não gerada — disponível após o envio do questionário.',
-        strengths: [], goals: [], painPoints: [], opportunities: [], suggestedQuestions: [], businessMaturity: '—',
-      },
-      meeting: { title: 'Reunião 1', transcriptUploaded: false, status: 'scheduled' },
-      transcriptAnalysis: null,
-      playbook: { versions: [] },
-      assessment: { title: 'Teste de Arquétipos', description: 'Uma breve avaliação externa para identificar seu arquétipo de marca dominante.', externalUrl: 'https://example.com/archetype-test', status: 'not_started' },
-      archetypeQuiz: { visualSet: null, notes: '', attempts: [] },
-      pitches: null,
-      homework: [
-        { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
-        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
-        { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
-      ],
-      activity: [
-        { type: 'whatsapp_status_changed', text: 'Adicionada ao grupo de WhatsApp', at: '2026-08-11T09:00:00' },
-        { type: 'signed_contract_uploaded', text: 'Contrato assinado enviado para o perfil da cliente', at: '2026-08-10T09:00:00' },
-      ],
-      playbookExperience: { format: null, completedAt: null },
-      quiz: { score: null, total: null, completedAt: null },
-      meetingRequests: [],
-      notes: '',
-      moodLog: [],
-    },
+    // client-6 (Débora Lima) removed — confirmed seeded/demo data
+    // representing the retired Ascensão de Imagem program (never went
+    // through real Autentique: autentique_document_id was null; her only
+    // "payment" was a seeded mock row, not a real SumUp transaction).
+    // Removed together with her dependent pendingReviews (rev3) and
+    // assistantMessages (am1, am3) entries above.
+    // See Production Audit Remediation Pass, High 8.
     // --- Client 7: Fernanda — just converted from a lead, hasn't filled out
     // her onboarding info yet. This is the "very visible" blocker case: her
     // contract can't even be prepared until she submits it — see
@@ -2421,8 +2337,17 @@ export const MockDB = {
       const doneCount = includedActivities.filter((a) => ['completed', 'feedback_available'].includes(a.status)).length;
       const mentorDeliverables = p.mentorDeliverableKeys.map((key) => mentorDeliverable(db, c, key)).filter((d) => d.status !== null);
       // Essencial sees Fase 4 too, just locked as a Premium teaser — never
-      // filtered out entirely (see PREMIUM_ONLY_PHASE_INDEX).
-      const premiumLocked = p.id === PREMIUM_ONLY_PHASE_INDEX && c.profile.tier !== 'premium';
+      // filtered out entirely (see PREMIUM_ONLY_PHASE_INDEX). Gated on
+      // programSlug, not tier — programSlug is the documented sole
+      // authority for program identity/access everywhere else in this file
+      // (getProgramActivities, getEncounterJourney, etc.); this was the one
+      // place still reading the cosmetic `tier` field for a real gating
+      // decision, flagged by the Production Audit as an inconsistency
+      // (Débora Lima/client-6 had tier:'premium' with a non-Premium program,
+      // which made this line disagree with every other Premium check in
+      // the app). Fixed per the Remediation Pass's "normalize program
+      // gating to one canonical source" requirement.
+      const premiumLocked = p.id === PREMIUM_ONLY_PHASE_INDEX && c.profile.programSlug !== 'persea-premium';
       return {
         id: p.id, name: phaseNames[p.id] || `Fase ${p.id + 1}`, description: p.description, premiumLocked,
         status: p.id < currentIndex ? 'completed' : p.id === currentIndex ? 'current' : 'upcoming',
@@ -3340,10 +3265,7 @@ export const MockDB = {
     const db = load();
     const c = client(db, id);
     c.onboarding.contract.program = program || null;
-    if (program === 'ascensao_imagem') {
-      c.onboarding.contract.duration = null;
-      c.onboarding.contract.value = PROGRAM_VALUE.ascensao_imagem;
-    } else if (program === 'persea') {
+    if (program === 'persea') {
       // Duration/value stay whatever they were (or null, until picked via setContractDuration).
       if (!CONTRACT_DURATIONS.includes(c.onboarding.contract.duration)) {
         c.onboarding.contract.duration = null;
@@ -3356,13 +3278,23 @@ export const MockDB = {
     save(db);
   },
   // Real negotiated deals don't always land on a catalog price (custom
-  // discount, bundled extra, etc.) — this lets Nay override the suggested
-  // catalog value with what was actually agreed on the closing call,
-  // independent of program/duration selection above.
+  // discount, bundled extra, etc.) — this lets Nay record what was actually
+  // agreed on the closing call, independent of program/duration selection
+  // above.
+  //
+  // Production Audit Remediation Pass (Medium — "Valor Total Acordado"):
+  // this used to write straight into contract.value, the exact same field
+  // setPaymentLines/renegotiatePaymentPlan silently overwrite with the sum
+  // of the plan's lines — whichever ran more recently won, with no warning
+  // if they disagreed. Now agreedValue is its own field: the explicit
+  // number Nay typed here, never touched by the line-sum calculators.
+  // contract.value stays what it always was — the calculated total from
+  // the actual payment lines. See renderContractValueSection for how a
+  // mismatch between the two is surfaced rather than silently resolved.
   setContractValue(id, value) {
     const db = load();
     const c = client(db, id);
-    c.onboarding.contract.value = value || null;
+    c.onboarding.contract.agreedValue = value || null;
     save(db);
   },
   advanceContractStatus(id, status) {
@@ -3403,10 +3335,21 @@ export const MockDB = {
   // of a payment that already existed keep its paid/pending status and
   // paidAt — regenerating the plan never silently un-pays something that
   // was already collected; a line with no matching id is a brand-new entry.
+  // Production Audit Remediation Pass (High 7): once the contract is signed
+  // (onboarding.contract.status === 'completed'), the agreed plan is a
+  // contractual baseline and must never be silently rewritten in place —
+  // that includes changing an already-paid line's amount and removing
+  // lines wholesale, not just typing new numbers over old ones. From that
+  // point on, the only door for changing the plan is renegotiatePaymentPlan
+  // below, which versions instead of overwriting. Before signing (still
+  // 'info_pending'/'info_received'/'contract_prepared'/etc.), this keeps
+  // behaving exactly as before — the plan hasn't been agreed to yet, so
+  // free editing is correct.
   setPaymentLines(id, lines) {
     const db = load();
     const c = client(db, id);
     const contract = c.onboarding.contract;
+    if (contract.status === 'completed') return { ok: false, error: 'plan_frozen' };
     const existingById = new Map((c.payments || []).map((p) => [p.id, p]));
     const cleaned = (lines || []).filter((l) => l.amount > 0);
     if (!cleaned.length) return null;
@@ -3431,8 +3374,63 @@ export const MockDB = {
     contract.paymentMethods = methods;
     contract.paymentMethod = methods[0] || null;
     save(db);
-    this.logActivity(id, 'payment_plan_set', `Plano de pagamento definido: ${cleaned.length} pagamento(s), total R$ ${contract.value.toLocaleString('pt-BR')}`);
+    this.logActivity(id, 'payment_plan_set', `Plano de pagamento definido: ${cleaned.length} pagamento(s), total ${contract.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
     return c.payments;
+  },
+  // Returns the frozen version history for a signed client's payment plan —
+  // empty until the first renegotiation. Version numbering starts at 1 for
+  // the originally-signed plan (captured the first time
+  // renegotiatePaymentPlan runs), so "Version 2" is always the first actual
+  // renegotiation, matching the spec's wording.
+  getPaymentPlanVersions(id) {
+    const c = client(load(), id);
+    return c.onboarding.paymentPlanVersions || [];
+  },
+  // Production Audit Remediation Pass (High 7): the ONLY way to change a
+  // signed client's payment plan. Admin-only (assistant is blocked — see
+  // authorization matrix: assistant never gets contractual/payment-plan
+  // renegotiation). Never overwrites the original in place — snapshots the
+  // current plan as the next version in history first (so "Version 1" is
+  // always recoverable), then applies the new lines the same way
+  // setPaymentLines does (preserving paid/pending status + paidAt for any
+  // line whose id is reused). aditivoNeeded is optional and purely
+  // informational for now, per the spec's "can remain optional for Admin
+  // to decide later" — no addendum document is generated automatically.
+  renegotiatePaymentPlan(id, lines, { reason = '', actorRole = 'admin', actorName = 'Nay', aditivoNeeded = false } = {}) {
+    if (actorRole !== 'admin') return { ok: false, error: 'not_authorized' };
+    const db = load();
+    const c = client(db, id);
+    const contract = c.onboarding.contract;
+    if (contract.status !== 'completed') return { ok: false, error: 'no_signed_plan_yet' };
+    const cleaned = (lines || []).filter((l) => l.amount > 0);
+    if (!cleaned.length) return { ok: false, error: 'empty_plan' };
+
+    if (!c.onboarding.paymentPlanVersions) c.onboarding.paymentPlanVersions = [];
+    const now = new Date().toISOString();
+    const nextVersion = c.onboarding.paymentPlanVersions.length + 1; // 1 = the plan as originally signed
+    c.onboarding.paymentPlanVersions.push({
+      version: nextVersion, lines: (c.payments || []).map((p) => ({ ...p })),
+      totalValue: contract.value, changedAt: now, changedBy: actorName, reason, aditivoNeeded,
+    });
+
+    const existingById = new Map((c.payments || []).map((p) => [p.id, p]));
+    c.payments = cleaned.map((l, i) => {
+      const existing = l.id && existingById.get(l.id);
+      return {
+        id: existing ? existing.id : `p${id}-${Date.now()}-${i}`,
+        dueDate: l.dueDate || new Date().toISOString().slice(0, 10),
+        amount: Number(l.amount) || 0,
+        method: l.method || null,
+        label: l.label || null,
+        status: existing ? existing.status : 'pending',
+        paidAt: existing ? existing.paidAt : null,
+      };
+    });
+    contract.value = cleaned.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    contract.installments = cleaned.length;
+    save(db);
+    this.logActivity(id, 'payment_plan_renegotiated', `Plano de pagamento renegociado (versão ${nextVersion + 1}) por ${actorName}${reason ? ' — ' + reason : ''}.`);
+    return { ok: true, payments: c.payments, version: nextVersion + 1 };
   },
   // Manual, one-off control over the schedule — for cases the generator
   // above doesn't cover (uneven amounts, an extra ad-hoc charge, fixing a
@@ -3445,7 +3443,7 @@ export const MockDB = {
     c.payments.push(payment);
     c.payments.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
     save(db);
-    this.logActivity(id, 'payment_added', `Parcela avulsa adicionada: R$ ${payment.amount.toLocaleString('pt-BR')} em ${dueDate}`);
+    this.logActivity(id, 'payment_added', `Parcela avulsa adicionada: ${payment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em ${dueDate}`);
     return payment;
   },
   removePayment(id, paymentId) {
@@ -4147,15 +4145,25 @@ export const MockDB = {
   },
 
   // --- Payments (per-client billing) ---
+  // Both getters apply deriveEffectiveStatus on every read (Production
+  // Audit Remediation Pass, Medium — real "Em Atraso" derivation): the
+  // stored status stays 'pending' until actually paid — overdue is a
+  // computed view recalculated fresh every time, so it can never go stale
+  // or need a manual "mark overdue" step, and a due-today payment is never
+  // prematurely flagged. Only 'pending' is ever elevated to 'overdue'; paid
+  // rows pass through untouched, as does an already-'overdue' row.
   getPayments(id = DEFAULT_CLIENT_ID) {
-    return client(load(), id).payments || [];
+    return (client(load(), id).payments || []).map((p) => ({ ...p, status: deriveEffectiveStatus(p.status, p.dueDate) }));
   },
   getAllPayments({ program } = {}) {
     const db = load();
     const all = [];
     Object.entries(db.clients).forEach(([id, c]) => {
       if (program && c.onboarding.contract.program !== program) return;
-      (c.payments || []).forEach((p) => all.push({ ...p, clientId: id, clientName: c.profile.fullName, program: c.onboarding.contract.program }));
+      (c.payments || []).forEach((p) => all.push({
+        ...p, status: deriveEffectiveStatus(p.status, p.dueDate),
+        clientId: id, clientName: c.profile.fullName, program: c.onboarding.contract.program,
+      }));
     });
     return all.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   },
@@ -4175,10 +4183,10 @@ export const MockDB = {
         date: new Date().toISOString(),
         status: 'upcoming',
         relatedStudentId: clientId,
-        topic: `Pagamento de R$ ${p.amount.toLocaleString('pt-BR')} confirmado`,
+        topic: `Pagamento de ${p.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} confirmado`,
         assignedTo: 'assistant',
         assistantPersona: 'ju',
-        assigneeNotes: `Parcela de R$ ${p.amount.toLocaleString('pt-BR')} (vencimento ${p.dueDate}) foi confirmada — emitir nota fiscal/recibo para a cliente.`,
+        assigneeNotes: `Parcela de ${p.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (vencimento ${p.dueDate}) foi confirmada — emitir nota fiscal/recibo para a cliente.`,
       });
     }
     return p;
@@ -4215,7 +4223,7 @@ export const MockDB = {
     p.sumupLinkUrl = url;
     p.linkSentAt = new Date().toISOString();
     save(db);
-    this.logActivity(clientId, 'payment_link_sent', `Link de pagamento enviado — R$ ${p.amount.toLocaleString('pt-BR')}`);
+    this.logActivity(clientId, 'payment_link_sent', `Link de pagamento enviado — ${p.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`);
     return p;
   },
   reportPaymentReceived(clientId, paymentId) {
@@ -4784,7 +4792,18 @@ export const MockDB = {
   // profile.phaseIndex; see admin/client-detail.js for the "Avançar Fase"
   // control that calls it, and getEncounterJourney/getClientJourney for
   // everywhere the resulting phase shows up for both her and the client.
-  setClientPhase(clientId, index) {
+  // Production Audit Remediation Pass (Critical 3): phase progression is
+  // Admin-only per the authorization matrix — an assistant must not be able
+  // to change it, including by calling this function directly (console,
+  // another future caller), not just by the UI button being hidden. MockDB
+  // is a pure client-side/localStorage layer with no server session to
+  // check against, so actorRole is the caller's own honesty, same as any
+  // other client-only code — it stops accidental/UI-bypass calls from
+  // legitimate app code, though it cannot stop someone editing their own
+  // browser's JS. The equivalent real-Supabase column (clients.phase_index)
+  // has a genuine DB-level guard: see migration enforce_admin_only_phase_index.
+  setClientPhase(clientId, index, actorRole = 'admin') {
+    if (actorRole !== 'admin') return null;
     const db = load();
     const c = db.clients[clientId];
     if (!c) return null;
@@ -5300,10 +5319,23 @@ export const MockDB = {
   // steps, blank questionnaire, no playbook yet), so it drops straight into
   // the existing Clientes/Onboarding pipeline with no special-casing needed
   // anywhere else in the app.
+  //
+  // Production Audit Remediation Pass (Critical 1): this used to be
+  // directly callable — via a now-removed admin UI shortcut, or from
+  // anywhere else — with no precondition, so a lead could become a client
+  // (and get real OS access) before cadastro/contrato existed. The only
+  // sanctioned caller today is activateLead, which already checks this same
+  // precondition before calling in. The check is duplicated here, not just
+  // there, so that fact stays true even if a future caller forgets to check
+  // first, is added elsewhere, or this is invoked directly (console,
+  // another button, anything) — "impossible to execute" outside the real
+  // flow, not merely hidden from the UI.
   convertLeadToClient(id, { tier = 'essential', programSlug = 'persea-essential' } = {}) {
     const db = load();
     const lead = db.leads.find((l) => l.id === id);
     if (!lead) return null;
+    if (lead.convertedToClientId) return lead.convertedToClientId; // idempotent — never a second client row
+    if (lead.onboardingStatus !== 'ready_for_activation') return null; // contract+onboarding must be done first
     const clientId = `client-${Date.now()}`;
     const now = new Date().toISOString();
     const nextWeek = new Date(); nextWeek.setDate(nextWeek.getDate() + 7);
