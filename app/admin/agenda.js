@@ -9,7 +9,7 @@ import {
   MockDB, AGENDA_TYPES, AGENDA_TYPE_LABEL, AGENDA_STATUSES, AGENDA_STATUS_LABEL,
   ASSISTANT_PERSONAS, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, formatDateTime, formatDate, toast, openModal } from '../shared/ui.js';
+import { renderShell, card, formatDateTime, toast, openModal } from '../shared/ui.js';
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 
@@ -122,9 +122,13 @@ async function loadGoogleEvents() {
   return data.events || [];
 }
 
-function renderGoogleCalendarCard(status, events) {
+// The pulled-in events themselves still show up as chips inside the month
+// grid below (see buildItemsByDay/calChip) — this card is just the
+// connection status, not a second listing of the same events. A duplicate
+// list here was redundant noise once the grid already shows them.
+function renderGoogleCalendarCard(status) {
   return card(`
-    <div class="flex items-center justify-between flex-wrap gap-3 mb-1">
+    <div class="flex items-center justify-between flex-wrap gap-3">
       <div>
         <p class="text-sm text-white/50 mb-1">Google Calendar</p>
         ${status.connected
@@ -133,21 +137,6 @@ function renderGoogleCalendarCard(status, events) {
       </div>
       ${status.connected ? '' : '<button id="connect-google-calendar" class="btn-primary">Connect Google Calendar</button>'}
     </div>
-    ${status.connected ? `
-      <div class="pt-3 mt-3" style="border-top:1px solid var(--line);">
-        <p class="text-xs uppercase mb-2" style="color:var(--muted); letter-spacing:.1em;">Já está no seu Google Calendar</p>
-        ${events.length ? `
-          <div class="space-y-1.5">
-            ${events.map((e) => `
-              <div class="flex items-center justify-between text-sm gap-3">
-                <span class="truncate">${e.summary}</span>
-                <span class="text-xs text-white/30 whitespace-nowrap">${e.all_day ? formatDate(`${e.start}T00:00:00`) : formatDateTime(e.start)}</span>
-              </div>
-            `).join('')}
-          </div>
-        ` : '<p class="text-xs text-white/20">Nenhum evento futuro encontrado.</p>'}
-      </div>
-    ` : ''}
   `, 'mb-6');
 }
 
@@ -545,7 +534,7 @@ async function render() {
       </div>
       <a href="recordings.html" class="btn-ghost">Gravações e Transcrições →</a>
     </div>
-    ${renderGoogleCalendarCard(calendarStatus, googleEvents)}
+    ${renderGoogleCalendarCard(calendarStatus)}
     ${renderFilters()}
     ${renderPendenciasStrip()}
     ${renderCalendar()}
