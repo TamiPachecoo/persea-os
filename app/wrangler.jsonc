@@ -1,0 +1,23 @@
+{
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/wrangler.json/",
+  // Static-assets-only Worker — no "main" entry script, because there is no
+  // backend logic to run here. Supabase (Postgres/Auth/Storage/Edge
+  // Functions) remains the entire backend; this Worker's only job is
+  // serving the existing static app/ files as-is.
+  "name": "persea-os",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    // Root directory in the Cloudflare dashboard is set to "app" (this
+    // file's own location), so "./" here means "everything in app/".
+    "directory": "./",
+    // Every internal link in this app already uses the exact .html
+    // filename (e.g. "admin/dashboard.html") — auto-trailing-slash keeps
+    // that working exactly as today while also tolerating a trailing
+    // slash, without rewriting anything.
+    "html_handling": "auto-trailing-slash",
+    // This is a real multi-page static site (60+ real .html routes), not a
+    // single-page app — a genuine 404 for an unknown path is correct here.
+    // Deliberately NOT "single-page-application".
+    "not_found_handling": "none"
+  }
+}
