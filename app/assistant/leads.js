@@ -30,13 +30,13 @@ const REAL_STATUS_CLASS = {
 async function loadRealStatuses(leadIds) {
   if (!leadIds.length) return new Map();
   const { data } = await supabase.from('clients')
-    .select('id, legacy_id, access_status, contracts(id, status, autentique_document_id)')
+    .select('id, legacy_id, access_status, is_demo, contracts(id, status, autentique_document_id)')
     .in('legacy_id', leadIds);
   const map = new Map();
   (data || []).forEach((c) => {
     const contract = Array.isArray(c.contracts) ? c.contracts[0] : c.contracts;
     map.set(c.legacy_id, {
-      clientId: c.id, accessStatus: c.access_status,
+      clientId: c.id, accessStatus: c.access_status, isDemo: c.is_demo,
       contractId: contract?.id, contractStatus: contract?.status, autentiqueDocId: contract?.autentique_document_id,
     });
   });
@@ -125,11 +125,13 @@ function commercialSummary(ct) {
 // uses — no trip to a different page required to find it.
 function realContractSection(l, real) {
   const gold = 'style="color:var(--gold);"';
-  // Demo clients (legacy_id "demo-...") never actually reach Autentique, so
-  // the real "Verificar Assinatura" button (which calls the real Autentique
-  // API) would just fail here — offer the same simulated sign-off contract.html
-  // has instead, so the whole walkthrough can stay on this one tab.
-  const isDemo = l.id.startsWith('demo-');
+  // clients.is_demo (a real column, not a legacy_id string guess) — any
+  // client flagged demo, including one bridged from an ordinary-looking
+  // test lead, never actually reaches Autentique, so the real "Verificar
+  // Assinatura" button (which calls the real Autentique API) would just
+  // fail here — offer the same simulated sign-off contract.html has
+  // instead, so the whole walkthrough can stay on this one tab.
+  const isDemo = !!real.isDemo;
   const canSign = real.autentiqueDocId && !['completed'].includes(real.contractStatus);
   return `
     <div class="pt-4" style="border-top:1px solid var(--line);">
@@ -313,11 +315,12 @@ async function render() {
       const id = btn.dataset.createAccess;
       const real = realStatuses.get(id);
       btn.disabled = true; btn.textContent = 'Enviando...';
-      // Demo clients skip the real invite e-mail (invite-client detects this
-      // itself from legacy_id, mock:true here is just explicit) — Supabase's
-      // built-in sender has a strict per-hour rate limit shared with every
-      // real invite, so repeated demo runs would otherwise burn through it.
-      const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: real.clientId, mock: id.startsWith('demo-') } });
+      // Demo clients skip the real invite e-mail (invite-client checks
+      // clients.is_demo itself server-side regardless of this hint) —
+      // Supabase's built-in sender has a strict per-hour rate limit shared
+      // with every real invite, so repeated demo runs would otherwise burn
+      // through it.
+      const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: real.clientId, mock: !!real.isDemo } });
       if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Criar Acesso'; return; }
       toast(data.mock
         ? (data.resent ? 'Acesso (demo) já existia — nada a reenviar.' : 'Acesso criado (demo) — sem e-mail real enviado, mas o login já funciona de verdade.')

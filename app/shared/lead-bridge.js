@@ -29,9 +29,17 @@ export async function ensureRealClientForLead(lead) {
   const fullName = reg.fullName || lead.fullName || 'Sem nome';
   const email = reg.email || lead.email || null;
 
+  // Preserves the existing "demo-" prefixed test-lead convention used for
+  // walkthroughs (demo-contract-1, lead-demo-signing, etc.) — those keep
+  // auto-tagging as demo with zero behavior change. A real lead created
+  // through the normal Condições Comerciais flow defaults to NOT demo, since
+  // most future leads are real deals; is_demo is a real column now (not a
+  // legacy_id string trick), so it can always be flipped later without
+  // touching any id anything else depends on.
   const { data: client, error: clientErr } = await supabase.from('clients').insert({
     legacy_id: lead.id, full_name: fullName, email, status: 'onboarding', tier,
     program_slug: lead.program || 'persea-essential', access_status: 'pending',
+    is_demo: lead.id.startsWith('demo-'),
   }).select('id').single();
   if (clientErr) return { error: clientErr.message };
 

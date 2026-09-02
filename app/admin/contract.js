@@ -57,7 +57,7 @@ if (!clientId) {
 
 async function load() {
   const [{ data: client }, { data: contract }] = await Promise.all([
-    supabase.from('clients').select('id, full_name, email, program_slug, access_status, status, legacy_id').eq('id', clientId).maybeSingle(),
+    supabase.from('clients').select('id, full_name, email, program_slug, access_status, status, legacy_id, is_demo').eq('id', clientId).maybeSingle(),
     supabase.from('contracts').select('*').eq('client_id', clientId).maybeSingle(),
   ]);
   if (contract) {
@@ -212,19 +212,26 @@ async function render() {
 
   const { data: partyInfo } = await supabase.from('party_info').select('*').eq('client_id', clientId).maybeSingle();
 
+  // Demo/test clients (clients.is_demo — every seeded/test client except
+  // Marina) get simulated send/sign buttons further down and skip the real
+  // invite e-mail here — every real send/invite counts against a real,
+  // shared quota (Autentique's monthly documents, Supabase's hourly email
+  // rate limit) or creates a real charge (SumUp, see sumup-create-checkout).
+  const isDemo = !!client.is_demo;
+
   const header = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Contrato</p>
-      <h1 class="text-3xl font-serif mb-2">${client.full_name}</h1>
-      <span class="badge badge-progress">${STATUS_LABEL[contract.status] || contract.status}</span>
+      <div class="flex items-center gap-3 mb-2 flex-wrap">
+        <h1 class="text-3xl font-serif">${client.full_name}</h1>
+        <span class="badge badge-progress">${STATUS_LABEL[contract.status] || contract.status}</span>
+      </div>
+      <label class="flex items-center gap-2 text-xs" style="color:${isDemo ? 'var(--terracotta)' : 'var(--muted)'};">
+        <input type="checkbox" id="toggle-is-demo" ${isDemo ? 'checked' : ''} />
+        Cliente de demonstração — nunca envia para Autentique ou cria cobrança real no SumUp
+      </label>
     </div>
   `;
-
-  // Demo/training clients (legacy_id prefixed "demo-") get simulated
-  // send/sign buttons further down and skip the real invite e-mail here —
-  // every real send/invite counts against a real, shared quota (Autentique's
-  // monthly documents, Supabase's hourly email rate limit).
-  const isDemo = !!client.legacy_id?.startsWith('demo-');
 
   const termsIncomplete = !contract.program || (contract.program === 'persea' && !contract.duration) || contract.value_cents == null;
   if (termsIncomplete) {
@@ -393,5 +400,17 @@ async function render() {
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// Delegated (not re-attached per render) since #toggle-is-demo lives inside
+// `header`, which every branch of render() includes — this way it works
+// regardless of which branch actually rendered, with no per-branch wiring.
+content.addEventListener('change', async (e) => {
+  if (e.target.id !== 'toggle-is-demo') return;
+  const checked = e.target.checked;
+  const { error } = await supabase.from('clients').update({ is_demo: checked }).eq('id', clientId);
+  if (error) { toast(error.message, { tone: 'error' }); e.target.checked = !checked; return; }
+  toast(checked ? 'Marcada como cliente de demonstração.' : 'Marcada como cliente real.');
+  render();
+});
 
 render();
