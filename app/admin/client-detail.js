@@ -1,5 +1,5 @@
 import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE, PROGRAMS, PROGRAM_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_DEFS, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, NF_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_BADGE_CLASS, ARCHETYPE_VISUAL_SETS, ARCHETYPE_VISUAL_SET_LABEL, ASSISTANT_PERSONA_LABEL, AGENDA_STATUS_LABEL, AGENDA_TYPE_LABEL, TIER_MAX_PHASE_INDEX, PREMIUM_ONLY_PHASE_INDEX, MENTOR_DELIVERABLE_STATUS_LABEL, MENTOR_DELIVERABLE_STATUS_BADGE_CLASS, ENCOUNTER_DEFS, BUSINESS_SURVEY_QUESTIONS, GUIDE_STATUS_LABEL, ENCOUNTER_PREP_CHECKLIST } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal, renderRecordingBlock } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
@@ -1779,6 +1779,27 @@ function renderScheduleRequestSection(n, enc) {
     </form>
   `, 'mb-6');
 }
+// The actual mock version of "link this encounter's Google Drive
+// recording/transcript to the client" — reuses the exact recording bundle
+// already tracked per meeting (see admin/recordings.js, blankMeetingRecording
+// in mock-db.js) via the same agendaItemId every E-tab already has, so
+// there's no second, parallel recording concept to keep in sync. Once the
+// real Drive connection exists (see the sharing-model note on Gravações),
+// this same card is what real file links would render into — the mock
+// data shape doesn't change, only where recordingUrl/transcriptUrl come from.
+function renderEncounterRecordingCard(enc) {
+  if (!enc.agendaItemId) return '';
+  const meeting = MockDB.getMeetingDetail(enc.agendaItemId);
+  if (!meeting || meeting.type !== 'individual_meeting') return '';
+  return card(`
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm text-white/50">Gravação da Reunião</p>
+      <a href="recording-detail.html?id=${meeting.id}" class="btn-text">Ver detalhes →</a>
+    </div>
+    ${renderRecordingBlock(meeting)}
+  `, 'mb-6');
+}
+
 function renderEncounterTab(n) {
   const def = ENCOUNTER_DEFS[n - 1];
   const program = MockDB.getClientProgram(clientId);
@@ -1801,6 +1822,7 @@ function renderEncounterTab(n) {
         ${enc.agendaItemId ? `<a href="agenda.html?item=${enc.agendaItemId}" class="btn-text">Abrir na Agenda</a>` : `<a href="agenda.html" class="btn-text">Ir para Agenda →</a>`}
       </div>
     `, 'mb-6')}
+    ${renderEncounterRecordingCard(enc)}
     ${renderScheduleRequestSection(n, enc)}
     ${renderEncounterExtra(n)}
     ${journeyPhase && (journeyPhase.activities.length || journeyPhase.mentorDeliverables.length) ? card(`

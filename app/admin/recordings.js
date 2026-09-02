@@ -32,11 +32,28 @@ function renderSyncSummary() {
       <p class="text-sm text-white/50">Sincronização com Google</p>
       <span class="text-xs" style="color:var(--muted);">Demonstração — integração ainda não conectada</span>
     </div>
-    <div class="grid sm:grid-cols-4 gap-4 text-sm">
+    <div class="grid sm:grid-cols-4 gap-4 text-sm mb-6">
       <div><p class="text-xs text-white/30 mb-1">Conta conectada</p><p>${s.connectedAccount}</p></div>
       <div><p class="text-xs text-white/30 mb-1">Última verificação</p><p>${s.lastCheckedAt ? formatDateTime(s.lastCheckedAt) : '—'}</p></div>
       <div><p class="text-xs text-white/30 mb-1">Próxima verificação</p><p>${s.nextCheckAt ? formatDateTime(s.nextCheckAt) : '—'}</p></div>
       <div><p class="text-xs text-white/30 mb-1">Status</p><p class="capitalize">${s.syncStatus.replace('_', ' ')} · ${s.attempts} tentativas</p></div>
+    </div>
+    <div class="pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-xs uppercase mb-3" style="color:var(--gold); letter-spacing:.1em;">⏸ Decisão pendente com a Nay — forma de compartilhamento</p>
+      <p class="text-xs text-white/30 mb-4">Quando conectarmos ao Google Drive de verdade, cada gravação precisa ser compartilhada com a cliente certa. Duas formas possíveis — a segurança é bem diferente entre elas:</p>
+      <div class="grid sm:grid-cols-2 gap-4 text-sm">
+        <div class="value-item-card">
+          <p class="font-medium mb-1">Opção A — Link público</p>
+          <p class="text-xs text-white/40 mb-2">"Qualquer pessoa com o link" pode assistir, sem precisar estar logada em nada.</p>
+          <p class="text-xs" style="color:var(--terracotta);">Mais simples, mas se o link vazar ou for encaminhado, qualquer um consegue abrir.</p>
+        </div>
+        <div class="value-item-card">
+          <p class="font-medium mb-1">Opção B — Restrito por e-mail (recomendado)</p>
+          <p class="text-xs text-white/40 mb-2">Compartilhado só com o e-mail da cliente — ela precisa estar logada numa Conta Google com esse e-mail para abrir.</p>
+          <p class="text-xs" style="color:var(--gold);">Mais privado — mas exige que ela tenha (ou crie) uma Conta Google com o e-mail cadastrado.</p>
+        </div>
+      </div>
+      <p class="text-xs text-white/20 mt-4">Verificação manual (Nay/assistente confere e confirma cada gravação antes dela ficar visível para a cliente) já está decidida — vale para as duas opções acima.</p>
     </div>
   `, 'mb-8');
 }
