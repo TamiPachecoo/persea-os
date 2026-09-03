@@ -80,6 +80,29 @@ function renderFilters() {
   `, 'mb-6');
 }
 
+// Assistant Painel removal: ported verbatim from assistant/queue.js's
+// meetingRequestRow — meeting requests assigned to her now live on her
+// Agenda, since that's what they are.
+function meetingRequestRow(r) {
+  return `
+    <div class="py-3 border-b border-white/5 last:border-0">
+      <p class="font-medium text-sm">${r.clientName}</p>
+      <p class="text-sm mt-1">${r.reason}</p>
+      <div class="flex items-center gap-2 mt-3">
+        <button data-resolve-request="${r.clientId}:${r.id}" class="btn-text">Marcar como concluída</button>
+      </div>
+    </div>
+  `;
+}
+function renderAssistantRequestsCard() {
+  const requests = MockDB.listAllMeetingRequests().filter((r) => r.assignedTo === 'assistant' && r.status !== 'done');
+  if (!requests.length) return '';
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Solicitações de Reunião</p>
+    ${requests.map(meetingRequestRow).join('')}
+  `, 'mb-6');
+}
+
 function renderPendenciasStrip() {
   const buckets = MockDB.getAgendaBuckets(agendaFilterPredicate);
   if (!buckets.pendencias.length) return '';
@@ -301,10 +324,20 @@ function render() {
       </div>
       <a href="recordings.html" class="btn-ghost">Recomendações de Conteúdo →</a>
     </div>
+    ${renderAssistantRequestsCard()}
     ${renderFilters()}
     ${renderPendenciasStrip()}
     ${renderCalendar()}
   `;
+
+  content.querySelectorAll('[data-resolve-request]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const [clientId, requestId] = btn.dataset.resolveRequest.split(':');
+      MockDB.resolveMeetingRequest(clientId, requestId);
+      toast('Solicitação marcada como concluída.');
+      render();
+    });
+  });
 
   content.querySelector('#filter-type').addEventListener('change', (e) => { filters.type = e.target.value; render(); });
   content.querySelector('#filter-completed').addEventListener('change', (e) => { filters.showCompleted = e.target.checked; render(); });

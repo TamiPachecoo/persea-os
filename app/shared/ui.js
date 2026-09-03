@@ -149,8 +149,12 @@ function onboardingGateBanner(active) {
   `;
 }
 
+// Painel removed — Agenda is Nay's landing page now: today's schedule,
+// pendências, and meeting requests (previously the Painel's one genuinely
+// unique piece) all live there (see admin/agenda.js's renderRequestsCard).
+// The rest of the old Painel was redundant with pages already in this nav
+// (clients awaiting info -> CRM, overdue payments -> Financeiro).
 const ADMIN_NAV = [
-  ['dashboard.html', 'Painel'],
   ['agenda.html', 'Agenda'],
   ['crm.html', 'CRM'],
   ['content.html', 'Conteúdos'],
@@ -159,15 +163,16 @@ const ADMIN_NAV = [
   ['reports.html', 'Relatórios'],
 ];
 
-// The assistant's own mirror of Nay's admin nav — same shape (Painel,
-// Agenda, Clientes, Financeiro), scoped to her actual duties. Deliberately
-// not the full admin CRM: no Leads, no business-wide revenue/Relatórios —
+// The assistant's own mirror of Nay's admin nav — same shape (Agenda,
+// Clientes, Financeiro), scoped to her actual duties. Deliberately not the
+// full admin CRM: no Leads, no business-wide revenue/Relatórios —
 // Templates replaces those with her real day-to-day: the Canva source
 // material she works from, per client-workspace, before uploading what she
 // builds straight onto that client's own profile (no separate "delivered
 // projects" library to browse — the client's CRM record is that record now).
+// Painel removed — Agenda is her landing page now (meeting requests
+// assigned to her, pendências, and her schedule all live there).
 const ASSISTANT_NAV = [
-  ['queue.html', 'Painel'],
   ['agenda.html', 'Agenda'],
   ['leads.html', 'Cadastros'],
   ['clients.html', 'Clientes'],

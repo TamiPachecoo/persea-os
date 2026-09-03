@@ -1,15 +1,16 @@
-// Agenda — Nay's real calendar, laid out the way Google Calendar's month
-// view is: weekday header, a grid of day squares, click a day to add
-// something on it, click an item to open it. The difference from Google
-// Calendar: when an item here is linked to a client (relatedStudentId),
-// that client sees it on her own dashboard (see MockDB.getUpcomingMeetingForClient
-// + client/dashboard.js), and anything typed into the meeting notes while
-// it happens lives in this OS instead of staying trapped in Nay's head/inbox.
+// Agenda — Nay's real calendar (and, since the Painel was removed, her
+// landing page), laid out the way Google Calendar's month view is: weekday
+// header, a grid of day squares, click a day to add something on it, click
+// an item to open it. The difference from Google Calendar: when an item
+// here is linked to a client (relatedStudentId), that client sees it on
+// her own Encontros page (see MockDB.getUpcomingMeetingForClient), and
+// anything typed into the meeting notes while it happens lives in this OS
+// instead of staying trapped in Nay's head/inbox.
 import {
   MockDB, AGENDA_TYPES, AGENDA_TYPE_LABEL, AGENDA_STATUSES, AGENDA_STATUS_LABEL,
-  ASSISTANT_PERSONAS, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL,
+  ASSISTANT_PERSONAS, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, ENCOUNTER_DEFS, ENCOUNTER_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, formatDateTime, toast, openModal } from '../shared/ui.js';
+import { renderShell, card, formatDateTime, formatDate, toast, openModal } from '../shared/ui.js';
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 
@@ -162,6 +163,78 @@ function renderFilters() {
         <input type="checkbox" id="filter-completed" ${filters.showCompleted ? 'checked' : ''} /> Mostrar concluídos/cancelados
       </label>
       <button id="new-agenda-item" class="btn-primary ml-auto" style="padding:9px 18px;font-size:12.5px;">+ Novo Item</button>
+    </div>
+  `, 'mb-6');
+}
+
+// Admin Painel removal: ported verbatim from admin/dashboard.js's
+// renderRequestsCard/encounterRequestRow — meeting requests (free-form
+// MockDB.requestMeeting + structured encounter-time-picking) now live on
+// Agenda, since that's what they are.
+const REQUEST_STATUS_LABEL = {
+  pending: ['Aguardando triagem', 'badge-locked'],
+  assigned: ['Agendada', 'badge-progress'],
+  done: ['Concluída', 'badge-completed'],
+};
+function encounterRequestRow(r) {
+  const client = MockDB.getClient(r.clientId);
+  const def = ENCOUNTER_DEFS[r.encounterNumber - 1];
+  const detail = r.status === 'awaiting_nay_confirmation'
+    ? `Horário escolhido: ${formatDateTime(r.selectedTime)}`
+    : r.status === 'client_unavailable' ? 'Nenhum horário ofertado funcionou'
+    : 'Aguardando a cliente escolher um horário';
+  const needsNay = r.status !== 'awaiting_client_response';
+  return `
+    <div class="py-3 border-b border-white/5 last:border-0">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="font-medium text-sm">${client ? client.fullName : r.clientId}</p>
+          <p class="text-sm mt-1">${ENCOUNTER_LABEL[def.slug]} — ${detail}</p>
+        </div>
+        <span class="badge ${needsNay ? 'badge-progress' : 'badge-locked'}">${needsNay ? 'Aguardando você' : 'Aguardando a cliente'}</span>
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <a href="client-detail.html?id=${r.clientId}&tab=e${r.encounterNumber}" class="btn-text">Abrir</a>
+      </div>
+    </div>
+  `;
+}
+function renderRequestsCard() {
+  const pending = MockDB.listAllMeetingRequests().filter((r) => r.status !== 'done');
+  const encounterPending = MockDB.listAllEncounterRequests().filter((r) => !['confirmed', 'cancelled'].includes(r.status));
+  if (!pending.length && !encounterPending.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm text-white/50">Solicitações de Reunião</p>
+      <span class="text-xs" style="color:var(--muted);">${pending.length + encounterPending.length} em aberto</span>
+    </div>
+    <div class="space-y-4">
+      ${encounterPending.map(encounterRequestRow).join('')}
+      ${pending.map((r) => `
+        <div class="py-3 border-b border-white/5 last:border-0">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="font-medium text-sm">${r.clientName}</p>
+              <p class="text-sm mt-1">${r.reason}</p>
+              <p class="text-xs mt-1" style="color:var(--muted);">${formatDate(r.createdAt)}</p>
+            </div>
+            <span class="badge ${REQUEST_STATUS_LABEL[r.status][1]}">${REQUEST_STATUS_LABEL[r.status][0]}</span>
+          </div>
+          <div class="flex items-center gap-2 mt-3">
+            ${r.status === 'pending' ? `
+              <label class="text-xs" style="color:var(--muted);">Responsável</label>
+              <select data-assign-select="${r.clientId}:${r.id}" class="field" style="width:auto; padding:5px 10px; font-size:12.5px;">
+                <option value="" selected disabled>Escolher…</option>
+                <option value="nay">Nay</option>
+                <option value="assistant">Assistente</option>
+              </select>
+            ` : `
+              <span class="text-xs" style="color:var(--muted);">Com ${ASSIGNEE_LABEL[r.assignedTo]}</span>
+              <button data-resolve="${r.clientId}:${r.id}" class="btn-text">Marcar como concluída</button>
+            `}
+          </div>
+        </div>
+      `).join('')}
     </div>
   `, 'mb-6');
 }
@@ -535,6 +608,7 @@ async function render() {
       <a href="recordings.html" class="btn-ghost">Gravações e Transcrições →</a>
     </div>
     ${renderGoogleCalendarCard(calendarStatus)}
+    ${renderRequestsCard()}
     ${renderFilters()}
     ${renderPendenciasStrip()}
     ${renderCalendar()}
@@ -554,6 +628,25 @@ async function render() {
       return;
     }
     window.location.href = data.url;
+  });
+
+  content.querySelectorAll('[data-assign-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const [clientId, requestId] = select.dataset.assignSelect.split(':');
+      const assignee = select.value;
+      if (!assignee) return;
+      MockDB.assignMeetingRequest(clientId, requestId, assignee);
+      toast(`Reunião atribuída a ${ASSIGNEE_LABEL[assignee]}.`);
+      render();
+    });
+  });
+  content.querySelectorAll('[data-resolve]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const [clientId, requestId] = btn.dataset.resolve.split(':');
+      MockDB.resolveMeetingRequest(clientId, requestId);
+      toast('Solicitação marcada como concluída.');
+      render();
+    });
   });
 
   content.querySelector('#filter-type').addEventListener('change', (e) => { filters.type = e.target.value; render(); });

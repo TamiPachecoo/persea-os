@@ -11,7 +11,7 @@ import { renderShell, card, badgeFromMaps, initialsAvatar, formatDateTime, isVal
 import { requireProfile } from '../shared/supabase-auth.js';
 
 if (!(await requireProfile('assistant'))) throw new Error('not authorized');
-document.body.innerHTML = renderShell({ role: 'assistant', active: 'queue.html', title: 'Recomendações de Conteúdo' });
+document.body.innerHTML = renderShell({ role: 'assistant', active: 'agenda.html', title: 'Recomendações de Conteúdo' });
 const content = document.getElementById('app-content');
 
 const FILTERS = [
@@ -56,7 +56,7 @@ function render() {
   const filtered = activeFilter ? all.filter((m) => m.filterBucket === activeFilter) : all;
 
   content.innerHTML = `
-    <a href="queue.html" class="btn-text mb-6 inline-block">&larr; Painel</a>
+    <a href="agenda.html" class="btn-text mb-6 inline-block">&larr; Agenda</a>
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Recomendações de Conteúdo</p>
       <h1 class="text-3xl font-serif">Gravações para Revisar</h1>

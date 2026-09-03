@@ -16,7 +16,7 @@ import { requireProfile } from '../shared/supabase-auth.js';
 
 if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 const meetingId = new URLSearchParams(location.search).get('id');
-document.body.innerHTML = renderShell({ role: 'assistant', active: 'queue.html' });
+document.body.innerHTML = renderShell({ role: 'assistant', active: 'agenda.html' });
 const content = document.getElementById('app-content');
 
 function openFlagModal(m) {
