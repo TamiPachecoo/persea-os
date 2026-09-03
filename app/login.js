@@ -15,7 +15,7 @@ const next = params.get('next');
 const ROLE_HOME = {
   admin: '/admin/dashboard.html',
   assistant: '/assistant/queue.html',
-  client: '/client/dashboard.html',
+  client: '/client/program.html', // Painel removed — Minha Jornada is her landing page now
 };
 
 function goHome(role) {

@@ -5311,7 +5311,8 @@ export const MockDB = {
     c.profile.status = 'active'; // she already paid + signed — never "onboarding" from her own side
     // Invitation-based access (see item 8): she gets a "create your access"
     // interstitial the first time the client side loads for her, instead of
-    // a visible password. See client/dashboard.js + createClientAccess.
+    // a visible password. See shared/client-context.js's
+    // renderAccessPendingGate + createClientAccess below.
     c.profile.accessStatus = 'pending';
     c.onboarding.clientInfo = {
       ...c.onboarding.clientInfo, ...reg, submitted: true,

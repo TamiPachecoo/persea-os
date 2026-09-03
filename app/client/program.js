@@ -1,14 +1,16 @@
-// Program Hub — the client's complete mentoring journey in one place.
-// Every activity card reads its status live from MockDB.getProgramActivities,
-// which itself computes status from the *real* underlying feature (the
-// questionnaire, the assessment step, brandDirection, value-analysis, etc.)
-// — never a separate progress table. That's what keeps this page and the
-// Painel from ever showing two different numbers for the same client.
+// Program Hub — the client's complete mentoring journey in one place, and
+// (since the Painel was removed) her landing page. Every activity card
+// reads its status live from MockDB.getProgramActivities, which itself
+// computes status from the *real* underlying feature (the questionnaire,
+// the assessment step, brandDirection, value-analysis, etc.) — never a
+// separate progress table, so this page can never show a different number
+// than the feature it's summarizing.
 import { MockDB, TIER_PHASES } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, progressBar, toast, formatDate,
   initClientSwitcher, isValidHttpUrl, externalLinkAttrs, lockedStateCard, isNonProduction,
+  renderPhaseTracker, wirePhaseTrackerNav,
 } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext();
@@ -266,6 +268,8 @@ function render() {
       <p class="text-xs text-white/30">${program.durationMonths ? `Duração: ${program.durationMonths} meses` : 'Duração a confirmar com a Nay'}</p>
     </div>
 
+    ${renderPhaseTracker(MockDB.getPhaseProgress(clientId))}
+
     ${card(`
       <div class="grid sm:grid-cols-3 gap-6 mb-5">
         <div>
@@ -315,12 +319,18 @@ function render() {
   content.querySelectorAll('[data-dev-phase]').forEach((btn) => {
     btn.addEventListener('click', () => { MockDB.setClientPhase(clientId, Number(btn.dataset.devPhase)); render(); });
   });
+  // No hrefBase — the tracker's own phase sections live on this same page
+  // now (this used to be dashboard.js-only, navigating here via hrefBase;
+  // now the tracker and the sections it points at are both right here, so
+  // a click just opens/scrolls within the page — see wirePhaseTrackerNav).
+  wirePhaseTrackerNav(content);
 }
 
 render();
 
-// Arriving from the Painel's tracker (or any link with #phase-section-N) —
-// open that phase's section and scroll to it once the page has settled.
+// Arriving via a direct #phase-section-N link (e.g. sent by Nay/assistente,
+// or an older bookmark) — open that phase's section and scroll to it once
+// the page has settled.
 if (location.hash.startsWith('#phase-section-')) {
   const target = content.querySelector(location.hash);
   if (target) {

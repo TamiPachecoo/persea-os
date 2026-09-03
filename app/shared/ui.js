@@ -105,11 +105,13 @@ export function statusBadge(status) {
 // still exist and are reachable via links from Painel/the Hub; they're just
 // no longer top-level nav items. The Program Hub's own label is dynamic
 // (the client's actual enrolled program name), computed in renderShell.
+// Client Painel removal: "Resumo" (dashboard.html) is gone — Minha Jornada
+// is her landing page now (see login.js/set-password.js), so there's no
+// separate "home" nav entry to keep.
 function clientNav() {
   const gated = MockDB.needsOnboardingCompletion(getActiveClientId());
   const lock = gated ? '🔒 ' : '';
   return [
-    ['dashboard.html', 'Resumo'],
     ['program.html', `${lock}Minha Jornada`],
     ['encontros.html', 'Encontros'],
     ['content.html', `${lock}Conteúdos`],
@@ -123,11 +125,13 @@ function clientNav() {
 // -block their real content behind the same check (see program.js/
 // content.js), this banner is just what makes the restriction visible
 // everywhere else too. Suppressed on onboarding.html itself (no point
-// telling her to go where she already is) and on dashboard.html (which
-// already carries its own more finely-staged onboarding banner — see
-// renderOnboardingBanner in client/dashboard.js).
+// telling her to go where she already is). Now also shown on program.html
+// (Minha Jornada, her landing page since the Painel was removed) — it used
+// to be excluded there in favor of dashboard.js's own more finely-staged
+// banner, which no longer exists; program.js's lockedStateCard still
+// handles the real content block underneath.
 function onboardingGateBanner(active) {
-  if (active === 'onboarding.html' || active === 'dashboard.html') return '';
+  if (active === 'onboarding.html') return '';
   const activeId = getActiveClientId();
   if (!MockDB.needsOnboardingCompletion(activeId)) return '';
   const stage = MockDB.getOnboarding(activeId).contract.status;
@@ -807,11 +811,12 @@ export function wirePhaseTrackerNav(root, { hrefBase } = {}) {
   });
 }
 
-// Encounter-scheduling requests — shared between Resumo (dashboard.js) and
-// Encontros (encontros.js) so both ever show the exact same set/state for
-// a request, never independently-drifting copies. Covers every open
-// status: Nay's offered times to pick from, the decline-with-observation
-// path when none work, and the two "waiting on Nay now" states, read-only.
+// Encounter-scheduling requests — shown on Encontros (encontros.js); used to
+// also appear on the Painel before it was removed, kept as a shared helper
+// so any future page never risks an independently-drifting copy. Covers
+// every open status: Nay's offered times to pick from, the
+// decline-with-observation path when none work, and the two "waiting on
+// Nay now" states, read-only.
 export function renderEncounterRequestsCard(clientId) {
   const requests = MockDB.getEncounterRequests(clientId).filter((r) => !['confirmed', 'cancelled'].includes(r.status));
   if (!requests.length) return '';

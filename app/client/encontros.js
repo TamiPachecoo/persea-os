@@ -6,12 +6,25 @@
 // client's own, via MockDB.getClientMeetingsWithRecording's clientId filter.
 import { MockDB, AGENDA_TYPE_LABEL, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
-import { renderShell, card, formatDateTime, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock, renderEncounterRequestsCard, wireEncounterRequestForms } from '../shared/ui.js';
+import { renderShell, card, formatDateTime, formatDate, toast, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock, renderEncounterRequestsCard, wireEncounterRequestForms } from '../shared/ui.js';
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥', online_event: '🌐', photo_review: '📸',
 };
 const AGENDA_STATUS_BADGE = { upcoming: 'badge-progress', completed: 'badge-completed', rescheduled: 'badge-locked', cancelled: 'badge-locked' };
+// Client Painel removal: this free-form "Precisa tirar uma dúvida?" request
+// (MockDB.requestMeeting/getMeetingRequests) used to live on the Painel —
+// ported here verbatim since Encontros is now where every meeting-related
+// action lives, alongside the structured encounter-time-picking card above
+// (renderEncounterRequestsCard, a separate flow/data model already shared
+// with this page). See admin/dashboard.js's renderRequestsCard and
+// assistant/queue.js for how Nay/the assistant triage these.
+const MEETING_STATUS_LABEL = {
+  pending: ['Aguardando triagem', 'badge-locked'],
+  assigned: ['Reunião agendada', 'badge-progress'],
+  done: ['Concluída', 'badge-completed'],
+};
+let showRequestForm = false;
 
 const __clientCtx = await getCurrentClientContext();
 if (!__clientCtx) throw new Error('not authorized');
@@ -71,6 +84,61 @@ function meetingCard(it, recordingByMeetingId) {
   `, 'mb-5');
 }
 
+function renderMeetingRequestCard() {
+  const mount = document.getElementById('meeting-request-card');
+  const requests = MockDB.getMeetingRequests(clientId);
+
+  mount.innerHTML = card(`
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm text-white/50">Precisa tirar uma dúvida?</p>
+      ${!showRequestForm ? `<button id="toggle-request" class="btn-ghost">Solicitar Reunião</button>` : ''}
+    </div>
+    ${showRequestForm ? `
+      <div class="mt-4">
+        <textarea id="request-reason" rows="3" class="field" placeholder="Conte rapidamente o que você gostaria de discutir..."></textarea>
+        <div class="flex items-center gap-3 mt-3">
+          <button id="send-request" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar Solicitação</button>
+          <button id="cancel-request" class="btn-text">Cancelar</button>
+        </div>
+      </div>
+    ` : ''}
+    ${requests.length ? `
+      <div class="mt-5 space-y-2">
+        ${requests.map((r) => {
+          const [label, badgeClass] = MEETING_STATUS_LABEL[r.status];
+          const who = r.assignedTo === 'nay' ? ' · com a Nay' : r.assignedTo === 'assistant' ? ' · com a assistente' : '';
+          return `
+            <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+              <div>
+                <p class="text-sm">${r.reason}</p>
+                <p class="text-xs" style="color:var(--muted);">${formatDate(r.createdAt)}${who}</p>
+              </div>
+              <span class="badge ${badgeClass}">${label}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : ''}
+  `);
+
+  document.getElementById('toggle-request')?.addEventListener('click', () => {
+    showRequestForm = true;
+    renderMeetingRequestCard();
+  });
+  document.getElementById('cancel-request')?.addEventListener('click', () => {
+    showRequestForm = false;
+    renderMeetingRequestCard();
+  });
+  document.getElementById('send-request')?.addEventListener('click', () => {
+    const text = document.getElementById('request-reason').value.trim();
+    if (!text) { toast('Escreva um breve motivo antes de enviar.', { tone: 'error' }); return; }
+    MockDB.requestMeeting(clientId, text);
+    showRequestForm = false;
+    toast('Solicitação enviada! Nay ou a assistente vão entrar em contato.');
+    renderMeetingRequestCard();
+  });
+}
+
 function render() {
   const items = MockDB.getAgendaItemsForClient(clientId).filter((it) => MEETING_TYPES.has(it.type));
   const recordingByMeetingId = new Map(MockDB.getClientMeetingsWithRecording(clientId).map((m) => [m.id, m]));
@@ -84,6 +152,7 @@ function render() {
       <h1 class="text-3xl font-serif">Seus Encontros</h1>
     </div>
     ${renderEncounterRequestsCard(clientId)}
+    <div id="meeting-request-card" class="mb-8"></div>
     ${usageSummary()}
     <p class="text-xs uppercase mb-4" style="color:var(--muted); letter-spacing:.12em;">Próximos</p>
     ${upcoming.length ? upcoming.map((it) => meetingCard(it, recordingByMeetingId)).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado no momento — Nay avisa por aqui assim que marcar o próximo.</p>', 'mb-5')}
@@ -95,6 +164,7 @@ function render() {
   `;
 
   wireEncounterRequestForms(content, render);
+  renderMeetingRequestCard();
 }
 
 render();

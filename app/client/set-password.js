@@ -39,5 +39,5 @@ document.getElementById('set-password-form').addEventListener('submit', async (e
   const { error } = await supabase.auth.updateUser({ password });
   if (error) { toast(error.message, { tone: 'error' }); return; }
   toast('Senha criada!');
-  location.href = 'dashboard.html';
+  location.href = 'program.html'; // Painel removed — Minha Jornada is her landing page now
 });

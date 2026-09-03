@@ -30,6 +30,32 @@ function renderNotice(message, detail) {
   `;
 }
 
+// Client Painel removal: this was previously the last thing client/
+// dashboard.js rendered (inside the shell, after renderShell already ran),
+// since dashboard.html was guaranteed to be the first page every freshly-
+// activated/invited client landed on. Now that no single client page is
+// guaranteed to be "first" in that same way, this lives here instead — the
+// one funnel every client page already calls before rendering anything —
+// so it fires correctly regardless of which page she lands on. Renders
+// before the shell (no nav/switcher yet — she hasn't really "entered" the
+// app), same full-takeover convention as renderNotice above.
+function renderAccessPendingGate(clientId) {
+  document.body.innerHTML = `
+    <div class="min-h-[60vh] flex items-center justify-center">
+      <div class="max-w-md w-full text-center">
+        <p class="eyebrow mb-4">Persea</p>
+        <h1 class="font-serif text-3xl mb-4">Bem-vinda ao Persea</h1>
+        <p class="text-sm mb-8" style="color:var(--muted); line-height:1.7;">Seu espaço está pronto. Crie seu acesso para começar sua jornada.</p>
+        <button id="create-access" class="btn-primary" style="padding:12px 28px;font-size:13.5px;">Criar meu acesso</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('create-access').addEventListener('click', () => {
+    MockDB.createClientAccess(clientId);
+    location.reload();
+  });
+}
+
 // Returns { clientId, mode: 'demo' | 'production', profile } — profile is
 // null in demo (no real session involved there). Returns null if this
 // function has already redirected/rendered a stop state (no real session,
@@ -37,18 +63,26 @@ function renderNotice(message, detail) {
 // callers should `throw new Error('not authorized')` immediately after a
 // null result, same convention as requireProfile itself.
 export async function getCurrentClientContext(loginPath = '../login.html') {
-  if (!isProductionEnvironment()) {
-    return { clientId: getActiveClientId(), mode: 'demo', profile: null };
+  let clientId;
+  let profile = null;
+  const mode = isProductionEnvironment() ? 'production' : 'demo';
+  if (mode === 'demo') {
+    clientId = getActiveClientId();
+  } else {
+    profile = await requireProfile('client', loginPath);
+    if (!profile) return null; // requireProfile already redirected to login
+    if (!profile.client_id) {
+      renderNotice(
+        'Sua conta ainda não está vinculada a um cadastro de cliente.',
+        'Fale com a equipe PERSEA para concluir sua ativação.',
+      );
+      return null;
+    }
+    clientId = profile.client_id;
   }
-  const profile = await requireProfile('client', loginPath);
-  if (!profile) return null; // requireProfile already redirected to login
-  if (!profile.client_id) {
-    renderNotice(
-      'Sua conta ainda não está vinculada a um cadastro de cliente.',
-      'Fale com a equipe PERSEA para concluir sua ativação.',
-    );
-    return null;
-  }
+
+  const client = MockDB.getClient(clientId);
+
   // Known, deliberate limitation (see the Final Core Production
   // Architecture Pass report): the rich client journey experience
   // (dashboard, program, questionnaire, playbook, etc.) still reads
@@ -57,13 +91,24 @@ export async function getCurrentClientContext(loginPath = '../login.html') {
   // those ~20 pages crash on `undefined.someProperty`, this is the one
   // place that catches it and shows an honest "not ready yet" notice
   // instead of a broken page. Remove this check page-by-page as each one
-  // is actually converted to read its real Supabase equivalent.
-  if (!MockDB.getClient(profile.client_id)) {
+  // is actually converted to read its real Supabase equivalent. Demo mode
+  // never hits this — every demo client always exists in MockDB.
+  if (mode === 'production' && !client) {
     renderNotice(
       'Esta área ainda está sendo preparada para clientes reais.',
       'Volte em breve — a equipe PERSEA foi avisada.',
     );
     return null;
   }
-  return { clientId: profile.client_id, mode: 'production', profile };
+
+  // Client Painel removal: this used to only ever fire on client/
+  // dashboard.js, guaranteed to be the first page a freshly-activated
+  // client saw. Checked here instead so it still fires correctly no matter
+  // which client page she lands on first — see renderAccessPendingGate.
+  if (client?.accessStatus === 'pending') {
+    renderAccessPendingGate(clientId);
+    return null;
+  }
+
+  return { clientId, mode, profile };
 }
