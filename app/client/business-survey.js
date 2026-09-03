@@ -7,10 +7,13 @@
 // Once submitted, this opens straight into "just the answers" — same rule
 // as Extração de Marca (questionnaire.js) — editing is an explicit choice,
 // not the default view.
-import { MockDB, getActiveClientId, BUSINESS_SURVEY_QUESTIONS } from '../shared/mock-db.js';
+import { MockDB, BUSINESS_SURVEY_QUESTIONS } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, formatDateTime } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Pesquisa de Precificação' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

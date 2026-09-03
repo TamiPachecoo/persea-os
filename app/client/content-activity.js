@@ -2,10 +2,13 @@
 // journey. Distinct from content.html (the Conteúdos gateway to Hubla):
 // this is a submission/feedback shell, not a lesson library. Kept
 // deliberately simple per spec — no content methodology invented here.
-import { MockDB, getActiveClientId, PROGRAM_ACTIVITY_STATUS_LABEL, PROGRAM_ACTIVITY_STATUS_BADGE_CLASS } from '../shared/mock-db.js';
+import { MockDB, PROGRAM_ACTIVITY_STATUS_LABEL, PROGRAM_ACTIVITY_STATUS_BADGE_CLASS } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, formatDateTime } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Conteúdo' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

@@ -2,10 +2,13 @@
 // docs/PERSEA_METHODOLOGY.md §2-3: client info -> contract -> signature ->
 // WhatsApp milestone -> resources unlock -> Phase 1. Conceptual UI only;
 // no real contract generation, e-signature, or WhatsApp integration.
-import { MockDB, getActiveClientId, ONBOARDING_STAGE_LABEL, CONTRACT_DURATION_LABEL, WHATSAPP_STATUS_LABEL } from '../shared/mock-db.js';
+import { MockDB, ONBOARDING_STAGE_LABEL, CONTRACT_DURATION_LABEL, WHATSAPP_STATUS_LABEL } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, stepEyebrow, initClientSwitcher } from '../shared/ui.js';
 
-const activeClientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'onboarding.html', title: 'Onboarding' });
 initClientSwitcher();
 

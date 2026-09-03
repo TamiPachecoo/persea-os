@@ -3,7 +3,8 @@
 // live in program.js, this page only surfaces a summary + the one thing to
 // do next. Both read the exact same MockDB.getProgramActivities/
 // getProgramProgress, so they can never disagree with each other.
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, formatDateTime, formatDate, toast,
   initClientSwitcher, externalLinkAttrs, isValidHttpUrl,
@@ -18,8 +19,9 @@ const MEETING_STATUS_LABEL = {
 };
 
 let showRequestForm = false;
-const activeClientId = getActiveClientId();
-
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'dashboard.html' });
 initClientSwitcher();
 

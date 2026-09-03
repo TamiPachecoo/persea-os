@@ -4,13 +4,16 @@
 // Deliberately shows no locked/unlocked state, no progress bar, no
 // completion %, no "next lesson", no watched status — Persea OS has no way
 // of knowing what happened inside Hubla, and the UI must not imply it does.
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl,
   contentCardInner, lockedStateCard,
 } from '../shared/ui.js';
 
-const activeClientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'content.html', title: 'Conteúdos' });
 initClientSwitcher();
 

@@ -2,6 +2,7 @@ import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_ST
 import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal, renderRecordingBlock, brl } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
+import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
   REVIEW_STATUSES, REVIEW_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
@@ -478,20 +479,33 @@ async function hydrateRealFinancialSummary() {
     el.innerHTML = card(`<p class="text-xs" style="color:var(--terracotta);">⚠ Esta cliente ainda não tem registro real no Supabase — os valores de Pagamentos abaixo são só demonstração local, não um pagamento persistente.</p>`, 'mb-6');
     return;
   }
-  const [{ data: contract }, { data: payments }] = await Promise.all([
-    supabase.from('contracts').select('value_cents').eq('client_id', realClient.id).maybeSingle(),
-    supabase.from('payments').select('amount_cents, status').eq('client_id', realClient.id),
+  const { data: contract } = await supabase.from('contracts').select('id, value_cents').eq('client_id', realClient.id).maybeSingle();
+  const [{ data: payments }, { lines, error: linesErr }] = await Promise.all([
+    supabase.from('payments').select('amount_cents, status').eq('client_id', realClient.id).eq('provider', 'sumup'),
+    contract?.id ? loadActiveObligations({ contractId: contract.id }) : Promise.resolve({ lines: [] }),
   ]);
   const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  // Recebido: confirmed real payments, a fact about money movement — Final
+  // Core Production Architecture Pass, Part 3. A Receber/Em Atraso: the
+  // contractual obligation itself (current signed plan) minus confirmed
+  // allocations, never "payments where status is pending/overdue" — a
+  // client can owe money for an installment Nay never generated a SumUp
+  // link for at all.
   const recebido = (payments || []).filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
-  const aReceber = (payments || []).filter((p) => ['pending', 'overdue'].includes(p.status)).reduce((s, p) => s + p.amount_cents, 0);
+  const { aReceberCents, emAtrasoCents } = summarizeObligations(lines || []);
+  const planTotal = (lines || []).reduce((s, l) => s + l.amount_cents, 0);
+  const agreedVsPlanMismatch = contract?.value_cents != null && lines?.length && Math.abs(planTotal - contract.value_cents) >= 1;
   el.innerHTML = card(`
     <p class="text-sm text-white/50 mb-3">Financeiro Real — Sistema Supabase</p>
-    <div class="grid sm:grid-cols-3 gap-4 text-sm">
+    <div class="grid sm:grid-cols-4 gap-4 text-sm mb-3">
       <div><p class="text-white/40 text-xs mb-1">Valor Contratado</p><p>${contract?.value_cents ? brlCents(contract.value_cents) : '—'}</p></div>
       <div><p class="text-white/40 text-xs mb-1">Recebido</p><p>${brlCents(recebido)}</p></div>
-      <div><p class="text-white/40 text-xs mb-1">A Receber</p><p>${brlCents(aReceber)}</p></div>
+      <div><p class="text-white/40 text-xs mb-1">A Receber</p><p>${linesErr ? '—' : brlCents(aReceberCents)}</p></div>
+      <div><p class="text-white/40 text-xs mb-1">Em Atraso</p><p style="${emAtrasoCents ? 'color:var(--terracotta);' : ''}">${linesErr ? '—' : brlCents(emAtrasoCents)}</p></div>
     </div>
+    ${agreedVsPlanMismatch ? `
+      <p class="text-xs" style="color:var(--terracotta);">⚠ Valor acordado (${brlCents(contract.value_cents)}) e soma do plano assinado (${brlCents(planTotal)}) não batem — diferença de ${brlCents(Math.abs(planTotal - contract.value_cents))}. Resolva no contrato real antes de considerar o plano final.</p>
+    ` : ''}
   `, 'mb-6');
 }
 

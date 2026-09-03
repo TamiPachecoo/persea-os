@@ -7,11 +7,14 @@
 // (not started / resuming / already done), matching how every other
 // Program Hub activity in this app works.
 import {
-  MockDB, getActiveClientId, ARCHETYPE_QUIZ_SECTIONS, ARCHETYPE_SCALE_LABELS,
+  MockDB, ARCHETYPE_QUIZ_SECTIONS, ARCHETYPE_SCALE_LABELS,
 } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, isNonProduction } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Teste de Arquétipos' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

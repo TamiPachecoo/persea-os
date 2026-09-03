@@ -4,7 +4,8 @@
 // meetings additionally carry a Google Meet recording/transcript bundle
 // (PROTOTYPE — see docs/google-meet-integration.md); only ever this
 // client's own, via MockDB.getClientMeetingsWithRecording's clientId filter.
-import { MockDB, getActiveClientId, AGENDA_TYPE_LABEL, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
+import { MockDB, AGENDA_TYPE_LABEL, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, formatDateTime, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock, renderEncounterRequestsCard, wireEncounterRequestForms } from '../shared/ui.js';
 
 const AGENDA_TYPE_ICON = {
@@ -12,7 +13,9 @@ const AGENDA_TYPE_ICON = {
 };
 const AGENDA_STATUS_BADGE = { upcoming: 'badge-progress', completed: 'badge-completed', rescheduled: 'badge-locked', cancelled: 'badge-locked' };
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'encontros.html', title: 'Encontros' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

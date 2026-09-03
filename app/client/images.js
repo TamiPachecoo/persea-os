@@ -3,7 +3,8 @@
 // localStorage (see MockDB.addClientImage) — clearly a prototype
 // convention, same as homework.js's media submissions. A real build would
 // swap this for real object storage without touching this screen's shape.
-import { MockDB, getActiveClientId, IMAGE_STATUS_LABEL, GUIDE_STATUS_LABEL, HUBLA_STATUS_LABEL } from '../shared/mock-db.js';
+import { MockDB, IMAGE_STATUS_LABEL, GUIDE_STATUS_LABEL, HUBLA_STATUS_LABEL } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, formatDateTime, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
 
 const MAX_FILE_MB = 8;
@@ -12,7 +13,9 @@ const IMAGE_STATUS_BADGE = {
   em_analise: 'badge-progress', novas_solicitadas: 'badge-locked', aprovado: 'badge-completed',
 };
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Imagens' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

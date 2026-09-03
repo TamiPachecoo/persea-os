@@ -4,13 +4,16 @@
 // questionnaire, the assessment step, brandDirection, value-analysis, etc.)
 // — never a separate progress table. That's what keeps this page and the
 // Painel from ever showing two different numbers for the same client.
-import { MockDB, getActiveClientId, TIER_PHASES } from '../shared/mock-db.js';
+import { MockDB, TIER_PHASES } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, progressBar, toast, formatDate,
   initClientSwitcher, isValidHttpUrl, externalLinkAttrs, lockedStateCard, isNonProduction,
 } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Programa' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

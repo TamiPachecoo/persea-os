@@ -1,8 +1,10 @@
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, progressBar, statusBadge, formatDateTime, toast, showMoodPrompt, stepEyebrow, animateCount, initClientSwitcher } from '../shared/ui.js';
 
-const activeClientId = getActiveClientId();
-
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 function promptMoodIfNewlyCompleted(taskId, wasCompletedBefore) {
   const task = MockDB.getHomework(activeClientId).find((t) => t.id === taskId);
   if (task && task.status === 'completed' && !wasCompletedBefore) {

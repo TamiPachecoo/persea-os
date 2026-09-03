@@ -6,6 +6,7 @@ import { MockDB, PROGRAMS, PROGRAM_LABEL, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_L
 import { renderShell, card, toast, formatDate, openModal, brl } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
+import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'financial.html', title: 'Financeiro' });
@@ -14,26 +15,34 @@ const content = document.getElementById('app-content');
 const PAYMENT_STATUS_CLASS = { paid: 'badge-completed', pending: 'badge-progress', overdue: 'badge-locked' };
 const paymentBadge = (status) => `<span class="badge ${PAYMENT_STATUS_CLASS[status] || 'badge-locked'}">${PAYMENT_STATUS_LABEL[status] || status}</span>`;
 
-// Production Audit Remediation Pass (Critical 2): the KPIs below this point
-// (renderKPIs, renderForecast, renderByProgram, renderClientBilling) are all
-// sourced from MockDB — a per-browser, non-persistent prototype pipeline,
-// not the real payment record. Real, confirmed SumUp payments live in
-// Supabase's payments table (see admin/payments.js) and previously had no
-// presence at all on this tenant-wide screen, which is exactly the "two
-// systems, neither clearly authoritative" gap the audit flagged. This
-// fetches the real, is_demo-safe totals (same rule as admin/payments.js's
-// computeKPIs — mock rows and any is_demo client's rows never count as
-// real revenue) and renders them first, clearly labeled, so a glance at
-// this page can never mistake demonstration data for real revenue.
+// Production Audit Remediation Pass (Critical 2) + Final Core Production
+// Architecture Pass (Part 3): the KPIs below this point (renderKPIs,
+// renderForecast, renderByProgram, renderClientBilling) are all sourced
+// from MockDB — a per-browser, non-persistent prototype pipeline, not the
+// real payment record. This fetches the real, is_demo-safe totals and
+// renders them first, clearly labeled.
+//
+// A Receber/Em Atraso now come from loadActiveObligations
+// (shared/financial-model.js) — the contractual obligation itself
+// (contract_payment_lines on each contract's currently-signed version)
+// minus confirmed payment_allocations, corrected per your explicit
+// instruction: a contractual obligation exists even if no SumUp checkout
+// was ever generated for it, so it can never be defined as "payments where
+// status is pending/overdue." Recebido stays payments-table-sourced — it's
+// a fact about confirmed money movement, not an obligation.
 async function loadRealKPIs() {
-  const { data, error } = await supabase.from('payments').select('amount_cents, status, provider, clients(is_demo)');
-  if (error) return { error: error.message };
-  const real = (data || []).filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
-  const recebido = real.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
-  const aReceber = real.filter((p) => ['pending', 'overdue'].includes(p.status)).reduce((s, p) => s + p.amount_cents, 0);
-  return { recebido, aReceber };
+  const [{ data: payments, error: payErr }, { lines, error: linesErr }] = await Promise.all([
+    supabase.from('payments').select('amount_cents, status, provider, clients(is_demo)'),
+    loadActiveObligations({ excludeDemo: true }),
+  ]);
+  if (payErr) return { error: payErr.message };
+  if (linesErr) return { error: linesErr };
+  const realPayments = (payments || []).filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
+  const recebido = realPayments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
+  const { aReceberCents, emAtrasoCents } = summarizeObligations(lines || []);
+  return { recebido, aReceber: aReceberCents, emAtraso: emAtrasoCents };
 }
-function renderRealKPIs({ recebido, aReceber, error }) {
+function renderRealKPIs({ recebido, aReceber, emAtraso, error }) {
   const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   return card(`
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -41,9 +50,10 @@ function renderRealKPIs({ recebido, aReceber, error }) {
       <a href="payments.html" class="btn-text">Ver todas as cobranças ↗</a>
     </div>
     ${error ? `<p class="text-xs" style="color:var(--terracotta);">Não foi possível carregar os totais reais: ${error}</p>` : `
-      <div class="grid sm:grid-cols-2 gap-4">
+      <div class="grid sm:grid-cols-3 gap-4">
         <div><p class="text-2xl font-serif">${brlCents(recebido)}</p><p class="text-white/40 text-xs mt-1">Recebido (confirmado)</p></div>
-        <div><p class="text-2xl font-serif">${brlCents(aReceber)}</p><p class="text-white/40 text-xs mt-1">A Receber (pendente/em atraso)</p></div>
+        <div><p class="text-2xl font-serif" style="color:var(--terracotta);">${brlCents(emAtraso)}</p><p class="text-white/40 text-xs mt-1">Em Atraso</p></div>
+        <div><p class="text-2xl font-serif">${brlCents(aReceber)}</p><p class="text-white/40 text-xs mt-1">A Receber (saldo de todas as parcelas)</p></div>
       </div>
     `}
   `, 'mb-8');

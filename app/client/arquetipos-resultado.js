@@ -4,13 +4,16 @@
 // responses (see mock-db.js) — nothing here calculates or trusts a
 // client-supplied score. If the visual set isn't known yet (no profile
 // gender, never corrected by Nay), asks the one-time question first.
-import { MockDB, getActiveClientId, ARCHETYPE_VISUAL_SET_LABEL } from '../shared/mock-db.js';
+import { MockDB, ARCHETYPE_VISUAL_SET_LABEL } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, toast, initClientSwitcher, formatDate,
   renderArchetypeRadar, archetypePortrait, archetypeIntensityBar, initScrollReveal, isNonProduction,
 } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Mapa de Arquétipos' });
 initClientSwitcher();
 

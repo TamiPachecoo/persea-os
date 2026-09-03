@@ -25,3 +25,19 @@ export function deriveEffectiveStatus(status, dueDateISO) {
   if (status === 'pending' && dueDateISO && dueDateISO < todayISOInBrazil()) return 'overdue';
   return status;
 }
+
+// Final Core Production Architecture Pass, Part 3: the contractual-
+// obligation-level equivalent of deriveEffectiveStatus above — takes a row
+// from contract_payment_lines_effective (amount_cents, allocated_cents,
+// outstanding_cents, due_date) and derives its real state from the
+// obligation itself, not from whether a SumUp checkout happens to exist.
+// Never invents a new stored status — 'partially_paid_overdue' is a
+// derived UI label, nothing is ever written back as that string.
+export function deriveLineEffectiveState(line) {
+  const outstanding = line.outstanding_cents ?? (line.amount_cents - (line.allocated_cents || 0));
+  const partiallyPaid = (line.allocated_cents || 0) > 0 && outstanding > 0;
+  if (outstanding <= 0) return { status: 'paid', outstandingCents: 0 };
+  const isPastDue = !!line.due_date && line.due_date < todayISOInBrazil();
+  if (isPastDue) return { status: partiallyPaid ? 'partially_paid_overdue' : 'overdue', outstandingCents: outstanding };
+  return { status: partiallyPaid ? 'partially_paid' : 'pending', outstandingCents: outstanding };
+}

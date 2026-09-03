@@ -5,15 +5,18 @@
 // Fiscal — separate from onboarding because it's needed for the life of
 // the contract, not just once at signup.
 import {
-  MockDB, getActiveClientId, PROGRAM_LABEL, CONTRACT_DURATION_LABEL,
+  MockDB, PROGRAM_LABEL, CONTRACT_DURATION_LABEL,
   ONBOARDING_STAGE_LABEL, PAYMENT_STATUS_LABEL, NF_STATUS_LABEL,
 } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, toast, formatDate, initClientSwitcher, isValidHttpUrl, externalLinkAttrs,
   isValidAssetSrc, assetLinkAttrs, brl,
 } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'financial.html', title: 'Financeiro' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

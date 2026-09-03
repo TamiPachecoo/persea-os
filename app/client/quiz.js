@@ -1,7 +1,10 @@
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, progressBar, showMoodPrompt, enableTilt, animateCount, initClientSwitcher } from '../shared/ui.js';
 
-const activeClientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Quiz Rápido' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

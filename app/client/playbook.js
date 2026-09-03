@@ -1,7 +1,10 @@
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt, stepEyebrow, initScrollReveal, enableTilt, initClientSwitcher } from '../shared/ui.js';
 
-const activeClientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
 initClientSwitcher();
 

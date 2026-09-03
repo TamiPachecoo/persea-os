@@ -7,10 +7,13 @@
 // pre-rasterized page images are available — falls back to a flat PDF
 // <embed>, and finally to an honest "not published yet" state, so the page
 // still works if only the raw PDF (or nothing) has been published.
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, isValidAssetSrc, assetLinkAttrs, formatDate } from '../shared/ui.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Guia de Atividades' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

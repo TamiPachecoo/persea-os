@@ -7,6 +7,7 @@ import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { card, toast, openModal, formatDate, formatDateTime } from '../shared/ui.js';
 import { deriveEffectiveStatus } from '../shared/date-utils.js';
+import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
 
 const content = document.getElementById('app-content');
 
@@ -81,7 +82,13 @@ async function loadClients() {
   return data || [];
 }
 
-function computeKPIs(payments) {
+// Final Core Production Architecture Pass, Part 3: Recebido stays
+// payments-table-sourced (a fact about confirmed money movement) — A
+// Receber/Em Atraso now come from the real contractual obligations
+// (obligationLines, loaded separately via shared/financial-model.js), not
+// "payments where status is pending/overdue." A contractual installment
+// can be owed even if Nay never generated a SumUp checkout for it at all.
+function computeKPIs(payments, obligationLines) {
   // Mock rows AND any is_demo client's rows are excluded from real
   // financial totals by design — they exist purely to test the flow, never
   // to be confused with real revenue. Checking is_demo too (not just
@@ -90,16 +97,17 @@ function computeKPIs(payments) {
   // through a real checkout — this catches that case even if it recurs.
   const real = payments.filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
   const recebido = real.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
-  const aReceber = real.filter((p) => ['pending', 'overdue'].includes(p.status)).reduce((s, p) => s + p.amount_cents, 0);
-  return { recebido, aReceber };
+  const { aReceberCents, emAtrasoCents } = summarizeObligations(obligationLines || []);
+  return { recebido, aReceber: aReceberCents, emAtraso: emAtrasoCents };
 }
 
-function renderKPIs(payments) {
-  const { recebido, aReceber } = computeKPIs(payments);
+function renderKPIs(payments, obligationLines) {
+  const { recebido, aReceber, emAtraso } = computeKPIs(payments, obligationLines);
   const mockCount = payments.filter((p) => p.provider === 'mock').length;
   return `
-    <div class="grid sm:grid-cols-2 gap-4 mb-6">
+    <div class="grid sm:grid-cols-3 gap-4 mb-6">
       ${card(`<p class="text-2xl font-serif">${brl(recebido)}</p><p class="text-white/40 text-xs mt-1">Valor Recebido</p>`)}
+      ${card(`<p class="text-2xl font-serif" style="${emAtraso ? 'color:var(--terracotta);' : ''}">${brl(emAtraso)}</p><p class="text-white/40 text-xs mt-1">Em Atraso</p>`)}
       ${card(`<p class="text-2xl font-serif">${brl(aReceber)}</p><p class="text-white/40 text-xs mt-1">A Receber</p>`)}
     </div>
     ${mockCount ? `<p class="text-xs mb-6" style="color:var(--muted);">${mockCount} cobrança${mockCount === 1 ? '' : 's'} em modo de teste (não contam nos totais acima) — SumUp ainda não conectado com credenciais reais.</p>` : ''}
@@ -225,20 +233,19 @@ async function openNewChargeModal(clients, prefill, onDone) {
     lineSelect.innerHTML = '<option value="">Cobrança avulsa — não vincular a uma parcela</option>';
     const { data: contract } = await supabase.from('contracts').select('id').eq('client_id', clientId).maybeSingle();
     if (!contract) return;
-    const [{ data: lines }, { data: linkedPayments }] = await Promise.all([
-      supabase.from('contract_payment_lines').select('id, seq, amount_cents, method, due_date, label').eq('contract_id', contract.id).order('seq'),
-      supabase.from('payments').select('payment_line_id').eq('contract_id', contract.id).not('payment_line_id', 'is', null),
-    ]);
-    if (!lines?.length) return;
-    const linkedIds = new Set((linkedPayments || []).map((p) => p.payment_line_id));
+    // Only the CURRENT signed version's lines are real, live obligations —
+    // a superseded version's lines are historical, not something to charge
+    // against (see shared/financial-model.js). outstanding_cents (not the
+    // full amount) is what's actually still owed on each.
+    const { lines, error } = await loadActiveObligations({ contractId: contract.id });
+    if (error || !lines?.length) return;
     lineField.hidden = false;
-    lines.forEach((l) => {
+    lines.filter((l) => l.outstanding_cents > 0).forEach((l) => {
       const opt = document.createElement('option');
       opt.value = l.id;
-      opt.dataset.amountCents = l.amount_cents;
+      opt.dataset.amountCents = l.outstanding_cents;
       opt.dataset.dueDate = l.due_date || '';
-      const already = linkedIds.has(l.id);
-      opt.textContent = `Parcela ${l.seq + 1} — ${brl(l.amount_cents)}${l.due_date ? ' — vence ' + formatDate(l.due_date) : ''}${l.label ? ' — ' + l.label : ''}${already ? ' (já tem cobrança vinculada)' : ''}`;
+      opt.textContent = `Parcela ${l.seq + 1} — ${brl(l.outstanding_cents)} em aberto de ${brl(l.amount_cents)}${l.due_date ? ' — vence ' + formatDate(l.due_date) : ''}${l.label ? ' — ' + l.label : ''}`;
       lineSelect.appendChild(opt);
     });
   }
@@ -378,6 +385,15 @@ function renderUnmatchedSection(unmatched) {
   `, 'mb-6');
 }
 
+// Final Core Production Architecture Pass, section 13/17: supports
+// allocating this one transaction across one or more outstanding
+// installments (or none at all — a payment can be created fully
+// unallocated) rather than assuming a single 1:1 link. Each line's
+// checkbox pre-fills with min(its own outstanding balance, whatever of the
+// transaction is still unallocated as rows get checked) — a starting
+// suggestion, not a silent decision; Nay can edit any amount before
+// confirming, and the total is capped client-side (and, regardless, by
+// enforce_allocation_limits server-side) at the transaction's own amount.
 function openReconcileModal(tx, clients, onDone) {
   const { el, close } = openModal({
     title: 'Vincular Pagamento SumUp',
@@ -393,40 +409,77 @@ function openReconcileModal(tx, clients, onDone) {
           ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
         </select>
       </div>
-      <div id="reconcile-line-field" hidden class="mb-4">
-        <label class="text-xs text-white/40 block mb-1">Parcela do plano (opcional)</label>
-        <select name="payment_line_id" class="field"><option value="">Não vincular a uma parcela específica</option></select>
+      <div id="reconcile-lines-field" hidden class="mb-4">
+        <label class="text-xs text-white/40 block mb-1">Alocar em parcelas em aberto (opcional)</label>
+        <div id="reconcile-lines"></div>
+        <p class="text-xs mt-2" id="reconcile-unallocated"></p>
       </div>
       <button id="reconcile-confirm" class="btn-primary block w-full text-center" style="padding-top:10px;padding-bottom:10px;">Confirmar Vínculo</button>
     `,
   });
   let resolvedContractId = null;
+
+  function updateUnallocated() {
+    const allocated = [...el.querySelectorAll('[data-alloc-amount]')]
+      .reduce((s, input) => s + (input.disabled ? 0 : Math.round((parseFloat(input.value) || 0) * 100)), 0);
+    const remaining = (tx.amount_cents - allocated) / 100;
+    el.querySelector('#reconcile-unallocated').textContent =
+      remaining > 0 ? `${brl(remaining * 100)} do pagamento ficará sem vincular a nenhuma parcela.` : remaining < 0 ? 'Soma das alocações excede o valor do pagamento — ajuste antes de confirmar.' : 'Valor totalmente alocado.';
+    el.querySelector('#reconcile-unallocated').style.color = remaining < 0 ? 'var(--terracotta)' : 'var(--muted)';
+  }
+
   el.querySelector('[name="client_id"]').addEventListener('change', async (e) => {
-    const lineField = el.querySelector('#reconcile-line-field');
-    const lineSelect = el.querySelector('[name="payment_line_id"]');
-    lineField.hidden = true;
-    lineSelect.innerHTML = '<option value="">Não vincular a uma parcela específica</option>';
+    const linesField = el.querySelector('#reconcile-lines-field');
+    const linesEl = el.querySelector('#reconcile-lines');
+    linesField.hidden = true;
+    linesEl.innerHTML = '';
     resolvedContractId = null;
     if (!e.target.value) return;
     const { data: contract } = await supabase.from('contracts').select('id').eq('client_id', e.target.value).maybeSingle();
     if (!contract) return;
     resolvedContractId = contract.id;
-    const { data: lines } = await supabase.from('contract_payment_lines').select('id, seq, amount_cents, due_date, label').eq('contract_id', contract.id).order('seq');
-    if (!lines?.length) return;
-    lineField.hidden = false;
-    lines.forEach((l) => {
-      const opt = document.createElement('option');
-      opt.value = l.id;
-      opt.textContent = `Parcela ${l.seq + 1} — ${brl(l.amount_cents)}${l.due_date ? ' — vence ' + formatDate(l.due_date) : ''}${l.label ? ' — ' + l.label : ''}`;
-      lineSelect.appendChild(opt);
+    const { lines } = await loadActiveObligations({ contractId: contract.id });
+    const outstanding = (lines || []).filter((l) => l.outstanding_cents > 0);
+    if (!outstanding.length) return;
+    linesField.hidden = false;
+    let remainingTx = tx.amount_cents;
+    linesEl.innerHTML = outstanding.map((l) => {
+      const suggested = Math.min(l.outstanding_cents, Math.max(0, remainingTx));
+      remainingTx -= suggested;
+      return `
+        <label class="flex items-center gap-2 text-xs mb-2">
+          <input type="checkbox" data-alloc-line="${l.id}" data-max="${l.outstanding_cents}" ${suggested > 0 ? 'checked' : ''} />
+          Parcela ${l.seq + 1} — em aberto ${brl(l.outstanding_cents)}${l.due_date ? ' — vence ' + formatDate(l.due_date) : ''}
+          <input type="number" min="0.01" step="0.01" max="${(l.outstanding_cents / 100).toFixed(2)}" data-alloc-amount data-alloc-for="${l.id}" class="field" style="width:110px; margin-left:auto;" value="${(suggested / 100).toFixed(2)}" ${suggested > 0 ? '' : 'disabled'} />
+        </label>
+      `;
+    }).join('');
+    linesEl.querySelectorAll('[data-alloc-line]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const amountInput = linesEl.querySelector(`[data-alloc-for="${cb.dataset.allocLine}"]`);
+        amountInput.disabled = !cb.checked;
+        if (cb.checked && !Number(amountInput.value)) amountInput.value = (Number(cb.dataset.max) / 100).toFixed(2);
+        updateUnallocated();
+      });
     });
+    linesEl.querySelectorAll('[data-alloc-amount]').forEach((input) => input.addEventListener('input', updateUnallocated));
+    updateUnallocated();
   });
+
   el.querySelector('#reconcile-confirm').addEventListener('click', async () => {
     const clientId = el.querySelector('[name="client_id"]').value;
     if (!clientId) { toast('Selecione uma cliente.', { tone: 'error' }); return; }
-    const paymentLineId = el.querySelector('[name="payment_line_id"]')?.value || null;
+    const allocations = [...el.querySelectorAll('[data-alloc-line]')]
+      .filter((cb) => cb.checked)
+      .map((cb) => ({
+        payment_line_id: cb.dataset.allocLine,
+        amount_cents: Math.round((parseFloat(el.querySelector(`[data-alloc-for="${cb.dataset.allocLine}"]`).value) || 0) * 100),
+      }))
+      .filter((a) => a.amount_cents > 0);
+    const totalAllocated = allocations.reduce((s, a) => s + a.amount_cents, 0);
+    if (totalAllocated > tx.amount_cents) { toast('Soma das alocações excede o valor do pagamento.', { tone: 'error' }); return; }
     const { data, error } = await supabase.functions.invoke('sumup-reconcile-transaction', {
-      body: { transaction_id: tx.id, client_id: clientId, contract_id: resolvedContractId, payment_line_id: paymentLineId },
+      body: { transaction_id: tx.id, client_id: clientId, contract_id: resolvedContractId, allocations },
     });
     if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); return; }
     close();
@@ -440,6 +493,15 @@ async function render() {
     loadPayments(), loadClients(), filterClientId ? Promise.resolve([]) : loadUnmatchedTransactions(),
   ]);
   const scopedClient = filterClientId ? clients.find((c) => c.id === filterClientId) : null;
+  // Obligations: tenant-wide excludes demo clients (same rule as everywhere
+  // else); scoped to one client, filters to her contract specifically.
+  let obligationLines = [];
+  if (scopedClient) {
+    const { data: contract } = await supabase.from('contracts').select('id').eq('client_id', scopedClient.id).maybeSingle();
+    if (contract) ({ lines: obligationLines = [] } = await loadActiveObligations({ contractId: contract.id }));
+  } else {
+    ({ lines: obligationLines = [] } = await loadActiveObligations({ excludeDemo: true }));
+  }
 
   // Opening a client's scoped view should answer "what do I charge her
   // next" at a glance, sourced from history already in the system —
@@ -472,7 +534,7 @@ async function render() {
         <button data-gen-link="${nextPending.id}" class="btn-primary">Gerar Link de Pagamento</button>
       </div>
     `, 'mb-6') : ''}
-    ${renderKPIs(payments)}
+    ${renderKPIs(payments, obligationLines)}
     ${card(`
       <p class="text-sm text-white/50 mb-4">Histórico de Pagamentos${scopedClient ? '' : ' — Todas as Clientes'}</p>
       ${payments.length ? payments.map(paymentRow).join('') : '<p class="text-sm text-white/50">Nenhuma cobrança ainda.</p>'}

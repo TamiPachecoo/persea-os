@@ -5,7 +5,8 @@
 // getValueAssessment — those functions are where premium access is actually
 // enforced (see mock-db.js), not this screen; this screen just reacts to
 // what they return.
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, formatDate, isNonProduction } from '../shared/ui.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
@@ -14,7 +15,9 @@ import {
   VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
 } from '../shared/value-analysis-schema.js';
 
-const clientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'value-analysis.html', title: 'Leitura Estratégica de Valor' });
 initClientSwitcher();
 const content = document.getElementById('app-content');

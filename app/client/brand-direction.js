@@ -9,10 +9,13 @@
 // edited on client-detail.js's Brand Direction tab. MockDB enforces this by
 // construction: saveBrandIdeas() only ever touches the brandIdeas field —
 // there is no client-callable path into saveBrandDirection().
-import { MockDB, getActiveClientId } from '../shared/mock-db.js';
+import { MockDB } from '../shared/mock-db.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl, boardEmptyState, mountPinterestBoard } from '../shared/ui.js';
 
-const activeClientId = getActiveClientId();
+const __clientCtx = await getCurrentClientContext();
+if (!__clientCtx) throw new Error('not authorized');
+const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'brand-direction.html', title: 'Direção da Marca' });
 initClientSwitcher();
 
