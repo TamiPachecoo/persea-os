@@ -1011,100 +1011,9 @@ const SEED = {
   ],
   // Leads — mostly sourced from the VIP WhatsApp group. Not yet clients;
   // convertLeadToClient() is what promotes one into db.clients.
-  leads: [
-    {
-      id: 'lead1', fullName: 'Patrícia Nogueira', email: 'patricia.n@example.com', phone: '(31) 90000-1001',
-      source: 'vip_group', vipGroupStatus: 'in_group', stage: 'em_conversa', interestedProgram: 'persea',
-      socialLinks: { instagram: 'https://instagram.com/patricianogueira', tiktok: '', linkedin: 'https://linkedin.com/in/patricianogueira', facebook: '' },
-      notes: 'Muito ativa no grupo, sempre comenta nas dinâmicas. Trabalha com consultoria financeira.',
-      interactions: [
-        { id: 'li1', date: '2026-08-10T14:00:00', summary: 'Ligação rápida — perguntou sobre o formato do programa Persea (6 ou 12 meses) e como funciona o acompanhamento.' },
-      ],
-      convertedToClientId: null, convertedAt: null,
-      // Demo: sale closed on the call, registration link already sent —
-      // waiting on her to fill it in.
-      program: 'persea-essential', onboardingStatus: 'registration_sent',
-      commercialTerms: {
-        paymentMethods: ['cartao_credito', 'pix'], paymentMethod: 'cartao_credito', installments: 6, agreedAmount: 18000, firstDueDate: '2026-09-05',
-        commercialNotes: 'Fechou no plano semestral: entrada via Pix + saldo parcelado no cartão em 6x.', responsibleId: 'nay', saleAgreedAt: '2026-08-18T15:00:00',
-      },
-      registrationToken: 'lead1-demo1234abcd5678', registrationInfo: null, registrationSentAt: '2026-08-18T16:00:00', registrationCompletedAt: null,
-      contractStatus: 'info_pending', signedFileName: null,
-      history: [
-        { type: 'registration_sent', text: 'Formulário de cadastro enviado à cliente.', at: '2026-08-18T16:00:00' },
-        { type: 'sale_agreed', text: 'Condições comerciais registradas.', at: '2026-08-18T15:00:00' },
-      ],
-      createdAt: '2026-07-15T09:00:00', updatedAt: '2026-08-18T16:00:00',
-    },
-    {
-      id: 'lead2', fullName: 'Vanessa Tavares', email: 'vanessa.tavares@example.com', phone: '(31) 90000-1002',
-      source: 'vip_group', vipGroupStatus: 'in_group', stage: 'engajado', interestedProgram: null,
-      socialLinks: { instagram: 'https://instagram.com/vanessatavares', tiktok: 'https://tiktok.com/@vanessatavares', linkedin: '', facebook: '' },
-      notes: 'Entrou no grupo após a aula de oratória. Preencheu a ficha de interesse mas ainda não teve conversa direta.',
-      interactions: [],
-      convertedToClientId: null, convertedAt: null,
-      createdAt: '2026-07-21T10:00:00', updatedAt: '2026-07-21T10:00:00',
-    },
-    {
-      id: 'lead3', fullName: 'Fernanda Buono', email: 'fernanda.buono@example.com', phone: '(31) 90000-1003',
-      source: 'referral', vipGroupStatus: 'not_in_group', stage: 'proposta_enviada', interestedProgram: 'persea',
-      socialLinks: { instagram: 'https://instagram.com/fernandabuono', tiktok: '', linkedin: '', facebook: '' },
-      notes: 'Indicada pela Renata Costa. Já teve reunião de diagnóstico, proposta da Persea Premium enviada por email.',
-      interactions: [
-        { id: 'li2', date: '2026-08-05T11:00:00', summary: 'Reunião de diagnóstico — quer resolver a imagem pessoal antes de aumentar a exposição em palestras.' },
-        { id: 'li3', date: '2026-08-08T16:30:00', summary: 'Proposta comercial enviada por email, aguardando retorno.' },
-      ],
-      convertedToClientId: null, convertedAt: null,
-      // Demo: registration completed, contract already signed — this is
-      // the "Ativar Cliente" state (see admin/lead-detail.js). Was seeded
-      // as the retired Ascensão de Imagem program; repointed to Persea
-      // Premium (Production Audit Remediation Pass, High 8) rather than
-      // deleted, since this is a lead exercising the activation flow, not
-      // demo client/financial data.
-      program: 'persea-premium', onboardingStatus: 'ready_for_activation',
-      commercialTerms: {
-        paymentMethods: ['pix'], paymentMethod: 'pix', installments: 1, agreedAmount: 32000, firstDueDate: '2026-08-20',
-        commercialNotes: 'Pagamento único via Pix, à vista com 5% de desconto já aplicado.', responsibleId: 'nay', saleAgreedAt: '2026-08-12T10:00:00',
-      },
-      registrationToken: 'lead3-demo9876zyxw4321', registrationCompletedAt: '2026-08-14T19:20:00', registrationSentAt: '2026-08-12T11:00:00',
-      registrationInfo: {
-        submitted: true, fullName: 'Fernanda Buono', socialName: '', birthDate: '1990-04-22', partyType: 'PF',
-        cpf: '345.678.901-22', rg: 'MG-19.887.223', profession: 'Palestrante', nationality: 'Brasileira', maritalStatus: 'Solteira',
-        cnpj: null, companyName: null, email: 'fernanda.buono@example.com', whatsapp: '(31) 90000-1003',
-        cep: '30140-071', street: 'Rua Pium-í', number: '255', complement: 'Apto 302', neighborhood: 'Serra', city: 'Belo Horizonte', state: 'MG',
-      },
-      contractStatus: 'completed', signedFileName: 'contrato-fernanda-buono-assinado.pdf',
-      history: [
-        { type: 'contract_signed', text: 'Contrato assinado enviado — pronta para ativação.', at: '2026-08-19T09:00:00' },
-        { type: 'contract_status_changed', text: 'Status do contrato: Aguardando Assinatura', at: '2026-08-16T10:00:00' },
-        { type: 'contract_status_changed', text: 'Status do contrato: Contrato Preparado', at: '2026-08-15T10:00:00' },
-        { type: 'registration_completed', text: 'Cadastro recebido da cliente.', at: '2026-08-14T19:20:00' },
-        { type: 'registration_sent', text: 'Formulário de cadastro enviado à cliente.', at: '2026-08-12T11:00:00' },
-        { type: 'sale_agreed', text: 'Condições comerciais registradas.', at: '2026-08-12T10:00:00' },
-      ],
-      createdAt: '2026-07-28T09:00:00', updatedAt: '2026-08-19T09:00:00',
-    },
-    {
-      id: 'lead4', fullName: 'Isabela Prado', email: 'isabela.prado@example.com', phone: '(31) 90000-1004',
-      source: 'vip_group', vipGroupStatus: 'left_group', stage: 'perdido', interestedProgram: null,
-      socialLinks: { instagram: '', tiktok: '', linkedin: '', facebook: '' },
-      notes: 'Saiu do grupo sem engajar em nenhuma dinâmica. Provavelmente não é o momento certo.',
-      interactions: [],
-      convertedToClientId: null, convertedAt: null,
-      createdAt: '2026-06-10T09:00:00', updatedAt: '2026-07-01T09:00:00',
-    },
-    {
-      id: 'lead5', fullName: 'Fernanda Lima', email: 'fernanda@example.com', phone: '(31) 90000-0007',
-      source: 'referral', vipGroupStatus: 'not_in_group', stage: 'convertido', interestedProgram: 'persea',
-      socialLinks: { instagram: '', tiktok: '', linkedin: '', facebook: '' },
-      notes: 'Indicada pela Marina Alves. Fechou o Persea Essencial — convertida em cliente (client-7).',
-      interactions: [
-        { id: 'li4', date: '2026-08-16T10:00:00', summary: 'Reunião de diagnóstico — decidiu fechar o Persea Essencial.' },
-      ],
-      convertedToClientId: 'client-7', convertedAt: '2026-08-17T09:00:00',
-      createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-17T09:00:00',
-    },
-  ],
+  // Cleared per request — all demo/seed leads removed; a real one will be
+  // created fresh through the normal CRM flow.
+  leads: [],
   // Dynamics Nay runs inside the VIP group (classes, Q&As, challenges) to
   // keep engagement flowing, each with a before/after count on whatever she
   // was actually measuring — this is what backs the "did this dynamic
@@ -1163,7 +1072,7 @@ const SEED = {
   // overwhelming rather than useful). Keep only enough to show each real
   // type once or twice; add real events as they actually happen.
   agendaItems: [
-    { id: 'ag1', type: 'admin_task', title: 'Preparar contrato da Bianca Souza', date: '2026-08-13T11:00:00', status: 'upcoming', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Preparar contrato a partir das informações recebidas', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-08-10T09:00:00', updatedAt: '2026-08-10T09:00:00' },
+    { id: 'ag1', type: 'admin_task', title: 'Preparar contrato da Juliana Paes', date: '2026-08-13T11:00:00', status: 'upcoming', relatedStudentId: 'client-4', relatedGroupLabel: null, topic: 'Preparar contrato a partir das informações recebidas', prepNotes: '', generalNotes: '', onlineLink: '', followUpNotes: '', createdAt: '2026-08-10T09:00:00', updatedAt: '2026-08-10T09:00:00' },
     { id: 'ag3', type: 'class', title: 'N Time Class — Tendências de Imagem 2026', date: '2026-08-13T20:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: 'N Time Class', topic: 'Aula mensal ao vivo sobre tendências de imagem', prepNotes: 'Revisar slides da aula anterior.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-ntime', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
     { id: 'ag4', type: 'group_meeting', title: 'Q&A Mensal — Turma Geral', date: '2026-08-14T19:00:00', status: 'upcoming', relatedStudentId: null, relatedGroupLabel: 'Q&A Mensal PERSEA', topic: 'Perguntas e respostas ao vivo com todas as mentoradas', prepNotes: 'Revisar dúvidas enviadas durante a semana.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-qna', followUpNotes: '', createdAt: '2026-08-01T09:00:00', updatedAt: '2026-08-01T09:00:00' },
     { id: 'ag6', type: 'individual_meeting', title: 'E2 — Comunicação e Vendas', date: '2026-08-15T10:00:00', status: 'upcoming', relatedStudentId: 'client-2', relatedGroupLabel: null, topic: 'Dificuldades de venda, comunicação, posicionamento e pitch', prepNotes: 'Revisar respostas do questionário antes da reunião.', generalNotes: '', onlineLink: 'https://meet.google.com/exemplo-julia', followUpNotes: '', createdAt: '2026-07-11T09:00:00', updatedAt: '2026-07-11T09:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
@@ -1174,8 +1083,8 @@ const SEED = {
     { id: 'ag15', type: 'individual_meeting', title: 'E1 — Extração e Essência', date: '2026-08-09T10:00:00', status: 'completed', relatedStudentId: 'client-2', relatedGroupLabel: null, topic: 'Extração de marca e essência', prepNotes: '', generalNotes: '', onlineLink: 'https://meet.google.com/persea-julia-e1', followUpNotes: '', createdAt: '2026-08-02T09:00:00', updatedAt: '2026-08-09T18:00:00', durationMinutes: 60, assignedTo: 'nay', assistantPersona: null,
       recording: { recordingStatus: 'erro', transcriptStatus: 'erro', recordingUrl: null, transcriptUrl: null, requiresAttention: true, attentionNote: 'O Google não retornou o link da gravação depois de várias tentativas — verifique manualmente no Drive e cole o link abaixo.', sync: { lastCheckedAt: '2026-08-12T09:00:00', nextCheckAt: null, googleAccount: 'nay@persea.com.br', syncStatus: 'erro', attempts: 6 } } },
     // Premium checkpoints (see CHECKPOINT_ALLOWANCE) — one done, one
-    // upcoming, enough to show the 30min ad-hoc check-in on Marina's tally.
-    { id: 'ag18', type: 'checkpoint', title: 'Check-in — Dúvidas de Precificação', date: '2026-07-20T09:30:00', status: 'completed', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Ajuste rápido na tabela de preços antes do lançamento', prepNotes: '', generalNotes: 'Alinhado — Marina vai testar o novo valor no próximo lote de clientes.', onlineLink: 'https://meet.google.com/persea-marina-checkin1', followUpNotes: '', createdAt: '2026-07-18T09:00:00', updatedAt: '2026-07-20T10:00:00', durationMinutes: 30, assignedTo: 'nay', assistantPersona: null },
+    // upcoming, enough to show the 30min ad-hoc check-in on Bruna's tally.
+    { id: 'ag18', type: 'checkpoint', title: 'Check-in — Dúvidas de Precificação', date: '2026-07-20T09:30:00', status: 'completed', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Ajuste rápido na tabela de preços antes do lançamento', prepNotes: '', generalNotes: 'Alinhado — Bruna vai testar o novo valor no próximo lote de clientes.', onlineLink: 'https://meet.google.com/persea-marina-checkin1', followUpNotes: '', createdAt: '2026-07-18T09:00:00', updatedAt: '2026-07-20T10:00:00', durationMinutes: 30, assignedTo: 'nay', assistantPersona: null },
     { id: 'ag21', type: 'checkpoint', title: 'Check-in — Feedback de Proposta', date: '2026-08-25T14:00:00', status: 'upcoming', relatedStudentId: 'client-1', relatedGroupLabel: null, topic: 'Ler uma proposta comercial antes de enviar', prepNotes: '', generalNotes: '', onlineLink: 'https://meet.google.com/persea-marina-checkin4', followUpNotes: '', createdAt: '2026-08-19T09:00:00', updatedAt: '2026-08-19T09:00:00', durationMinutes: 30, assignedTo: 'nay', assistantPersona: null },
   ],
   // Encontro scheduling requests — Nay starts one from a client's E{n} tab
@@ -1198,7 +1107,7 @@ const SEED = {
     },
     {
       id: 'rev2', clientId: 'client-2', type: 'image_guide', refSlug: 'estilo',
-      title: 'Guia de Estilo — Júlia', note: 'Primeira versão a partir da Direção da Marca.', fileUrl: 'https://example.com/guides/guia-estilo-julia.pdf',
+      title: 'Guia de Estilo — Adriana', note: 'Primeira versão a partir da Direção da Marca.', fileUrl: 'https://example.com/guides/guia-estilo-julia.pdf',
       status: 'pending', createdAt: '2026-08-15T11:00:00', resolvedAt: null, nayNote: '',
     },
     // rev3 (client-6 / Débora Lima) removed with her demo client record —
@@ -1213,19 +1122,16 @@ const SEED = {
   assistantMessages: [
     // am1/am3 (client-6 / Débora Lima) removed with her demo client record —
     // see Production Audit Remediation Pass, High 8.
-    {
-      id: 'am2', from: 'nay', clientId: 'client-5', text: 'Camila confirmou a reunião de fechamento pra dia 22 — se ela assinar lá, já pode subir o contrato autenticado no mesmo dia.',
-      route: 'client-workspace.html?id=client-5', at: '2026-08-15T16:40:00', read: true,
-    },
+    // am2 (client-5 / Camila Rocha) removed — Camila eliminated per request.
   ],
   clients: {
-    // --- Client 1: Marina — farthest along, playbook published, pitches ready ---
+    // --- Client 1: Bruna — farthest along, playbook published, pitches ready ---
     'client-1': {
-      profile: { id: 'client-1', fullName: 'Marina Alves', email: 'marina@example.com', status: 'active', tier: 'premium', phaseIndex: 1, programSlug: 'persea-premium', gender: 'feminino' },
+      profile: { id: 'client-1', fullName: 'Bruna Marquezine', email: 'bruna@example.com', status: 'active', tier: 'premium', phaseIndex: 1, programSlug: 'persea-premium', gender: 'feminino' },
       onboarding: {
         clientInfo: {
-          submitted: true, fullName: 'Marina Alves', partyType: 'PF', cpf: '123.456.789-00', cnpj: null, companyName: null,
-          address: 'Rua Exemplo, 100, Savassi, Belo Horizonte/MG', email: 'marina@example.com', whatsapp: '(31) 90000-0001',
+          submitted: true, fullName: 'Bruna Marquezine', partyType: 'PF', cpf: '123.456.789-00', cnpj: null, companyName: null,
+          address: 'Rua Exemplo, 100, Savassi, Belo Horizonte/MG', email: 'bruna@example.com', whatsapp: '(31) 90000-0001',
         },
         contract: { program: 'persea', duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-1-assinado.pdf', notes: 'Fechou no call de encerramento do onboarding — pediu para começar a Fase 1 já na semana seguinte.', paymentMethod: 'cartao_credito', installments: 12 },
         whatsappGroup: { status: 'added' },
@@ -1247,7 +1153,7 @@ const SEED = {
         keywords: ['Precisa', 'Calorosa', 'Autoridade silenciosa', 'Sem enrolação'],
         tone: 'Direto, confiante, frases curtas — nunca informal demais nem excessivamente formal.',
         references: ['Editoriais de moda em tons terrosos', 'Fotografia com luz natural, pouco contraste'],
-        guidance: 'Evitar linguagem motivacional genérica — Marina conquista pela precisão, não pelo entusiasmo.',
+        guidance: 'Evitar linguagem motivacional genérica — Bruna conquista pela precisão, não pelo entusiasmo.',
         belongs: ['Tons terrosos e neutros', 'Frases curtas e diretas', 'Bastidores reais do trabalho com clientes'],
         doesntBelong: ['Frases de efeito genéricas', 'Cores vibrantes/neon', 'Conteúdo puramente motivacional sem substância'],
         updatedAt: '2026-08-01T10:00:00',
@@ -1274,7 +1180,7 @@ const SEED = {
       ],
       digitalKit: { fileUrl: 'https://example.com/kits/digital-kit.pdf', summary: 'Template de feed + stories no tom terracota/dourado da marca, com variações para lançamento e bastidores.', canvaUrl: 'https://www.canva.com/design/PLACEHOLDER-kit-marina/edit', deliveredAt: '2026-07-20T10:00:00' },
       hublaAccess: { status: 'granted', grantedAt: '2026-07-20T10:00:00' },
-      // Real upsell example: Marina started on Persea Essencial and Nay
+      // Real upsell example: Bruna started on Persea Essencial and Nay
       // upgraded her to Premium a month in — this is what getSuccessMetrics'
       // upsell count/list is built from (changedBy: 'nay', not 'seed').
       programHistory: [
@@ -1306,7 +1212,7 @@ const SEED = {
       questionnaireAnalysis: {
         version: 1,
         generatedAt: '2026-07-01T10:00:00',
-        executiveSummary: 'Marina é uma profissional de alta competência cujo posicionamento externo ainda não acompanhou sua real expertise. Ela subestima sua autoridade por escrito, mas entrega além na prática.',
+        executiveSummary: 'Bruna é uma profissional de alta competência cujo posicionamento externo ainda não acompanhou sua real expertise. Ela subestima sua autoridade por escrito, mas entrega além na prática.',
         strengths: ['Credibilidade técnica profunda', 'Ponto de vista claro quando provocada', 'Forte empatia com clientes'],
         goals: ['Ser reconhecida como autoridade de categoria, não generalista', 'Elevar o valor cobrado por meio de posicionamento percebido'],
         painPoints: ['Descreve-se com linguagem vaga e segura', 'Sem narrativa consistente entre plataformas'],
@@ -1317,7 +1223,7 @@ const SEED = {
       meeting: { title: 'E1 — Extração e Essência', transcriptUploaded: true, status: 'analyzed' },
       transcriptAnalysis: {
         version: 1,
-        summary: 'Marina descreveu um padrão de conquistar clientes por indicação, mas com dificuldade de converter públicos frios — o que remete a uma autodescrição genérica.',
+        summary: 'Bruna descreveu um padrão de conquistar clientes por indicação, mas com dificuldade de converter públicos frios — o que remete a uma autodescrição genérica.',
         goals: ['Conseguir 3 palestras este ano', 'Aumentar os valores em 30% sem perder conversão'],
         challenges: ['Sensação de impostora ao "escolher um nicho"', 'Medo de afastar clientes antigos ao se especializar'],
         actionItems: ['Redigir uma declaração de posicionamento clara', 'Auditar os últimos 10 conteúdos quanto à consistência'],
@@ -1490,13 +1396,13 @@ const SEED = {
       },
     },
 
-    // --- Client 2: Júlia — just starting out, nothing analyzed yet ---
+    // --- Client 2: Adriana — just starting out, nothing analyzed yet ---
     'client-2': {
-      profile: { id: 'client-2', fullName: 'Júlia Ferreira', email: 'julia@example.com', status: 'active', tier: 'essential', phaseIndex: 0, programSlug: 'persea-essential', gender: 'feminino' },
+      profile: { id: 'client-2', fullName: 'Adriana Lima', email: 'adriana@example.com', status: 'active', tier: 'essential', phaseIndex: 0, programSlug: 'persea-essential', gender: 'feminino' },
       onboarding: {
         clientInfo: {
-          submitted: true, fullName: 'Júlia Ferreira', partyType: 'PF', cpf: '234.567.890-11', cnpj: null, companyName: null,
-          address: 'Av. Exemplo, 200, Centro, Sete Lagoas/MG', email: 'julia@example.com', whatsapp: '(31) 90000-0002',
+          submitted: true, fullName: 'Adriana Lima', partyType: 'PF', cpf: '234.567.890-11', cnpj: null, companyName: null,
+          address: 'Av. Exemplo, 200, Centro, Sete Lagoas/MG', email: 'adriana@example.com', whatsapp: '(31) 90000-0002',
         },
         contract: { program: 'persea', duration: 'semestral', status: 'completed', value: 18000, signedFileName: 'contrato-client-2-assinado.pdf', notes: '', paymentMethod: null, installments: null },
         whatsappGroup: { status: 'added' },
@@ -1553,7 +1459,7 @@ const SEED = {
       questionnaireAnalysis: {
         version: 1,
         generatedAt: '2026-07-10T09:15:00',
-        executiveSummary: 'Júlia tem clareza técnica mas evita visibilidade — o principal obstáculo é exposição, não competência.',
+        executiveSummary: 'Adriana tem clareza técnica mas evita visibilidade — o principal obstáculo é exposição, não competência.',
         strengths: ['Didática natural', 'Organização impecável de conteúdo', 'Empatia com o público iniciante'],
         goals: ['Perder o medo de aparecer', 'Construir autoridade em finanças pessoais'],
         painPoints: ['Evita gravar vídeos e fazer lives', 'Se compara constantemente a outras referências do nicho'],
@@ -1571,7 +1477,7 @@ const SEED = {
         status: 'not_started',
       },
       // Completed attempt — clean top 3 (Sábio 19 / Governante 18 / Criador 17),
-      // no tie, for contrast with Marina's tied example above.
+      // no tie, for contrast with Bruna's tied example above.
       // In-progress attempt — 20 of 48 answered, demonstrates save-and-resume.
       archetypeQuiz: {
         visualSet: null,
@@ -1612,13 +1518,13 @@ const SEED = {
       ],
     },
 
-    // --- Client 3: Renata — mid-journey, playbook drafted but not published ---
+    // --- Client 3: Anitta — mid-journey, playbook drafted but not published ---
     'client-3': {
-      profile: { id: 'client-3', fullName: 'Renata Costa', email: 'renata@example.com', status: 'active', tier: 'premium', phaseIndex: 0, programSlug: 'persea-premium', gender: 'feminino' },
+      profile: { id: 'client-3', fullName: 'Anitta', email: 'anitta@example.com', status: 'active', tier: 'premium', phaseIndex: 0, programSlug: 'persea-premium', gender: 'feminino' },
       onboarding: {
         clientInfo: {
-          submitted: true, fullName: 'Renata Costa', partyType: 'PJ', cpf: '345.678.901-22', cnpj: '12.345.678/0001-90', companyName: 'Renata Costa Consultoria',
-          address: 'Rua Exemplo, 300, Lourdes, Belo Horizonte/MG', email: 'renata@example.com', whatsapp: '(31) 90000-0003',
+          submitted: true, fullName: 'Anitta', partyType: 'PJ', cpf: '345.678.901-22', cnpj: '12.345.678/0001-90', companyName: 'Anitta Consultoria',
+          address: 'Rua Exemplo, 300, Lourdes, Belo Horizonte/MG', email: 'anitta@example.com', whatsapp: '(31) 90000-0003',
         },
         contract: { program: 'persea', duration: 'anual', status: 'completed', value: 32000, signedFileName: 'contrato-client-3-assinado.pdf', notes: '', paymentMethod: null, installments: null },
         whatsappGroup: { status: 'added' },
@@ -1675,7 +1581,7 @@ const SEED = {
       questionnaireAnalysis: {
         version: 1,
         generatedAt: '2026-06-28T11:00:00',
-        executiveSummary: 'Renata já entrega resultado operacional forte, mas se posiciona como "faz-tudo" — o que dilui o valor percebido do seu trabalho mais estratégico.',
+        executiveSummary: 'Anitta já entrega resultado operacional forte, mas se posiciona como "faz-tudo" — o que dilui o valor percebido do seu trabalho mais estratégico.',
         strengths: ['Execução comprovada', 'Linguagem direta e confiável', 'Cases fortes de antes/depois'],
         goals: ['Ser vista como estrategista, não só executora', 'Cobrar por diagnóstico, não só por implementação'],
         painPoints: ['Aceita qualquer tipo de projeto', 'Portfólio comunica serviço, não transformação'],
@@ -1686,12 +1592,12 @@ const SEED = {
       meeting: { title: 'E3 — Imagem e Estratégia', transcriptUploaded: true, status: 'analyzed' },
       transcriptAnalysis: {
         version: 1,
-        summary: 'Renata relatou cansaço de aceitar projetos fora do seu foco só para manter a agenda cheia, e dificuldade de precificar diagnóstico como etapa separada da execução.',
+        summary: 'Anitta relatou cansaço de aceitar projetos fora do seu foco só para manter a agenda cheia, e dificuldade de precificar diagnóstico como etapa separada da execução.',
         goals: ['Criar uma oferta de diagnóstico paga', 'Recusar 30% dos projetos fora do foco'],
         challenges: ['Medo de perder receita ao dizer não', 'Dificuldade de nomear a própria metodologia'],
         actionItems: ['Nomear a metodologia de diagnóstico', 'Criar página de portfólio por transformação, não por serviço'],
         homework: ['Ler o Playbook v1', 'Gravar o pitch de 30 segundos em áudio ou vídeo', 'Responder às perguntas de reflexão'],
-        keyInsights: ['Aceitar tudo é o principal fator que mantém Renata no nível "executora".'],
+        keyInsights: ['Aceitar tudo é o principal fator que mantém Anitta no nível "executora".'],
       },
       playbook: {
         versions: [
@@ -1725,7 +1631,7 @@ const SEED = {
       },
       // Completed attempt — clean top 3 (Sábio 19 / Governante 18 / Criador 17),
       // no tie, fits her established "Estrategista de Marca e Consultora de
-      // Negócios" narrative and contrasts with Marina's tied example.
+      // Negócios" narrative and contrasts with Bruna's tied example.
       archetypeQuiz: {
         visualSet: 'female',
         notes: '',
@@ -1770,11 +1676,11 @@ const SEED = {
     // --- Clients 4-6: onboarding-stage — Phase 1 not started yet, demonstrate
     // the pre-mentorship workflow from docs/PERSEA_METHODOLOGY.md §2. ---
     'client-4': {
-      profile: { id: 'client-4', fullName: 'Bianca Souza', email: 'bianca@example.com', status: 'onboarding', tier: 'essential', phaseIndex: 0, programSlug: 'persea-essential', gender: 'feminino' },
+      profile: { id: 'client-4', fullName: 'Juliana Paes', email: 'juliana@example.com', status: 'onboarding', tier: 'essential', phaseIndex: 0, programSlug: 'persea-essential', gender: 'feminino' },
       onboarding: {
         clientInfo: {
-          submitted: true, fullName: 'Bianca Souza', partyType: 'PF', cpf: '456.789.012-33', cnpj: null, companyName: null,
-          address: 'Rua Exemplo, 400, Centro, Contagem/MG', email: 'bianca@example.com', whatsapp: '(31) 90000-0004',
+          submitted: true, fullName: 'Juliana Paes', partyType: 'PF', cpf: '456.789.012-33', cnpj: null, companyName: null,
+          address: 'Rua Exemplo, 400, Centro, Contagem/MG', email: 'juliana@example.com', whatsapp: '(31) 90000-0004',
         },
         contract: { program: null, duration: null, status: 'info_received', value: null, signedFileName: null, notes: '', paymentMethod: null, installments: null },
         whatsappGroup: { status: 'not_added' },
@@ -1845,80 +1751,9 @@ const SEED = {
       moodLog: [],
     },
 
-    'client-5': {
-      profile: { id: 'client-5', fullName: 'Camila Rocha', email: 'camila@example.com', status: 'onboarding', tier: 'essential', phaseIndex: 0, programSlug: 'persea-essential', gender: 'feminino' },
-      onboarding: {
-        clientInfo: {
-          submitted: true, fullName: 'Camila Rocha', partyType: 'PF', cpf: '567.890.123-44', cnpj: null, companyName: null,
-          address: 'Rua Exemplo, 500, Centro, Betim/MG', email: 'camila@example.com', whatsapp: '(31) 90000-0005',
-        },
-        contract: { program: 'persea', duration: 'semestral', status: 'awaiting_signature', value: 18000, signedFileName: null, notes: '', paymentMethod: null, installments: null },
-        whatsappGroup: { status: 'pending' },
-      },
-      payments: [],
-      brandDirection: {
-        pinterestUrl: null, moodBoardIntro: '', positioningSummary: '', keywords: [], tone: '', references: [],
-        guidance: '', belongs: [], doesntBelong: [], updatedAt: null,
-      },
-      brandIdeas: '',
-      guideAcknowledged: false,
-      images: [],
-      imagesStatus: 'aguardando_envio',
-      imagesNote: '',
-      photoReminder: { sentAt: null, note: '' },
-      whatsappNotes: [],
-      contentActivity: { status: 'not_started', submission: '', feedback: '', updatedAt: null },
-      imageProjectStatus: 'not_started',
-      imageGuides: [{ slug: 'paleta_cores', fileUrl: null, note: '' }, { slug: 'estilo', fileUrl: null, note: '' }, { slug: 'moodboard_ensaio', fileUrl: null, note: '' }, { slug: 'guia_looks_mensal', fileUrl: null, note: '' }],
-      digitalKit: { fileUrl: null },
-      hublaAccess: { status: 'not_granted', grantedAt: null },
-      programHistory: [{ programSlug: 'persea-essential', changedAt: null, changedBy: 'seed' }],
-      journey: {
-        programName: 'Identidade',
-        steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'locked' },
-          { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'locked' },
-          { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
-          { key: 'assessment', title: 'Teste de Arquétipos', status: 'locked' },
-          { key: 'pitch', title: 'Gerador de Pitch', status: 'locked' },
-          { key: 'homework', title: 'Tarefas', status: 'locked' },
-        ],
-        upcomingMeeting: { title: 'E1 — Extração e Essência — a agendar após onboarding', date: '2026-08-28T10:00:00' },
-      },
-      questionnaire: {
-        title: 'Extração de Marca',
-        questions: [
-          { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
-          { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
-          { id: 'q3', text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', type: 'long_text', answer: '' },
-          { id: 'q4', text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', type: 'scale', answer: '' },
-        ],
-        status: 'in_progress',
-      },
-      questionnaireAnalysis: {
-        version: 0, generatedAt: null, executiveSummary: 'Ainda não gerada — disponível após o envio do questionário.',
-        strengths: [], goals: [], painPoints: [], opportunities: [], suggestedQuestions: [], businessMaturity: '—',
-      },
-      meeting: { title: 'E1 — Extração e Essência', transcriptUploaded: false, status: 'scheduled' },
-      transcriptAnalysis: null,
-      playbook: { versions: [] },
-      assessment: { title: 'Teste de Arquétipos', description: 'Uma breve avaliação externa para identificar seu arquétipo de marca dominante.', externalUrl: 'https://example.com/archetype-test', status: 'not_started' },
-      archetypeQuiz: { visualSet: null, notes: '', attempts: [] },
-      pitches: null,
-      homework: [
-        { id: 'h1', title: 'Ler o Playbook', type: 'boolean', status: 'pending' },
-        { id: 'h2', title: 'Gravação do Pitch (áudio ou vídeo)', type: 'media_upload', status: 'pending', submissions: [] },
-        { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
-      ],
-      activity: [
-        { type: 'onboarding_info_submitted', text: 'Informações de cadastro enviadas para o contrato', at: '2026-08-05T09:00:00' },
-      ],
-      playbookExperience: { format: null, completedAt: null },
-      quiz: { score: null, total: null, completedAt: null },
-      meetingRequests: [],
-      notes: '',
-      moodLog: [],
-    },
+    // client-5 (Camila Rocha) removed per request — eliminated, no
+    // dependent records left (her only reference, assistantMessages am2,
+    // was removed above).
 
     // client-6 (Débora Lima) removed — confirmed seeded/demo data
     // representing the retired Ascensão de Imagem program (never went
@@ -2021,8 +1856,8 @@ const RECORDING_SEED_SNAPSHOT = Object.fromEntries(
 // template library, content categories, the shared resource library —
 // none of that is client/lead-specific demo data) and empties every
 // per-lead/per-client/per-transaction collection, so an admin page on
-// app.naymurta.com genuinely shows zero clients/leads rather than Marina,
-// Júlia, etc. — same codebase, same seed shape, just started empty.
+// app.naymurta.com genuinely shows zero clients/leads rather than Bruna,
+// Adriana, etc. — same codebase, same seed shape, just started empty.
 //
 // Known, deliberately out-of-scope-for-this-pass limitation: the
 // client-facing pages (dashboard, program, financial, questionnaire...)
