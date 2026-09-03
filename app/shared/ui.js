@@ -29,9 +29,21 @@ export function isLocalDev() {
 // both, so this can't drift apart again. `currentPathname` is
 // location.pathname from whichever admin page is calling this, e.g.
 // '/admin/crm.html' or '/admin/lead-detail.html'.
+//
+// Live-testing bug fix: Cloudflare's static-asset serving is configured
+// with html_handling: "auto-trailing-slash" — it 307-redirects
+// /admin/lead-detail.html to /admin/lead-detail, so on the hosted site
+// location.pathname never actually contains ".html" once the page has
+// loaded. The old regex required a literal ".html" and silently failed to
+// match there, leaving the "copied" link pointing at the admin page itself
+// (token stuck on as a harmless, ignored query param) instead of the
+// public cadastro form — which is exactly why opening it prompted a login:
+// it was never actually the registration page. ".html" is now optional in
+// the match, so this works whether the browser's current pathname has the
+// extension (localhost) or not (the hosted, redirected form).
 export function buildRegistrationLink(token, currentPathname) {
   const origin = isLocalDev() ? `http://${location.host}` : location.origin;
-  const path = currentPathname.replace(/admin\/(crm|lead-detail)\.html/, 'client/registration.html');
+  const path = currentPathname.replace(/admin\/(crm|lead-detail)(\.html)?\/?$/, 'client/registration.html');
   return `${origin}${path}?token=${token}`;
 }
 
