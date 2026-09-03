@@ -207,17 +207,22 @@ function openExpenseModal() {
 async function render() {
   const summary = MockDB.getFinancialSummary();
   const realKPIs = await loadRealKPIs();
+  // System-Wide UX Simplification Pass: the real KPIs above are the reason
+  // anyone opens this page — the demo pipeline (KPIs, forecast, by-program,
+  // client billing, expenses: five more stacked sections) doesn't need to
+  // load fully open every time. Collapsed by default, everything still one
+  // click away, nothing removed.
   content.innerHTML = `
     ${renderRealKPIs(realKPIs)}
-    <div class="mb-3">
-      <p class="text-xs uppercase" style="color:var(--muted); letter-spacing:.08em;">↓ Pipeline de Demonstração</p>
-      <p class="text-xs text-white/20 mt-1 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
-    </div>
-    ${renderKPIs(summary)}
-    ${renderForecast()}
-    ${renderByProgram(summary)}
-    ${renderClientBilling()}
-    ${renderExpenses()}
+    <details class="mb-8">
+      <summary class="text-xs uppercase cursor-pointer" style="color:var(--muted); letter-spacing:.08em; list-style:none;">▸ Pipeline de Demonstração</summary>
+      <p class="text-xs text-white/20 mt-2 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
+      ${renderKPIs(summary)}
+      ${renderForecast()}
+      ${renderByProgram(summary)}
+      ${renderClientBilling()}
+      ${renderExpenses()}
+    </details>
   `;
   content.querySelector('#new-expense')?.addEventListener('click', openExpenseModal);
   content.querySelectorAll('[data-delete-expense]').forEach((btn) => {

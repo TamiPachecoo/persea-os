@@ -150,8 +150,12 @@ function renderRequestsCard() {
           </div>
           <div class="flex items-center gap-2 mt-3">
             ${r.status === 'pending' ? `
-              <button data-assign="${r.clientId}:${r.id}:nay" class="btn-ghost">Atribuir à Nay</button>
-              <button data-assign="${r.clientId}:${r.id}:assistant" class="btn-ghost">Atribuir à Assistente</button>
+              <label class="text-xs" style="color:var(--muted);">Responsável</label>
+              <select data-assign-select="${r.clientId}:${r.id}" class="field" style="width:auto; padding:5px 10px; font-size:12.5px;">
+                <option value="" selected disabled>Escolher…</option>
+                <option value="nay">Nay</option>
+                <option value="assistant">Assistente</option>
+              </select>
             ` : `
               <span class="text-xs" style="color:var(--muted);">Com ${ASSIGNEE_LABEL[r.assignedTo]}</span>
               <button data-resolve="${r.clientId}:${r.id}" class="btn-text">Marcar como concluída</button>
@@ -227,9 +231,15 @@ function render() {
     <a href="reports.html" class="btn-text">Ver relatórios completos (impacto, adesão, engajamento, financeiro) &rarr;</a>
   `;
 
-  content.querySelectorAll('[data-assign]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const [clientId, requestId, assignee] = btn.dataset.assign.split(':');
+  // System-Wide UX Simplification Pass (Design Rule #5): one "Responsável"
+  // dropdown instead of two always-visible "Atribuir à X" buttons —
+  // functionally identical (still calls assignMeetingRequest either way),
+  // just one control instead of two competing for attention.
+  content.querySelectorAll('[data-assign-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const [clientId, requestId] = select.dataset.assignSelect.split(':');
+      const assignee = select.value;
+      if (!assignee) return;
       MockDB.assignMeetingRequest(clientId, requestId, assignee);
       toast(`Reunião atribuída a ${ASSIGNEE_LABEL[assignee]}.`);
       render();

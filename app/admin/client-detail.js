@@ -120,6 +120,36 @@ function renderAssistantContextSidebar() {
   `, 'mb-6');
 }
 
+// System-Wide UX Simplification Pass — Client Detail (Admin/Assistant):
+// answers "where is this client and what needs to happen next" at a
+// glance, before any tab is even opened. Reuses data every tab already
+// reads (getEncounterJourney, getNextAction, getPayments,
+// getEncounterRequests) — no new state, just surfaced earlier. Renders
+// nothing (not an empty strip) when there's genuinely nothing to show.
+function renderClientAttentionStrip() {
+  const enc = MockDB.getEncounterJourney(clientId).find((e) => e.status === 'upcoming');
+  const nextAction = MockDB.getNextAction(clientId);
+  const overdue = MockDB.getPayments(clientId).filter((p) => p.status === 'overdue').length;
+  const openRequests = MockDB.getEncounterRequests(clientId).filter((r) => r.status === 'awaiting_nay_confirmation').length;
+  const attention = overdue + openRequests;
+  const items = [
+    enc ? { label: 'Próximo encontro', value: `E${enc.number} — ${enc.name} · ${formatDate(enc.date)}` } : null,
+    nextAction ? { label: 'Próxima ação', value: nextAction.title } : null,
+    attention ? { label: 'Atenção', value: `${attention} pendência${attention === 1 ? '' : 's'}`, tone: 'var(--terracotta)' } : null,
+  ].filter(Boolean);
+  if (!items.length) return '';
+  return `
+    <div class="flex flex-wrap items-start gap-x-10 gap-y-3 mb-8 pb-6" style="border-bottom:1px solid var(--line);">
+      ${items.map((it) => `
+        <div>
+          <p class="text-xs" style="color:var(--muted);">${it.label}</p>
+          <p class="text-sm mt-0.5" style="${it.tone ? `color:${it.tone};` : ''}">${it.value}</p>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function shell(inner) {
   const done = isOnboardingDone();
   const visibleTabs = done ? TABS : [['onboarding', 'Onboarding'], ...TABS];
@@ -138,6 +168,7 @@ function shell(inner) {
         ${statusBadge(client.status)}
       </div>
     </div>
+    ${renderClientAttentionStrip()}
     ${!MockDB.getOnboarding(clientId).clientInfo.submitted ? `
       <div class="mb-8" style="border-left:3px solid var(--terracotta); border-radius:4px;">${card(`
         <p class="text-sm" style="color:var(--terracotta);">⚠ Esta cliente ainda não preencheu as informações de cadastro — o contrato não pode ser preparado até isso acontecer.</p>
