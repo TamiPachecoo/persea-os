@@ -133,10 +133,13 @@ function renderGoogleCalendarCard(status) {
       <div>
         <p class="text-sm text-white/50 mb-1">Google Calendar</p>
         ${status.connected
-          ? `<p class="text-sm" style="color:var(--gold);">● Connected${status.google_account_email ? `<br/><span class="text-xs text-white/40">${status.google_account_email}</span>` : ''}</p>`
+          ? `<p class="text-sm" style="color:var(--gold);">Status: Conectado</p>
+             <p class="text-xs text-white/40 mt-0.5">Conta conectada: ${status.google_account_email || '—'}</p>`
           : '<p class="text-xs text-white/30">Nenhuma conta conectada ainda.</p>'}
       </div>
-      ${status.connected ? '' : '<button id="connect-google-calendar" class="btn-primary">Connect Google Calendar</button>'}
+      ${status.connected
+        ? '<button id="reconnect-google-calendar" class="btn-ghost">Reconectar Google</button>'
+        : '<button id="connect-google-calendar" class="btn-primary">Connect Google Calendar</button>'}
     </div>
   `, 'mb-6');
 }
@@ -625,6 +628,35 @@ async function render() {
     if (error || data?.error) {
       toast(data?.error || error.message, { tone: 'error' });
       e.target.disabled = false; e.target.textContent = 'Connect Google Calendar';
+      return;
+    }
+    window.location.href = data.url;
+  });
+
+  // Reconnect = clear this account's own stored Google OAuth credentials
+  // (google-calendar-disconnect, scoped to the caller's own row — never
+  // another user's, never any other PERSEA data), then run the exact same
+  // auth-start flow as a first-time connect. Needed whenever the underlying
+  // Google OAuth app/credentials change (e.g. moving off a test project),
+  // since the old refresh token belongs to the old app and would otherwise
+  // just sit there marked "connected" while silently no longer working.
+  content.querySelector('#reconnect-google-calendar')?.addEventListener('click', async (e) => {
+    const profile = await getCurrentProfile();
+    if (!profile || !['admin', 'assistant'].includes(profile.role)) {
+      toast('Faça login no sistema real (login.html) antes de reconectar o Google Calendar.', { tone: 'error' });
+      return;
+    }
+    e.target.disabled = true; e.target.textContent = 'Reconectando...';
+    const { data: discData, error: discErr } = await supabase.functions.invoke('google-calendar-disconnect');
+    if (discErr || discData?.error) {
+      toast(discData?.error || discErr.message, { tone: 'error' });
+      e.target.disabled = false; e.target.textContent = 'Reconectar Google';
+      return;
+    }
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth-start');
+    if (error || data?.error) {
+      toast(data?.error || error.message, { tone: 'error' });
+      e.target.disabled = false; e.target.textContent = 'Reconectar Google';
       return;
     }
     window.location.href = data.url;
