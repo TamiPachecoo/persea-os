@@ -7,6 +7,7 @@ import { renderShell, card, toast, formatDate, openModal, brl } from '../shared/
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
+import { loadHublaPendingClients, markHublaAccessGranted } from '../shared/hubla-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'financial.html', title: 'Financeiro' });
@@ -57,6 +58,41 @@ function renderRealKPIs({ recebido, aReceber, emAtraso, error }) {
       </div>
     `}
   `, 'mb-8');
+}
+
+// Hubla exposes no API to grant access (checked directly against their
+// docs) — only a manual "Adicionar membro(s)" action inside Hubla itself.
+// This can't automate that step, but it removes the part that was actually
+// eating Nay/Ju's time: knowing who's waiting. Once the grant happens in
+// Hubla, hubla-webhook's own customer.member_added handling flips this
+// status automatically — "Marcar como concedido" below is a manual
+// fallback for confirming a grant that predates the webhook, or that this
+// rule wasn't scoped to catch.
+function hublaPendingRow(c) {
+  return `
+    <div class="flex items-center justify-between py-3 border-b border-white/5 last:border-0 flex-wrap gap-2">
+      <div>
+        <p class="text-sm font-medium">${c.full_name}</p>
+        <p class="text-xs text-white/30">${c.email}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="button" data-copy-hubla-email="${c.email}" class="btn-ghost" style="padding:6px 12px; font-size:12px;">Copiar e-mail</button>
+        <button type="button" data-mark-hubla-granted="${c.id}" class="btn-text">Marcar como concedido</button>
+      </div>
+    </div>
+  `;
+}
+function renderHublaPendingCard({ clients, error }) {
+  if (error) return '';
+  if (!clients.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm text-white/50">Acessos Hubla Pendentes</p>
+      <span class="text-xs" style="color:var(--muted);">${clients.length}</span>
+    </div>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API — copie o e-mail e adicione em Hubla → Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+    ${clients.map(hublaPendingRow).join('')}
+  `, 'mb-6');
 }
 
 function renderKPIs(summary) {
@@ -206,7 +242,7 @@ function openExpenseModal() {
 
 async function render() {
   const summary = MockDB.getFinancialSummary();
-  const realKPIs = await loadRealKPIs();
+  const [realKPIs, hublaPending] = await Promise.all([loadRealKPIs(), loadHublaPendingClients()]);
   // System-Wide UX Simplification Pass: the real KPIs above are the reason
   // anyone opens this page — the demo pipeline (KPIs, forecast, by-program,
   // client billing, expenses: five more stacked sections) doesn't need to
@@ -214,6 +250,7 @@ async function render() {
   // click away, nothing removed.
   content.innerHTML = `
     ${renderRealKPIs(realKPIs)}
+    ${renderHublaPendingCard(hublaPending)}
     <details class="mb-8">
       <summary class="text-xs uppercase cursor-pointer" style="color:var(--muted); letter-spacing:.08em; list-style:none;">▸ Pipeline de Demonstração</summary>
       <p class="text-xs text-white/20 mt-2 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
@@ -229,6 +266,24 @@ async function render() {
     btn.addEventListener('click', () => {
       MockDB.deleteExpense(btn.dataset.deleteExpense);
       toast('Despesa removida.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-copy-hubla-email]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copyHublaEmail);
+        toast('E-mail copiado.');
+      } catch {
+        toast('Não foi possível copiar automaticamente — selecione o e-mail manualmente.', { tone: 'error' });
+      }
+    });
+  });
+  content.querySelectorAll('[data-mark-hubla-granted]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await markHublaAccessGranted(btn.dataset.markHublaGranted);
+      if (error) { toast('Erro ao atualizar o status.', { tone: 'error' }); return; }
+      toast('Acesso Hubla marcado como concedido.');
       render();
     });
   });
