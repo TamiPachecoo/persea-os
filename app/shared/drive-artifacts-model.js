@@ -14,20 +14,40 @@ export async function loadDriveArtifacts() {
   return { artifacts: data || [], error: null };
 }
 
-// Manual link — a staff member confirming "this file belongs to this
+// Meet names a session's recording/transcript/folder identically apart
+// from one of these suffixes — "Sessão X - Recording" / "Sessão X -
+// Anotações do Gemini" / bare "Sessão X" for the folder itself (see the
+// real example this was built from: google-drive-meet-files' delivery
+// report). Stripping the suffix gives the shared session key so one
+// confirmed link can apply to the whole session's files at once, instead
+// of requiring three separate clicks — and a staff member confirming
+// against, say, the recording row has no reason to expect the transcript
+// to stay silently unlinked right next to it.
+const SESSION_SUFFIX_PATTERN = / - (Recording|Anotações do Gemini)$/;
+export function sessionKeyFor(name) {
+  return (name || '').replace(SESSION_SUFFIX_PATTERN, '');
+}
+
+// Manual link — a staff member confirming "this session belongs to this
 // client," distinct from google-drive-meet-files' own automatic
-// title+time match (match_confidence: 'confident'). Deliberately doesn't
-// touch agenda_item_id — she's identifying who it belongs to, not
-// necessarily which exact calendar entry, and requiring that second guess
-// would just block an otherwise-confident manual call.
-export function linkArtifactToClient(artifactId, clientId, staffId) {
-  return supabase.from('google_meet_drive_artifacts').update({
-    client_id: clientId,
-    match_confidence: 'manual',
-    matched_at: new Date().toISOString(),
-    matched_by: staffId,
-    updated_at: new Date().toISOString(),
-  }).eq('id', artifactId);
+// title+time match (match_confidence: 'confident'). Applies to every
+// currently-UNMATCHED file sharing the same session key — `.is('client_id',
+// null)` means an already-linked sibling (confident, manual, or linked to
+// someone else entirely) is never silently overwritten; that one would
+// need its own explicit Desvincular first. Deliberately doesn't touch
+// agenda_item_id — identifying who it belongs to, not necessarily which
+// exact calendar entry.
+export function linkSessionToClient(sessionKey, clientId, staffId) {
+  return supabase.from('google_meet_drive_artifacts')
+    .update({
+      client_id: clientId,
+      match_confidence: 'manual',
+      matched_at: new Date().toISOString(),
+      matched_by: staffId,
+      updated_at: new Date().toISOString(),
+    })
+    .is('client_id', null)
+    .ilike('name', `${sessionKey}%`);
 }
 
 // Undo — puts a mistaken link back in the unmatched pool.

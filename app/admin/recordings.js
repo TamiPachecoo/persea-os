@@ -13,7 +13,7 @@ import {
 import { renderShell, card, toast, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs, functionErrorMessage } from '../shared/ui.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
-import { loadDriveArtifacts, linkArtifactToClient, unlinkArtifact } from '../shared/drive-artifacts-model.js';
+import { loadDriveArtifacts, linkSessionToClient, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'agenda.html', title: 'Gravações' });
@@ -30,12 +30,21 @@ async function loadClientOptions() {
 
 const ARTIFACT_TYPE_ICON = { recording: '🎥', transcript: '📝', unknown: '📁' };
 
+const ARTIFACT_TYPE_TEXT_LABEL = { recording: 'Gravação', transcript: 'Transcrição', unknown: 'Pasta da sessão' };
+
+// Confirming a link applies it to every currently-unmatched file sharing
+// this session's key (recording + transcript + folder), not just the one
+// row clicked — see linkSessionToClient. Surfacing the type label plainly
+// (rather than relying on the icon/raw filename alone) is the direct fix
+// for a real reported confusion: linking "the folder" row looked like
+// linking "the meeting," while the actual recording/transcript rows sat
+// right below it still showing "sem cliente vinculada."
 function driveArtifactRow(a, clients) {
   const isMatched = !!a.client_id;
   return `
     <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
       <div class="flex-1 min-w-[240px]">
-        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${a.name}</p>
+        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">— ${a.name}</span></p>
         <p class="text-xs text-white/30 mt-0.5">
           ${formatDateTime(a.discovered_at)} descoberto
           ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
@@ -50,7 +59,7 @@ function driveArtifactRow(a, clients) {
             <option value="">Vincular a...</option>
             ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
           </select>
-          <button type="button" data-link-artifact="${a.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
+          <button type="button" data-link-artifact="${a.id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
         `}
       </div>
     </div>
@@ -65,7 +74,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
       </div>
       <button type="button" id="search-drive-artifacts" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Buscar Gravações</button>
     </div>
-    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado (últimos 30 dias). Cada uma só fica vinculada a uma cliente depois de confirmada aqui — nunca atribuída sozinha sem certeza.</p>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado (últimos 30 dias). Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas — nunca atribuídas sozinhas sem certeza.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
       : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações".</p>'}
@@ -191,9 +200,9 @@ async function render() {
       const select = content.querySelector(`[data-link-client-select="${btn.dataset.linkArtifact}"]`);
       if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
       const profile = await getCurrentProfile();
-      const { error } = await linkArtifactToClient(btn.dataset.linkArtifact, select.value, profile.id);
+      const { error } = await linkSessionToClient(btn.dataset.sessionKey, select.value, profile.id);
       if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
-      toast('Gravação vinculada à cliente.');
+      toast('Sessão (gravação, transcrição e pasta) vinculada à cliente.');
       render();
     });
   });
