@@ -216,10 +216,22 @@ export function initClientSwitcher() {
 
 const ROLE_LABEL = { admin: 'Admin', assistant: 'Assistente', client: 'Cliente' };
 
+// Root-relative rather than bare filenames — every page that calls
+// renderShell already lives one level under its own role's directory, so
+// this changes nothing for them (/admin/x.html's own nav still resolves
+// identically). It matters for the handful of pages reached across roles
+// (e.g. admin/contract.js, opened by both /admin/ and /assistant/ — there
+// is no separate assistant/contract.html): a bare 'agenda.html' link would
+// resolve relative to whichever directory the current page physically
+// lives in, sending an assistant standing on /admin/contract.html to
+// Nay's admin agenda instead of her own.
+const ROLE_DIR = { admin: '/admin/', assistant: '/assistant/', client: '/client/' };
+
 export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
+  const dir = ROLE_DIR[role] || '';
   const navHtml = nav.map(([href, label]) => `
-    <a href="${href}" class="nav-link ${active === href ? 'active' : ''}">${label}</a>
+    <a href="${dir}${href}" class="nav-link ${active === href ? 'active' : ''}">${label}</a>
   `).join('');
 
   return `

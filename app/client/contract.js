@@ -1,13 +1,18 @@
 // Client's contract status — signing happens on an external e-signature
 // platform, not in this app, so this page is read-only: what's happening
 // with her contract, and a download link once the signed document is back.
+// Reached from onboarding.js's "Acompanhar contrato" link — previously had
+// no shell at all (no nav, no way back short of the browser), same trap
+// reported live on the admin/assistant contract page ("I'm locked in
+// here"). Fixed the same way: render the real shell.
 import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
-import { card } from '../shared/ui.js';
+import { card, renderShell } from '../shared/ui.js';
 
-const content = document.getElementById('app-content');
 const profile = await requireProfile('client');
 if (!profile) throw new Error('not authorized');
+document.body.innerHTML = renderShell({ role: 'client', title: 'Seu Contrato' });
+const content = document.getElementById('app-content');
 
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

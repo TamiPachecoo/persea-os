@@ -4,20 +4,26 @@
 // to run through an external e-signature platform (Autentique/Clicksign/
 // DocuSign — whichever Nay uses; signing itself never happens inside this
 // app), then uploads the signed file back here once it returns executed.
-// Standalone page for now (not yet wired into the mock admin nav, since the
-// rest of admin/assistant still runs on MockDB) — reach it directly via
-// contract.html?client_id=<uuid>.
+// Reached cross-directory from both admin/crm.js and assistant/leads.js —
+// there is no separate assistant/contract.html — via
+// contract.html?client_id=<uuid> (or ?legacy_id=). Previously had no shell
+// at all (no nav, no way to log out or navigate elsewhere without hitting
+// the browser back button — reported live as "I'm locked in here" once the
+// contract step was done). Now renders the real shell using the caller's
+// actual profile.role rather than guessing from the URL path (which is
+// always /admin/... regardless of who's viewing) — see renderShell's
+// role-prefixed nav hrefs for why a guess would have sent an assistant's
+// nav clicks to Nay's admin pages instead of her own.
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { mergeContractTemplate } from '../shared/contract-merge.js';
 import { renderContractPrintHtml } from '../shared/contract-print.js';
-import { card, toast, functionErrorMessage } from '../shared/ui.js';
+import { card, toast, functionErrorMessage, renderShell } from '../shared/ui.js';
 // Reusing the same program/duration/payment-method vocabulary the rest of
 // the app already uses (CRM lead conversion, mock onboarding) — just the
 // plain constant lists/labels, nothing MockDB-stateful.
 import { PROGRAMS, PROGRAM_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, PAYMENT_METHODS, PAYMENT_METHOD_LABEL } from '../shared/mock-db.js';
 
-const content = document.getElementById('app-content');
 const params = new URLSearchParams(location.search);
 let clientId = params.get('client_id');
 const legacyId = params.get('legacy_id');
@@ -37,6 +43,13 @@ if (!profile || !['admin', 'assistant'].includes(profile.role)) {
   location.href = `../login.html?next=${encodeURIComponent(location.pathname + location.search)}`;
   throw new Error('not authorized');
 }
+
+// Not itself a nav destination (reached only by a link from CRM/Cadastros),
+// but highlighting the section she came from — same convention client-
+// detail.js already uses — keeps her oriented instead of showing no active
+// tab at all.
+document.body.innerHTML = renderShell({ role: profile.role, active: profile.role === 'assistant' ? 'leads.html' : 'crm.html', title: 'Contrato' });
+const content = document.getElementById('app-content');
 
 // Linked in from the (still mock-based) admin client-detail page, which
 // only knows the client's legacy mock id — resolve it here rather than

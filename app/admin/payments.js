@@ -1,15 +1,19 @@
 // Real payment automation (SumUp) — Nova Cobrança, list, detail,
-// reconciliation. Standalone page for now (not yet wired into the mock
-// admin nav, same status as contract.html), reached via a link from the
-// existing Financeiro tab/page. See supabase/functions/sumup-* for the
+// reconciliation. Reached via a link from the Financeiro tab/page (admin
+// today; the role check below already permits assistant too, so this
+// renders her real shell rather than assuming admin the moment that link
+// exists on her side as well). See supabase/functions/sumup-* for the
 // actual SumUp API calls (never made from the browser).
+//
+// Previously had no shell at all — no nav, no way to log out or navigate
+// elsewhere short of the browser back button (same trap reported live on
+// contract.js: "I'm locked in here"). Fixed the same way: render the real
+// shell using profile.role, not a path guess.
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
-import { card, toast, openModal, formatDate, formatDateTime, functionErrorMessage } from '../shared/ui.js';
+import { card, toast, openModal, formatDate, formatDateTime, functionErrorMessage, renderShell } from '../shared/ui.js';
 import { deriveEffectiveStatus } from '../shared/date-utils.js';
 import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
-
-const content = document.getElementById('app-content');
 
 const STATUS_LABEL = {
   draft: 'Rascunho', pending: 'Aguardando pagamento', paid: 'Pago', overdue: 'Em atraso',
@@ -29,6 +33,9 @@ if (!profile || !['admin', 'assistant'].includes(profile.role)) {
   location.href = `../login.html?next=${encodeURIComponent(location.pathname + location.search)}`;
   throw new Error('not authorized');
 }
+
+document.body.innerHTML = renderShell({ role: profile.role, active: 'financial.html', title: 'Pagamentos' });
+const content = document.getElementById('app-content');
 
 // Optionally scoped to one client, linked in from her Financeiro tab (which
 // only knows her legacy mock id — resolve it here, same pattern as contract.js).
