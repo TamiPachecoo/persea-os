@@ -1,20 +1,76 @@
 // Gravações — Nay's overview of every 1:1 meeting's Google Meet recording
-// and transcript, across all clients. PROTOTYPE ONLY: nothing here talks to
-// a real Google or Supabase integration — see docs/google-meet-integration.md
-// for where that connects later. All data comes from MockDB's meeting
-// methods (see mock-db.js "Meeting recordings & transcripts" section); this
-// file is presentation only.
+// and transcript, across all clients. The meeting-by-meeting list below
+// (renderSyncSummary's fake status card, meetingRow, FILTERS) is still
+// PROTOTYPE ONLY — MockDB data, no real Google/Supabase behind it (see
+// docs/12-google-meet-integration.md). The "Descobertos no Google Drive"
+// card above it is real: google-drive-meet-files' actual discovery
+// results, straight from Supabase.
 import {
   MockDB, RECORDING_STATUS_LABEL, RECORDING_STATUS_BADGE_CLASS,
   TRANSCRIPT_STATUS_LABEL, TRANSCRIPT_STATUS_BADGE_CLASS,
   MEETING_LIFECYCLE_LABEL, MEETING_LIFECYCLE_BADGE_CLASS, ASSIGNEE_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
-import { requireProfile } from '../shared/supabase-auth.js';
+import { renderShell, card, toast, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs, functionErrorMessage } from '../shared/ui.js';
+import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
+import { loadDriveArtifacts, linkArtifactToClient, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'agenda.html', title: 'Gravações' });
 const content = document.getElementById('app-content');
+
+// Real client list for the "vincular a..." dropdown — every client, not
+// just non-demo, since most of today's roster is still flagged is_demo
+// (see clients_is_demo_flag) and this feature needs to be testable against
+// what actually exists right now, not just the one real client.
+async function loadClientOptions() {
+  const { data } = await supabase.from('clients').select('id, full_name').order('full_name');
+  return data || [];
+}
+
+const ARTIFACT_TYPE_ICON = { recording: '🎥', transcript: '📝', unknown: '📁' };
+
+function driveArtifactRow(a, clients) {
+  const isMatched = !!a.client_id;
+  return `
+    <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
+      <div class="flex-1 min-w-[240px]">
+        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${a.name}</p>
+        <p class="text-xs text-white/30 mt-0.5">
+          ${formatDateTime(a.discovered_at)} descoberto
+          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
+        </p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir no Drive ↗</a>
+        ${isMatched ? `
+          <button type="button" data-unlink-artifact="${a.id}" class="btn-text">Desvincular</button>
+        ` : `
+          <select data-link-client-select="${a.id}" class="field text-sm" style="width:auto;">
+            <option value="">Vincular a...</option>
+            ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
+          </select>
+          <button type="button" data-link-artifact="${a.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
+        `}
+      </div>
+    </div>
+  `;
+}
+function renderDriveArtifactsCard({ artifacts, error }, clients) {
+  return card(`
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div class="flex items-center gap-2">
+        <p class="text-sm text-white/50">Descobertos no Google Drive</p>
+        ${artifacts.length ? `<span class="text-xs" style="color:var(--muted);">${artifacts.length}</span>` : ''}
+      </div>
+      <button type="button" id="search-drive-artifacts" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Buscar Gravações</button>
+    </div>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado (últimos 30 dias). Cada uma só fica vinculada a uma cliente depois de confirmada aqui — nunca atribuída sozinha sem certeza.</p>
+    ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
+      : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
+      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações".</p>'}
+  `, 'mb-8');
+}
 
 const FILTERS = [
   ['', 'Todas'],
@@ -39,21 +95,8 @@ function renderSyncSummary() {
       <div><p class="text-xs text-white/30 mb-1">Status</p><p class="capitalize">${s.syncStatus.replace('_', ' ')} · ${s.attempts} tentativas</p></div>
     </div>
     <div class="pt-4" style="border-top:1px solid var(--line);">
-      <p class="text-xs uppercase mb-3" style="color:var(--gold); letter-spacing:.1em;">⏸ Decisão pendente com a Nay — forma de compartilhamento</p>
-      <p class="text-xs text-white/30 mb-4">Quando conectarmos ao Google Drive de verdade, cada gravação precisa ser compartilhada com a cliente certa. Duas formas possíveis — a segurança é bem diferente entre elas:</p>
-      <div class="grid sm:grid-cols-2 gap-4 text-sm">
-        <div class="value-item-card">
-          <p class="font-medium mb-1">Opção A — Link público</p>
-          <p class="text-xs text-white/40 mb-2">"Qualquer pessoa com o link" pode assistir, sem precisar estar logada em nada.</p>
-          <p class="text-xs" style="color:var(--terracotta);">Mais simples, mas se o link vazar ou for encaminhado, qualquer um consegue abrir.</p>
-        </div>
-        <div class="value-item-card">
-          <p class="font-medium mb-1">Opção B — Restrito por e-mail (recomendado)</p>
-          <p class="text-xs text-white/40 mb-2">Compartilhado só com o e-mail da cliente — ela precisa estar logada numa Conta Google com esse e-mail para abrir.</p>
-          <p class="text-xs" style="color:var(--gold);">Mais privado — mas exige que ela tenha (ou crie) uma Conta Google com o e-mail cadastrado.</p>
-        </div>
-      </div>
-      <p class="text-xs text-white/20 mt-4">Verificação manual (Nay/assistente confere e confirma cada gravação antes dela ficar visível para a cliente) já está decidida — vale para as duas opções acima.</p>
+      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">✓ Decidido — forma de compartilhamento</p>
+      <p class="text-xs text-white/30">Link público ("qualquer pessoa com o link pode assistir") — na prática já é como o Google Meet compartilha tudo que salva na pasta de gravações da Nay por padrão, então não muda nada do lado dela. Verificação manual (Nay/assistente confirma cada gravação vinculando-a à cliente certa, na seção "Descobertos no Google Drive" acima) continua sendo o que impede uma gravação de ser atribuída à pessoa errada — o link ser público não significa que o sistema atribui ela sozinho.</p>
     </div>
   `, 'mb-8');
 }
@@ -89,9 +132,10 @@ function meetingRow(m) {
   `;
 }
 
-function render() {
+async function render() {
   const all = MockDB.getMeetingsOverview();
   const filtered = activeFilter ? all.filter((m) => m.filterBucket === activeFilter) : all;
+  const [driveArtifacts, clientOptions] = await Promise.all([loadDriveArtifacts(), loadClientOptions()]);
 
   content.innerHTML = `
     <div class="mb-8">
@@ -99,6 +143,8 @@ function render() {
       <h1 class="text-3xl font-serif">Reuniões, Gravações e Transcrições</h1>
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Uma visão de todas as reuniões individuais, o status da gravação e da transcrição de cada uma, e o que ainda precisa de ação.</p>
     </div>
+
+    ${renderDriveArtifactsCard(driveArtifacts, clientOptions)}
 
     ${renderSyncSummary()}
 
@@ -125,6 +171,38 @@ function render() {
     row.addEventListener('click', (e) => {
       if (e.target.closest('[data-stop-row-click]')) return;
       location.href = `recording-detail.html?id=${row.dataset.openMeeting}`;
+    });
+  });
+
+  content.querySelector('#search-drive-artifacts')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Buscando...';
+    const { data, error } = await supabase.functions.invoke('google-drive-meet-files', { body: {} });
+    if (error || data?.error) {
+      toast(await functionErrorMessage(data, error), { tone: 'error' });
+      e.target.disabled = false; e.target.textContent = 'Buscar Gravações';
+      return;
+    }
+    const found = (data.matched?.length || 0) + (data.unmatched?.length || 0);
+    toast(found ? `${found} arquivo${found === 1 ? '' : 's'} encontrado${found === 1 ? '' : 's'}.` : 'Nenhum arquivo novo encontrado.');
+    render();
+  });
+  content.querySelectorAll('[data-link-artifact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const select = content.querySelector(`[data-link-client-select="${btn.dataset.linkArtifact}"]`);
+      if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
+      const profile = await getCurrentProfile();
+      const { error } = await linkArtifactToClient(btn.dataset.linkArtifact, select.value, profile.id);
+      if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
+      toast('Gravação vinculada à cliente.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-unlink-artifact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await unlinkArtifact(btn.dataset.unlinkArtifact);
+      if (error) { toast('Erro ao desvincular.', { tone: 'error' }); return; }
+      toast('Vínculo removido.');
+      render();
     });
   });
 }

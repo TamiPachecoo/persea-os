@@ -7,12 +7,66 @@ import {
   TRANSCRIPT_STATUS_LABEL, TRANSCRIPT_STATUS_BADGE_CLASS,
   MEETING_LIFECYCLE_LABEL, MEETING_LIFECYCLE_BADGE_CLASS,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
-import { requireProfile } from '../shared/supabase-auth.js';
+import { renderShell, card, toast, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs, functionErrorMessage } from '../shared/ui.js';
+import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
+import { loadDriveArtifacts, linkArtifactToClient, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 
 if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'agenda.html', title: 'Recomendações de Conteúdo' });
 const content = document.getElementById('app-content');
+
+// Real client list for the "vincular a..." dropdown — every client, not
+// just non-demo, since most of today's roster is still flagged is_demo
+// and this feature needs to be testable against what actually exists.
+async function loadClientOptions() {
+  const { data } = await supabase.from('clients').select('id, full_name').order('full_name');
+  return data || [];
+}
+
+const ARTIFACT_TYPE_ICON = { recording: '🎥', transcript: '📝', unknown: '📁' };
+
+function driveArtifactRow(a, clients) {
+  const isMatched = !!a.client_id;
+  return `
+    <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
+      <div class="flex-1 min-w-[240px]">
+        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${a.name}</p>
+        <p class="text-xs text-white/30 mt-0.5">
+          ${formatDateTime(a.discovered_at)} descoberto
+          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
+        </p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir no Drive ↗</a>
+        ${isMatched ? `
+          <button type="button" data-unlink-artifact="${a.id}" class="btn-text">Desvincular</button>
+        ` : `
+          <select data-link-client-select="${a.id}" class="field text-sm" style="width:auto;">
+            <option value="">Vincular a...</option>
+            ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
+          </select>
+          <button type="button" data-link-artifact="${a.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
+        `}
+      </div>
+    </div>
+  `;
+}
+function renderDriveArtifactsCard({ artifacts, error }, clients) {
+  return card(`
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div class="flex items-center gap-2">
+        <p class="text-sm text-white/50">Descobertos no Google Drive</p>
+        ${artifacts.length ? `<span class="text-xs" style="color:var(--muted);">${artifacts.length}</span>` : ''}
+      </div>
+      <button type="button" id="search-drive-artifacts" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Buscar Gravações</button>
+    </div>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado (últimos 30 dias). Cada uma só fica vinculada a uma cliente depois de confirmada aqui.</p>
+    ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
+      : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
+      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações".</p>'}
+  `, 'mb-6');
+}
 
 const FILTERS = [
   ['', 'Todas'],
@@ -94,9 +148,10 @@ function renderMessagesCard() {
   `, 'mb-6');
 }
 
-function render() {
+async function render() {
   const all = MockDB.getMeetingsOverview({ assignedTo: 'assistant' });
   const filtered = activeFilter ? all.filter((m) => m.filterBucket === activeFilter) : all;
+  const [driveArtifacts, clientOptions] = await Promise.all([loadDriveArtifacts(), loadClientOptions()]);
 
   content.innerHTML = `
     <a href="agenda.html" class="btn-text mb-6 inline-block">&larr; Agenda</a>
@@ -106,6 +161,7 @@ function render() {
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Reuniões atribuídas a você — status da gravação, da transcrição, e o que ainda falta fazer antes de preparar algo para a cliente.</p>
     </div>
 
+    ${renderDriveArtifactsCard(driveArtifacts, clientOptions)}
     ${renderMessagesCard()}
     ${card(`
       <div class="flex flex-wrap gap-2 mb-2">
@@ -148,6 +204,38 @@ function render() {
       const original = MockDB.getAssistantMessages().find((m) => m.id === form.dataset.replySubmit);
       MockDB.sendAssistantMessage({ from: 'assistant', clientId: original ? original.clientId : null, text: text.trim() });
       toast('Resposta enviada para a Nay.');
+      render();
+    });
+  });
+
+  content.querySelector('#search-drive-artifacts')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Buscando...';
+    const { data, error } = await supabase.functions.invoke('google-drive-meet-files', { body: {} });
+    if (error || data?.error) {
+      toast(await functionErrorMessage(data, error), { tone: 'error' });
+      e.target.disabled = false; e.target.textContent = 'Buscar Gravações';
+      return;
+    }
+    const found = (data.matched?.length || 0) + (data.unmatched?.length || 0);
+    toast(found ? `${found} arquivo${found === 1 ? '' : 's'} encontrado${found === 1 ? '' : 's'}.` : 'Nenhum arquivo novo encontrado.');
+    render();
+  });
+  content.querySelectorAll('[data-link-artifact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const select = content.querySelector(`[data-link-client-select="${btn.dataset.linkArtifact}"]`);
+      if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
+      const profile = await getCurrentProfile();
+      const { error } = await linkArtifactToClient(btn.dataset.linkArtifact, select.value, profile.id);
+      if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
+      toast('Gravação vinculada à cliente.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-unlink-artifact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await unlinkArtifact(btn.dataset.unlinkArtifact);
+      if (error) { toast('Erro ao desvincular.', { tone: 'error' }); return; }
+      toast('Vínculo removido.');
       render();
     });
   });
