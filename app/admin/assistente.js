@@ -163,7 +163,7 @@ const HUBLA_DASHBOARD_URL = 'https://app.hub.la/dashboard';
 function renderHublaSection({ clients, error }) {
   return `
     <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
-      <p class="text-sm text-white/40 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API — copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+      <p class="text-sm text-white/40 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API, então copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
       <a ${externalLinkAttrs(HUBLA_DASHBOARD_URL)} class="btn-ghost" style="white-space:nowrap;">Abrir Hubla ↗</a>
     </div>
     ${card(`
@@ -173,7 +173,7 @@ function renderHublaSection({ clients, error }) {
       </div>
       ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
         : clients.length ? clients.map(hublaPendingRow).join('')
-        : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência — todo mundo ativa já tem acesso.</p>'}
+        : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência. Todo mundo ativa já tem acesso.</p>'}
     `)}
   `;
 }
@@ -218,7 +218,7 @@ async function render() {
           await navigator.clipboard.writeText(btn.dataset.copyHublaEmail);
           toast('E-mail copiado.');
         } catch {
-          toast('Não foi possível copiar automaticamente — selecione o e-mail manualmente.', { tone: 'error' });
+          toast('Não foi possível copiar automaticamente. Selecione o e-mail manualmente.', { tone: 'error' });
         }
       });
     });

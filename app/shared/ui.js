@@ -640,30 +640,6 @@ export function renderSocialLinks(links, { emptyText = 'Nenhuma rede social cada
   `;
 }
 
-// --- Projetos / Guia de Produções reference-library card — shared so both
-// pages read as one system (see assistant/projects.js and
-// assistant/production-guides.js). One delivered deliverable: which client
-// it came from, the brief the assistant left for her future self, the file,
-// and the editable Canva source.
-export function projectCard(p) {
-  const fileOk = isValidAssetSrc(p.fileUrl);
-  const canvaOk = isValidHttpUrl(p.canvaUrl);
-  return card(`
-    <div class="flex items-start justify-between gap-3 mb-2">
-      <div>
-        <p class="text-xs uppercase" style="color:var(--muted); letter-spacing:.1em;">${p.label}</p>
-        <a href="client-workspace.html?id=${p.clientId}" class="text-lg font-serif hover:underline" style="color:var(--cream);">${p.clientName}</a>
-      </div>
-      ${p.deliveredAt ? `<span class="text-xs text-white/20 whitespace-nowrap">${formatDate(p.deliveredAt)}</span>` : ''}
-    </div>
-    <p class="text-sm text-white/50 mb-4">${p.summary || 'Sem resumo registrado — abra o arquivo para conferir o conteúdo.'}</p>
-    <div class="flex items-center gap-3 flex-wrap">
-      ${fileOk ? `<a ${assetLinkAttrs(p.fileUrl)} class="btn-ghost" style="padding:7px 14px;font-size:12px;">Ver arquivo ↗</a>` : ''}
-      ${canvaOk ? `<a ${externalLinkAttrs(p.canvaUrl)} class="btn-ghost" style="padding:7px 14px;font-size:12px;">Abrir no Canva ↗</a>` : ''}
-    </div>
-  `);
-}
-
 // --- Conteúdos gateway cards — shared between the client-facing gateway
 // (card = clickable <a> to Hubla) and the admin "Gerenciar conteúdos" panel
 // (card = same visual, wrapped in a management toolbar instead of a link).

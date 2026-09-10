@@ -250,7 +250,7 @@ function renderHublaPendingCard({ clients, error }) {
     <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. Copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : clients.length ? clients.map(hublaPendingRow).join('')
-      : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência — todo mundo ativa já tem acesso.</p>'}
+      : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência. Todo mundo ativa já tem acesso.</p>'}
   `, 'mb-8');
 }
 
@@ -376,7 +376,7 @@ async function render() {
         await navigator.clipboard.writeText(btn.dataset.copyHublaEmail);
         toast('E-mail copiado.');
       } catch {
-        toast('Não foi possível copiar automaticamente — selecione o e-mail manualmente.', { tone: 'error' });
+        toast('Não foi possível copiar automaticamente. Selecione o e-mail manualmente.', { tone: 'error' });
       }
     });
   });

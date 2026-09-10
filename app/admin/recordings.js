@@ -44,7 +44,7 @@ function driveArtifactRow(a, clients) {
   return `
     <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
       <div class="flex-1 min-w-[240px]">
-        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">— ${a.name}</span></p>
+        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">· ${a.name}</span></p>
         <p class="text-xs text-white/30 mt-0.5">
           ${formatDateTime(a.discovered_at)} descoberto
           ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
@@ -103,10 +103,10 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
       </div>
       <button type="button" id="run-drive-search" class="btn-primary mt-3" style="padding:8px 18px;font-size:12.5px;">Buscar</button>
     </div>
-    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado. Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas — nunca atribuídas sozinhas sem certeza.</p>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado. Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas, nunca atribuídas sozinhas sem certeza.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
-      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações" ou use a busca avançada.</p>'}
+      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda. Clique em "Buscar Gravações" ou use a busca avançada.</p>'}
   `, 'mb-8');
 }
 
@@ -133,8 +133,8 @@ function renderSyncSummary() {
       <div><p class="text-xs text-white/30 mb-1">Status</p><p class="capitalize">${s.syncStatus.replace('_', ' ')} · ${s.attempts} tentativas</p></div>
     </div>
     <div class="pt-4" style="border-top:1px solid var(--line);">
-      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">✓ Decidido — forma de compartilhamento</p>
-      <p class="text-xs text-white/30">Link público ("qualquer pessoa com o link pode assistir") — na prática já é como o Google Meet compartilha tudo que salva na pasta de gravações da Nay por padrão, então não muda nada do lado dela. Verificação manual (Nay/assistente confirma cada gravação vinculando-a à cliente certa, na seção "Descobertos no Google Drive" acima) continua sendo o que impede uma gravação de ser atribuída à pessoa errada — o link ser público não significa que o sistema atribui ela sozinho.</p>
+      <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">✓ Decidido: forma de compartilhamento</p>
+      <p class="text-xs text-white/30">Link público ("qualquer pessoa com o link pode assistir"). Na prática já é como o Google Meet compartilha tudo que salva na pasta de gravações da Nay por padrão, então não muda nada do lado dela. Verificação manual (Nay/assistente confirma cada gravação vinculando-a à cliente certa, na seção "Descobertos no Google Drive" acima) continua sendo o que impede uma gravação de ser atribuída à pessoa errada. O link ser público não significa que o sistema atribui ela sozinho.</p>
     </div>
   `, 'mb-8');
 }

@@ -40,7 +40,7 @@ function driveArtifactRow(a, clients) {
   return `
     <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
       <div class="flex-1 min-w-[240px]">
-        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">— ${a.name}</span></p>
+        <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">· ${a.name}</span></p>
         <p class="text-xs text-white/30 mt-0.5">
           ${formatDateTime(a.discovered_at)} descoberto
           ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
@@ -99,7 +99,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
     <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado. Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
-      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações" ou use a busca avançada.</p>'}
+      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda. Clique em "Buscar Gravações" ou use a busca avançada.</p>'}
   `, 'mb-6');
 }
 
