@@ -6,12 +6,14 @@
 import { MockDB, TEMPLATE_CATEGORIES, CONTENT_REVIEW_STATUS_LABEL, IMAGE_GUIDE_LABEL } from '../shared/mock-db.js';
 import { renderShell, card, toast, isValidHttpUrl, externalLinkAttrs, formatDateTime, openModal, isValidAssetSrc, assetLinkAttrs } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { loadHublaPendingClients, markHublaAccessGranted } from '../shared/hubla-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'assistente.html', title: 'Assistente' });
 const content = document.getElementById('app-content');
 
-let section = new URLSearchParams(location.search).get('section') === 'templates' ? 'templates' : 'revisoes';
+const SECTIONS = ['revisoes', 'templates', 'hubla'];
+let section = SECTIONS.includes(new URLSearchParams(location.search).get('section')) ? new URLSearchParams(location.search).get('section') : 'revisoes';
 
 // --- Templates ---------------------------------------------------------
 function itemTile(catKey, item, links, label) {
@@ -133,7 +135,46 @@ function openChangesModal(reviewId) {
   });
 }
 
-function render() {
+// --- Hubla -----------------------------------------------------------
+// Hubla exposes no API to grant access (checked directly against their
+// docs) — only a manual "Adicionar membro(s)" action inside Hubla itself.
+// This can't automate that step, but it removes the part that was actually
+// eating Nay/Ju's time: knowing who's waiting. Once the grant happens in
+// Hubla, hubla-webhook's own customer.member_added handling flips this
+// status automatically — "Marcar como concedido" below is a manual
+// fallback for confirming a grant that predates the webhook, or that this
+// rule wasn't scoped to catch.
+function hublaPendingRow(c) {
+  return `
+    <div class="flex items-center justify-between py-3 border-b border-white/5 last:border-0 flex-wrap gap-2">
+      <div>
+        <p class="text-sm font-medium">${c.full_name}</p>
+        <p class="text-xs text-white/30">${c.email}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="button" data-copy-hubla-email="${c.email}" class="btn-ghost" style="padding:6px 12px; font-size:12px;">Copiar e-mail</button>
+        <button type="button" data-mark-hubla-granted="${c.id}" class="btn-text">Marcar como concedido</button>
+      </div>
+    </div>
+  `;
+}
+function renderHublaSection({ clients, error }) {
+  return `
+    <p class="text-sm text-white/40 mb-6 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API — copie o e-mail e adicione em Hubla → Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+    ${card(`
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm text-white/50">Acessos Pendentes</p>
+        ${clients.length ? `<span class="text-xs" style="color:var(--muted);">${clients.length}</span>` : ''}
+      </div>
+      ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
+        : clients.length ? clients.map(hublaPendingRow).join('')
+        : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência — todo mundo ativa já tem acesso.</p>'}
+    `)}
+  `;
+}
+
+async function render() {
+  const hublaPending = section === 'hubla' ? await loadHublaPendingClients() : null;
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Assistente</p>
@@ -142,14 +183,15 @@ function render() {
     <div class="flex gap-1 mb-8 border-b border-white/10">
       <button data-section="revisoes" class="tab-btn ${section === 'revisoes' ? 'active' : ''}">Revisões</button>
       <button data-section="templates" class="tab-btn ${section === 'templates' ? 'active' : ''}">Templates</button>
+      <button data-section="hubla" class="tab-btn ${section === 'hubla' ? 'active' : ''}">Hubla</button>
     </div>
-    ${section === 'templates' ? renderTemplatesSection() : renderReviewsSection()}
+    ${section === 'templates' ? renderTemplatesSection() : section === 'hubla' ? renderHublaSection(hublaPending) : renderReviewsSection()}
   `;
 
   content.querySelectorAll('[data-section]').forEach((btn) => {
     btn.addEventListener('click', () => {
       section = btn.dataset.section;
-      history.replaceState(null, '', `assistente.html?section=${section === 'templates' ? 'templates' : 'revisoes'}`);
+      history.replaceState(null, '', `assistente.html?section=${section}`);
       render();
     });
   });
@@ -161,6 +203,25 @@ function render() {
         const input = content.querySelector(`[data-template-input="${catKey}:${itemKey}"]`);
         MockDB.setTemplateLink(catKey, itemKey, input.value);
         toast('Link do modelo salvo.');
+        render();
+      });
+    });
+  } else if (section === 'hubla') {
+    content.querySelectorAll('[data-copy-hubla-email]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.copyHublaEmail);
+          toast('E-mail copiado.');
+        } catch {
+          toast('Não foi possível copiar automaticamente — selecione o e-mail manualmente.', { tone: 'error' });
+        }
+      });
+    });
+    content.querySelectorAll('[data-mark-hubla-granted]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const { error } = await markHublaAccessGranted(btn.dataset.markHublaGranted);
+        if (error) { toast('Erro ao atualizar o status.', { tone: 'error' }); return; }
+        toast('Acesso Hubla marcado como concedido.');
         render();
       });
     });

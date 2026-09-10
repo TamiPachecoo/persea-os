@@ -12,6 +12,7 @@ import { renderShell, card, toast, formatDate } from '../shared/ui.js';
 import { ensureRealClientForLead } from '../shared/lead-bridge.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
+import { loadHublaPendingClients, markHublaAccessGranted } from '../shared/hubla-model.js';
 
 const REAL_STATUS_LABEL = {
   info_pending: 'Aguardando informações', info_received: 'Informações recebidas',
@@ -214,17 +215,53 @@ function leadCard(l, real) {
   `, 'mb-6');
 }
 
+// Hubla exposes no API to grant access (checked directly against their
+// docs) — only a manual "Adicionar membro(s)" action inside Hubla itself.
+// This can't automate that step, but it removes the part that was actually
+// eating your time: knowing who's waiting. Once the grant happens in
+// Hubla, hubla-webhook's own customer.member_added handling flips this
+// status automatically — "Marcar como concedido" below is a manual
+// fallback for confirming a grant that predates the webhook.
+function hublaPendingRow(c) {
+  return `
+    <div class="flex items-center justify-between py-3 border-b border-white/5 last:border-0 flex-wrap gap-2">
+      <div>
+        <p class="text-sm font-medium">${c.full_name}</p>
+        <p class="text-xs text-white/30">${c.email}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="button" data-copy-hubla-email="${c.email}" class="btn-ghost" style="padding:6px 12px; font-size:12px;">Copiar e-mail</button>
+        <button type="button" data-mark-hubla-granted="${c.id}" class="btn-text">Marcar como concedido</button>
+      </div>
+    </div>
+  `;
+}
+function renderHublaPendingCard({ clients, error }) {
+  return card(`
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm text-white/50">Acessos Hubla Pendentes</p>
+      ${clients.length ? `<span class="text-xs" style="color:var(--muted);">${clients.length}</span>` : ''}
+    </div>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. Copie o e-mail e adicione em Hubla → Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+    ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
+      : clients.length ? clients.map(hublaPendingRow).join('')
+      : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência — todo mundo ativa já tem acesso.</p>'}
+  `, 'mb-8');
+}
+
 async function render() {
   const mockQueue = MockDB.getAssistantOnboardingQueue();
   const demoLeads = await loadDemoLeads(new Set(mockQueue.map((l) => l.id)));
   const queue = [...mockQueue, ...demoLeads];
   const realStatuses = await loadRealStatuses(queue.map((l) => l.id));
+  const hublaPending = await loadHublaPendingClients();
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Cadastros</p>
       <h1 class="text-3xl font-serif">Contrato e Ativação</h1>
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Assim que uma lead preenche o cadastro que a Nay enviou, ela aparece aqui — prepare e faça upload do contrato assinado, depois ative o acesso dela.</p>
     </div>
+    ${renderHublaPendingCard(hublaPending)}
     ${queue.length ? queue.map((l) => leadCard(l, realStatuses.get(l.id))).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro pendente agora.</p>')}
   `;
 
@@ -325,6 +362,24 @@ async function render() {
       toast(data.mock
         ? (data.resent ? 'Acesso (demo) já existia — nada a reenviar.' : 'Acesso criado (demo) — sem e-mail real enviado, mas o login já funciona de verdade.')
         : (data.resent ? 'Convite reenviado.' : 'Acesso criado — ela receberá um e-mail para criar a senha.'));
+      render();
+    });
+  });
+  content.querySelectorAll('[data-copy-hubla-email]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copyHublaEmail);
+        toast('E-mail copiado.');
+      } catch {
+        toast('Não foi possível copiar automaticamente — selecione o e-mail manualmente.', { tone: 'error' });
+      }
+    });
+  });
+  content.querySelectorAll('[data-mark-hubla-granted]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await markHublaAccessGranted(btn.dataset.markHublaGranted);
+      if (error) { toast('Erro ao atualizar o status.', { tone: 'error' }); return; }
+      toast('Acesso Hubla marcado como concedido.');
       render();
     });
   });
