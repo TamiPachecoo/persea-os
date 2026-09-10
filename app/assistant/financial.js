@@ -87,14 +87,19 @@ function hublaPendingRow(c) {
   `;
 }
 function renderHublaPendingCard({ clients, error }) {
-  if (error || !clients.length) return '';
+  // Always visible — even (especially) when the queue is empty. A card
+  // that only appears once there's a pendency has no fixed home to check
+  // back on; showing an explicit "tudo em dia" state is what makes this
+  // feature findable at all on a normal day.
   return card(`
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm text-white/50">Acessos Hubla Pendentes</p>
-      <span class="text-xs" style="color:var(--muted);">${clients.length}</span>
+      ${clients.length ? `<span class="text-xs" style="color:var(--muted);">${clients.length}</span>` : ''}
     </div>
     <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. Copie o e-mail e adicione em Hubla → Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
-    ${clients.map(hublaPendingRow).join('')}
+    ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
+      : clients.length ? clients.map(hublaPendingRow).join('')
+      : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência — todo mundo ativa já tem acesso.</p>'}
   `, 'mb-6');
 }
 
