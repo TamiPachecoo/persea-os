@@ -11,7 +11,7 @@ import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { mergeContractTemplate } from '../shared/contract-merge.js';
 import { renderContractPrintHtml } from '../shared/contract-print.js';
-import { card, toast } from '../shared/ui.js';
+import { card, toast, functionErrorMessage } from '../shared/ui.js';
 // Reusing the same program/duration/payment-method vocabulary the rest of
 // the app already uses (CRM lead conversion, mock onboarding) — just the
 // plain constant lists/labels, nothing MockDB-stateful.
@@ -265,7 +265,7 @@ async function render() {
       // — since Supabase's built-in sender has a strict per-hour rate limit
       // shared with every real invite.
       const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: client.id, mock: isDemo } });
-      if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Convidar Cliente para Acesso'; return; }
+      if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Convidar Cliente para Acesso'; return; }
       toast(data.mock
         ? (data.resent ? 'Acesso (demo) já existia — nada a reenviar.' : 'Acesso criado (demo) — sem e-mail real enviado, mas o login já funciona de verdade.')
         : (data.resent ? 'Convite reenviado.' : 'Convite enviado — ela receberá um e-mail para criar a senha.'));
@@ -342,7 +342,7 @@ async function render() {
     e.target.disabled = true;
     e.target.textContent = 'Enviando...';
     const { data, error } = await supabase.functions.invoke('autentique-send', { body: { contract_id: contract.id } });
-    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Enviar para Assinatura via Autentique'; return; }
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Enviar para Assinatura via Autentique'; return; }
     toast('Enviado para assinatura via Autentique.');
     render();
   });
@@ -387,7 +387,7 @@ async function render() {
     e.target.disabled = true;
     e.target.textContent = 'Verificando...';
     const { data, error } = await supabase.functions.invoke('autentique-status', { body: { contract_id: contract.id } });
-    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Verificar Assinatura'; return; }
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Verificar Assinatura'; return; }
     if (data.signed) { toast('Assinado! Contrato registrado.'); render(); }
     else { toast('Ainda pendente de assinatura.'); e.target.disabled = false; e.target.textContent = 'Verificar Assinatura'; }
   });

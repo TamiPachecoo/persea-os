@@ -5,7 +5,7 @@
 // actual SumUp API calls (never made from the browser).
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
-import { card, toast, openModal, formatDate, formatDateTime } from '../shared/ui.js';
+import { card, toast, openModal, formatDate, formatDateTime, functionErrorMessage } from '../shared/ui.js';
 import { deriveEffectiveStatus } from '../shared/date-utils.js';
 import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
 
@@ -166,7 +166,7 @@ function showLinkModal(hostedUrl, isMock) {
 async function generateLinkForExisting(paymentId, onDone, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
   const { data, error } = await supabase.functions.invoke('sumup-create-checkout', { body: { payment_id: paymentId } });
-  if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); if (btn) { btn.disabled = false; btn.textContent = 'Gerar Link'; } return; }
+  if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); if (btn) { btn.disabled = false; btn.textContent = 'Gerar Link'; } return; }
   onDone();
   showLinkModal(data.hosted_url, data.mock);
 }
@@ -287,7 +287,7 @@ async function openNewChargeModal(clients, prefill, onDone) {
         internal_note: fd.get('internal_note') || null,
       },
     });
-    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); submitBtn.disabled = false; submitBtn.textContent = 'Gerar link de pagamento'; return; }
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); submitBtn.disabled = false; submitBtn.textContent = 'Gerar link de pagamento'; return; }
     close();
     onDone();
     showLinkModal(data.hosted_url, data.mock);
@@ -332,7 +332,7 @@ function openDetailModal(payment, onDone) {
     verifyBtn.addEventListener('click', async () => {
       verifyBtn.disabled = true; verifyBtn.textContent = 'Verificando...';
       const { data, error } = await supabase.functions.invoke('sumup-verify', { body: { payment_id: payment.id } });
-      if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); verifyBtn.disabled = false; verifyBtn.textContent = 'Verificar no SumUp'; return; }
+      if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); verifyBtn.disabled = false; verifyBtn.textContent = 'Verificar no SumUp'; return; }
       toast(data.already_processed ? 'Sem novidades — status já está atualizado.' : `Status atualizado: ${STATUS_LABEL[data.status] || data.status}`);
       onDone();
     });
@@ -344,7 +344,7 @@ function openDetailModal(payment, onDone) {
       btn.textContent = { pay: 'Simular Pago', fail: 'Simular Falha', refund: 'Simular Reembolso' }[action];
       btn.addEventListener('click', async () => {
         const { data, error } = await supabase.functions.invoke('sumup-verify', { body: { payment_id: payment.id, mock_action: action } });
-        if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); return; }
+        if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
         toast(`Simulado: ${STATUS_LABEL[data.status] || data.status}`);
         onDone();
       });
@@ -481,7 +481,7 @@ function openReconcileModal(tx, clients, onDone) {
     const { data, error } = await supabase.functions.invoke('sumup-reconcile-transaction', {
       body: { transaction_id: tx.id, client_id: clientId, contract_id: resolvedContractId, allocations },
     });
-    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); return; }
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
     close();
     toast('Pagamento vinculado — Financeiro atualizado.');
     onDone();
@@ -546,7 +546,7 @@ async function render() {
     e.target.disabled = true; e.target.textContent = 'Sincronizando...';
     const { data, error } = await supabase.functions.invoke('sumup-sync-transactions', { body: {} });
     e.target.disabled = false; e.target.textContent = 'Sincronizar SumUp';
-    if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); return; }
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
     toast(`${data.novas} novas · ${data.ja_existentes} já existentes · ${data.vinculadas} vinculadas · ${data.nao_vinculadas} não vinculadas`);
     render();
   });

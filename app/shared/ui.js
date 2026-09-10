@@ -274,6 +274,29 @@ document.addEventListener('click', (e) => {
   signOut().finally(() => { location.href = link.href; });
 });
 
+// Every Edge Function call in this app follows the same `{ data, error } =
+// await supabase.functions.invoke(...)` shape and checks `data?.error ||
+// error.message` for the toast text — but supabase-js sets `data` to null
+// whenever the function responds with a non-2xx status, so that `{error:
+// "..."}` body every function returns on failure never actually reaches
+// `data`. The caller only ever saw error.message's generic
+// "Edge Function returned a non-2xx status code" instead of the real
+// reason (confirmed live: an invite-client 502 for "email already
+// registered" showed only the generic message). This reads the real body
+// back out of the FunctionsHttpError's own Response object instead.
+export async function functionErrorMessage(data, error) {
+  if (data?.error) return data.error;
+  if (error?.context && typeof error.context.json === 'function') {
+    try {
+      const body = await error.context.clone().json();
+      if (body?.error) return body.error;
+    } catch {
+      // Response wasn't JSON, or already consumed — fall through.
+    }
+  }
+  return error?.message || 'Erro desconhecido.';
+}
+
 export function card(innerHtml, extraClass = '') {
   return `<div class="card ${extraClass}">${innerHtml}</div>`;
 }

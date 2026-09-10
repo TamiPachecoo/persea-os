@@ -10,7 +10,7 @@ import {
   MockDB, AGENDA_TYPES, AGENDA_TYPE_LABEL, AGENDA_STATUSES, AGENDA_STATUS_LABEL,
   ASSISTANT_PERSONAS, ASSISTANT_PERSONA_LABEL, ASSIGNEE_LABEL, ENCOUNTER_DEFS, ENCOUNTER_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, formatDateTime, formatDate, toast, openModal } from '../shared/ui.js';
+import { renderShell, card, formatDateTime, formatDate, toast, openModal, functionErrorMessage } from '../shared/ui.js';
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 
@@ -626,7 +626,7 @@ async function render() {
     e.target.disabled = true; e.target.textContent = 'Conectando...';
     const { data, error } = await supabase.functions.invoke('google-calendar-auth-start');
     if (error || data?.error) {
-      toast(data?.error || error.message, { tone: 'error' });
+      toast(await functionErrorMessage(data, error), { tone: 'error' });
       e.target.disabled = false; e.target.textContent = 'Connect Google Calendar';
       return;
     }
@@ -655,7 +655,7 @@ async function render() {
     }
     const { data, error } = await supabase.functions.invoke('google-calendar-auth-start');
     if (error || data?.error) {
-      toast(data?.error || error.message, { tone: 'error' });
+      toast(await functionErrorMessage(data, error), { tone: 'error' });
       e.target.disabled = false; e.target.textContent = 'Reconectar Google';
       return;
     }

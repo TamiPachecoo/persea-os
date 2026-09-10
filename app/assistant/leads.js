@@ -8,7 +8,7 @@ import {
   MockDB, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS, PROGRAM_LABEL_BY_SLUG,
   PAYMENT_METHOD_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, externalLinkAttrs } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, externalLinkAttrs, functionErrorMessage } from '../shared/ui.js';
 import { ensureRealClientForLead } from '../shared/lead-bridge.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
@@ -318,7 +318,7 @@ async function render() {
       const real = realStatuses.get(id);
       btn.disabled = true; btn.textContent = 'Verificando...';
       const { data, error } = await supabase.functions.invoke('autentique-status', { body: { contract_id: real.contractId } });
-      if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Verificar Assinatura'; return; }
+      if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); btn.disabled = false; btn.textContent = 'Verificar Assinatura'; return; }
       toast(data.signed ? 'Assinado! Contrato registrado.' : 'Ainda pendente de assinatura.');
       render();
     });
@@ -363,7 +363,7 @@ async function render() {
       // with every real invite, so repeated demo runs would otherwise burn
       // through it.
       const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: real.clientId, mock: !!real.isDemo } });
-      if (error || data?.error) { toast(data?.error || error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Criar Acesso'; return; }
+      if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); btn.disabled = false; btn.textContent = 'Criar Acesso'; return; }
       toast(data.mock
         ? (data.resent ? 'Acesso (demo) já existia — nada a reenviar.' : 'Acesso criado (demo) — sem e-mail real enviado, mas o login já funciona de verdade.')
         : (data.resent ? 'Convite reenviado.' : 'Acesso criado — ela receberá um e-mail para criar a senha.'));
