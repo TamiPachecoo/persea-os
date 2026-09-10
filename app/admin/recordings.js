@@ -65,6 +65,14 @@ function driveArtifactRow(a, clients) {
     </div>
   `;
 }
+// Quick search (no fields) always checks the last 30 days — the common
+// case, since most links happen soon after a session. "Busca avançada"
+// exists specifically for the exception this page couldn't handle at all
+// before: something older than 30 days, or found by typing part of the
+// client/session name instead of scanning a list. Both date_from/date_to
+// and keyword are real filters on Google's own side (see
+// google-drive-meet-files), not just cosmetic — a wider date range or a
+// keyword actually changes what Drive returns, up to 25 results per search.
 function renderDriveArtifactsCard({ artifacts, error }, clients) {
   return card(`
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -72,12 +80,33 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
         <p class="text-sm text-white/50">Descobertos no Google Drive</p>
         ${artifacts.length ? `<span class="text-xs" style="color:var(--muted);">${artifacts.length}</span>` : ''}
       </div>
-      <button type="button" id="search-drive-artifacts" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Buscar Gravações</button>
+      <div class="flex items-center gap-2">
+        <button type="button" id="search-drive-artifacts" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Buscar Gravações (30 dias)</button>
+        <button type="button" id="toggle-drive-search" class="btn-text">Busca avançada</button>
+      </div>
     </div>
-    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado (últimos 30 dias). Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas — nunca atribuídas sozinhas sem certeza.</p>
+    <div class="hidden mb-4" id="drive-search-form" style="padding:14px; border:1px solid var(--line); border-radius:8px;">
+      <p class="text-xs text-white/30 mb-3">Procure algo mais antigo que 30 dias, ou por uma palavra do nome do arquivo (ex.: nome da cliente).</p>
+      <div class="grid sm:grid-cols-3 gap-3 items-end">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">De</label>
+          <input type="date" id="drive-search-from" class="field text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Até</label>
+          <input type="date" id="drive-search-to" class="field text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Palavra-chave</label>
+          <input type="text" id="drive-search-keyword" class="field text-sm" placeholder="Ex.: nome da cliente" />
+        </div>
+      </div>
+      <button type="button" id="run-drive-search" class="btn-primary mt-3" style="padding:8px 18px;font-size:12.5px;">Buscar</button>
+    </div>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado. Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas — nunca atribuídas sozinhas sem certeza.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
-      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações".</p>'}
+      : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda — clique em "Buscar Gravações" ou use a busca avançada.</p>'}
   `, 'mb-8');
 }
 
@@ -183,17 +212,40 @@ async function render() {
     });
   });
 
-  content.querySelector('#search-drive-artifacts')?.addEventListener('click', async (e) => {
-    e.target.disabled = true; e.target.textContent = 'Buscando...';
-    const { data, error } = await supabase.functions.invoke('google-drive-meet-files', { body: {} });
+  async function runDriveSearch(btn, defaultLabel, body) {
+    btn.disabled = true; btn.textContent = 'Buscando...';
+    const { data, error } = await supabase.functions.invoke('google-drive-meet-files', { body });
     if (error || data?.error) {
       toast(await functionErrorMessage(data, error), { tone: 'error' });
-      e.target.disabled = false; e.target.textContent = 'Buscar Gravações';
+      btn.disabled = false; btn.textContent = defaultLabel;
       return;
     }
     const found = (data.matched?.length || 0) + (data.unmatched?.length || 0);
-    toast(found ? `${found} arquivo${found === 1 ? '' : 's'} encontrado${found === 1 ? '' : 's'}.` : 'Nenhum arquivo novo encontrado.');
+    toast(found ? `${found} arquivo${found === 1 ? '' : 's'} encontrado${found === 1 ? '' : 's'}.` : 'Nenhum arquivo encontrado nesse período/busca.');
     render();
+  }
+  content.querySelector('#search-drive-artifacts')?.addEventListener('click', (e) => {
+    runDriveSearch(e.target, 'Buscar Gravações (30 dias)', {});
+  });
+  content.querySelector('#toggle-drive-search')?.addEventListener('click', () => {
+    content.querySelector('#drive-search-form').classList.toggle('hidden');
+  });
+  content.querySelector('#run-drive-search')?.addEventListener('click', (e) => {
+    const from = content.querySelector('#drive-search-from').value;
+    const to = content.querySelector('#drive-search-to').value;
+    const keyword = content.querySelector('#drive-search-keyword').value.trim();
+    if ((from && !to) || (!from && to)) {
+      toast('Preencha as duas datas, ou nenhuma.', { tone: 'error' });
+      return;
+    }
+    const body = {};
+    if (from && to) { body.date_from = new Date(from + 'T00:00:00').toISOString(); body.date_to = new Date(to + 'T23:59:59').toISOString(); }
+    if (keyword) body.keyword = keyword;
+    if (!body.date_from && !body.keyword) {
+      toast('Preencha um período ou uma palavra-chave.', { tone: 'error' });
+      return;
+    }
+    runDriveSearch(e.target, 'Buscar', body);
   });
   content.querySelectorAll('[data-link-artifact]').forEach((btn) => {
     btn.addEventListener('click', async () => {
