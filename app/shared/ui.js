@@ -4,6 +4,7 @@
 
 import { MockDB, getActiveClientId, setActiveClientId, PREMIUM_ONLY_PHASE_INDEX, ENCOUNTER_DEFS, ENCOUNTER_LABEL } from './mock-db.js';
 import { isLocalDevelopment, isDemoEnvironment, isProductionEnvironment, isNonProduction } from './environment.js';
+import { signOut } from './supabase-auth.js';
 
 export { isDemoEnvironment, isProductionEnvironment, isNonProduction };
 
@@ -235,7 +236,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
           <div class="flex items-center gap-4">
             ${role === 'client' && isNonProduction() ? renderClientSwitcher() : ''}
             <span class="text-[10px] uppercase tracking-[.2em]" style="color:var(--muted);">Visão ${ROLE_LABEL[role] || role}</span>
-            <a href="../index.html" class="btn-text">Trocar perfil</a>
+            <a href="../index.html" id="logout-link" class="btn-text">Sair</a>
           </div>
         </div>
       </header>
@@ -252,6 +253,26 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
     </div>
   `;
 }
+
+// "Sair" was previously just a plain link to index.html — with an active
+// Supabase session, that page (via login.js's own already-signed-in check)
+// bounced straight back into the app instead of actually logging out,
+// leaving no way to end a session from inside the app at all. Delegated on
+// `document` (rather than queried right after renderShell returns) because
+// renderShell only returns an HTML string — the #logout-link element
+// doesn't exist in the DOM yet at that point, and every page that calls
+// renderShell also does its own separate `content.innerHTML` render pass
+// afterward, so there's no single shared "mounted" moment to hook a normal
+// listener into. This runs once per page load (ui.js is imported fresh by
+// every page script) and doesn't touch demo mode's localStorage-only
+// client session — supabase.auth.signOut() is a harmless no-op when
+// there's no real session to clear.
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('#logout-link');
+  if (!link) return;
+  e.preventDefault();
+  signOut().finally(() => { location.href = link.href; });
+});
 
 export function card(innerHtml, extraClass = '') {
   return `<div class="card ${extraClass}">${innerHtml}</div>`;
