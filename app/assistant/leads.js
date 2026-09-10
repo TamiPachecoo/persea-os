@@ -8,7 +8,7 @@ import {
   MockDB, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS, PROGRAM_LABEL_BY_SLUG,
   PAYMENT_METHOD_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, externalLinkAttrs } from '../shared/ui.js';
 import { ensureRealClientForLead } from '../shared/lead-bridge.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
@@ -236,13 +236,18 @@ function hublaPendingRow(c) {
     </div>
   `;
 }
+const HUBLA_DASHBOARD_URL = 'https://app.hub.la/dashboard';
+
 function renderHublaPendingCard({ clients, error }) {
   return card(`
-    <div class="flex items-center justify-between mb-2">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
       <p class="text-sm text-white/50">Acessos Hubla Pendentes</p>
-      ${clients.length ? `<span class="text-xs" style="color:var(--muted);">${clients.length}</span>` : ''}
+      <div class="flex items-center gap-3">
+        ${clients.length ? `<span class="text-xs" style="color:var(--muted);">${clients.length}</span>` : ''}
+        <a ${externalLinkAttrs(HUBLA_DASHBOARD_URL)} class="btn-text">Abrir Hubla ↗</a>
+      </div>
     </div>
-    <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. Copie o e-mail e adicione em Hubla → Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. Copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : clients.length ? clients.map(hublaPendingRow).join('')
       : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência — todo mundo ativa já tem acesso.</p>'}

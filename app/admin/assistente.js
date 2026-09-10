@@ -158,9 +158,14 @@ function hublaPendingRow(c) {
     </div>
   `;
 }
+const HUBLA_DASHBOARD_URL = 'https://app.hub.la/dashboard';
+
 function renderHublaSection({ clients, error }) {
   return `
-    <p class="text-sm text-white/40 mb-6 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API — copie o e-mail e adicione em Hubla → Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <p class="text-sm text-white/40 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API — copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+      <a ${externalLinkAttrs(HUBLA_DASHBOARD_URL)} class="btn-ghost" style="white-space:nowrap;">Abrir Hubla ↗</a>
+    </div>
     ${card(`
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm text-white/50">Acessos Pendentes</p>
