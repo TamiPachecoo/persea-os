@@ -31,6 +31,19 @@ async function loadClientOptions() {
 const ARTIFACT_TYPE_ICON = { recording: '🎥', transcript: '📝', unknown: '📁' };
 
 const ARTIFACT_TYPE_TEXT_LABEL = { recording: 'Gravação', transcript: 'Transcrição', unknown: 'Pasta da sessão' };
+const ENCOUNTER_SLOT_LABEL = { e1: 'E1', e2: 'E2', e3: 'E3', e4: 'E4', e5: 'E5', e6: 'E6', e7: 'E7', e8: 'E8' };
+function slotOptionsHtml() {
+  return `
+    <option value="">Sem encontro específico</option>
+    ${Object.entries(ENCOUNTER_SLOT_LABEL).map(([slug, label]) => `<option value="${slug}">${label}</option>`).join('')}
+    <option value="checkpoint">Checkpoint (avulso)</option>
+  `;
+}
+function slotLabelFor(a) {
+  if (a.is_checkpoint) return 'Checkpoint';
+  if (a.encounter_slug) return ENCOUNTER_SLOT_LABEL[a.encounter_slug] || a.encounter_slug;
+  return null;
+}
 
 // Confirming a link applies it to every currently-unmatched file sharing
 // this session's key (recording + transcript + folder), not just the one
@@ -47,7 +60,7 @@ function driveArtifactRow(a, clients) {
         <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">· ${a.name}</span></p>
         <p class="text-xs text-white/30 mt-0.5">
           ${formatDateTime(a.discovered_at)} descoberto
-          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
+          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
@@ -59,6 +72,7 @@ function driveArtifactRow(a, clients) {
             <option value="">Vincular a...</option>
             ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
           </select>
+          <select data-link-slot-select="${a.id}" class="field text-sm" style="width:auto;">${slotOptionsHtml()}</select>
           <button type="button" data-link-artifact="${a.id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
         `}
       </div>
@@ -251,8 +265,12 @@ async function render() {
     btn.addEventListener('click', async () => {
       const select = content.querySelector(`[data-link-client-select="${btn.dataset.linkArtifact}"]`);
       if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
+      const slotValue = content.querySelector(`[data-link-slot-select="${btn.dataset.linkArtifact}"]`).value;
       const profile = await getCurrentProfile();
-      const { error } = await linkSessionToClient(btn.dataset.sessionKey, select.value, profile.id);
+      const { error } = await linkSessionToClient(btn.dataset.sessionKey, select.value, profile.id, {
+        encounterSlug: slotValue && slotValue !== 'checkpoint' ? slotValue : null,
+        isCheckpoint: slotValue === 'checkpoint',
+      });
       if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
       toast('Sessão (gravação, transcrição e pasta) vinculada à cliente.');
       render();

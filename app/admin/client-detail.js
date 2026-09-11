@@ -1,8 +1,9 @@
 import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, WHATSAPP_STATUSES, WHATSAPP_STATUS_LABEL, CONTRACT_DURATIONS, CONTRACT_DURATION_LABEL, CONTRACT_DURATION_VALUE, PROGRAMS, PROGRAM_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_DEFS, UPGRADE_INTEREST_STATUSES, UPGRADE_INTEREST_STATUS_LABEL, NF_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_LABEL, ARCHETYPE_ATTEMPT_STATUS_BADGE_CLASS, ARCHETYPE_VISUAL_SETS, ARCHETYPE_VISUAL_SET_LABEL, ASSISTANT_PERSONA_LABEL, AGENDA_STATUS_LABEL, AGENDA_TYPE_LABEL, TIER_MAX_PHASE_INDEX, PREMIUM_ONLY_PHASE_INDEX, MENTOR_DELIVERABLE_STATUS_LABEL, MENTOR_DELIVERABLE_STATUS_BADGE_CLASS, ENCOUNTER_DEFS, BUSINESS_SURVEY_QUESTIONS, GUIDE_STATUS_LABEL, ENCOUNTER_PREP_CHECKLIST } from '../shared/mock-db.js';
 import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal, renderRecordingBlock, brl } from '../shared/ui.js';
-import { requireProfile } from '../shared/supabase-auth.js';
+import { requireProfile, getCurrentProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
+import { loadArtifactsForClient, loadUnlinkedArtifacts, linkArtifactToSlot, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
   REVIEW_STATUSES, REVIEW_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
@@ -36,6 +37,21 @@ document.body.innerHTML = renderShell({ role, active: isAssistant ? 'clients.htm
 const clientId = new URLSearchParams(location.search).get('id') || DEFAULT_CLIENT_ID;
 const client = MockDB.getClient(clientId);
 const phaseProgress = MockDB.getPhaseProgress(clientId);
+
+// Bridges this page's MockDB clientId ('client-1', etc.) to her real
+// Supabase clients.id — same lookup hydrateRealFinancialSummary already
+// does, memoized here since the Drive-linking cards below need it once
+// per real client rather than once per encounter tab. Most existing seed
+// clients have no Supabase counterpart at all (only ones that went
+// through the real activate/registration flow do) — null is a normal,
+// expected result, not an error.
+let __realClientIdCache;
+async function resolveRealClientId() {
+  if (__realClientIdCache !== undefined) return __realClientIdCache;
+  const { data } = await supabase.from('clients').select('id').eq('legacy_id', clientId).maybeSingle();
+  __realClientIdCache = data?.id || null;
+  return __realClientIdCache;
+}
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 // The visible tab row — Programa (client overview), one tab per encontro
 // (E1-E8, always all 8, same "get familiar with the names regardless of
@@ -490,6 +506,118 @@ function renderOnboardingTab() {
       <p class="text-xs text-white/30 mt-3">Aulas e materiais iniciais são liberados para a cliente assim que este status estiver "Adicionada".</p>
     `)}
   `;
+}
+
+const DRIVE_ARTIFACT_TYPE_ICON = { recording: '🎥', transcript: '📝', unknown: '📁' };
+const DRIVE_ARTIFACT_TYPE_LABEL = { recording: 'Gravação', transcript: 'Transcrição', unknown: 'Arquivo' };
+
+// One linked file (recording/transcript) already sitting in this
+// encounter/checkpoint slot — same "Desvincular puts it back in the
+// unmatched pool" convention as the Gravações page.
+function driveSlotRow(a) {
+  return `
+    <div class="flex items-center justify-between flex-wrap gap-2 py-2 border-b border-white/5 last:border-0">
+      <p class="text-sm">${DRIVE_ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${DRIVE_ARTIFACT_TYPE_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30">· ${a.name}</span></p>
+      <div class="flex items-center gap-2">
+        <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir no Drive ↗</a>
+        <button type="button" data-unlink-drive-artifact="${a.id}" class="btn-text">Desvincular</button>
+      </div>
+    </div>
+  `;
+}
+// Nothing linked to this slot yet — pick from whatever Gravações has
+// already discovered but nobody's claimed (see loadUnlinkedArtifacts).
+// Discovery itself only happens from the Gravações page's Buscar
+// Gravações/Busca avançada; this never talks to Drive directly.
+function driveSlotPicker(slotId, unlinked) {
+  if (!unlinked.length) {
+    return `<p class="text-xs text-white/20">Nenhum arquivo descoberto ainda para vincular — busque em Gravações primeiro.</p>`;
+  }
+  return `
+    <div class="flex items-center gap-2 flex-wrap">
+      <select data-drive-slot-picker="${slotId}" class="field text-sm" style="width:auto;">
+        <option value="">Vincular arquivo...</option>
+        ${unlinked.map((u) => `<option value="${u.id}">${DRIVE_ARTIFACT_TYPE_ICON[u.artifact_type] || '📁'} ${u.name}</option>`).join('')}
+      </select>
+      <button type="button" data-attach-drive-slot="${slotId}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Vincular</button>
+    </div>
+  `;
+}
+// Per-encounter card, hydrated after render() the same way the Financeiro
+// tab's real summary is — this is the E-tab half of the feature reported
+// live ("linked a recording, don't see it anywhere"): admin/assistant can
+// now attach a file to this exact encounter, right from here, instead of
+// only from the Gravações list.
+async function hydrateEncounterDriveCard(n) {
+  const el = document.getElementById(`drive-slot-e${n}`);
+  if (!el) return;
+  const realClientId = await resolveRealClientId();
+  if (!realClientId) { el.innerHTML = ''; return; }
+  const [{ artifacts }, { artifacts: unlinked }] = await Promise.all([loadArtifactsForClient(realClientId), loadUnlinkedArtifacts()]);
+  const linked = artifacts.filter((a) => a.encounter_slug === `e${n}`);
+  const slotId = `e${n}:${realClientId}`;
+  el.innerHTML = card(`
+    <p class="text-sm text-white/50 mb-3">Gravação do Google Drive (E${n})</p>
+    ${linked.length ? linked.map(driveSlotRow).join('') : driveSlotPicker(slotId, unlinked)}
+  `, 'mb-6');
+  el.querySelector(`[data-attach-drive-slot="${slotId}"]`)?.addEventListener('click', async () => {
+    const artifactId = el.querySelector(`[data-drive-slot-picker="${slotId}"]`).value;
+    if (!artifactId) { toast('Selecione um arquivo primeiro.', { tone: 'error' }); return; }
+    const profile = await getCurrentProfile();
+    const { error } = await linkArtifactToSlot(artifactId, realClientId, profile.id, { encounterSlug: `e${n}` });
+    if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
+    toast('Arquivo vinculado a este encontro.');
+    hydrateEncounterDriveCard(n);
+  });
+  el.querySelectorAll('[data-unlink-drive-artifact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await unlinkArtifact(btn.dataset.unlinkDriveArtifact);
+      if (error) { toast('Erro ao desvincular.', { tone: 'error' }); return; }
+      toast('Vínculo removido.');
+      hydrateEncounterDriveCard(n);
+    });
+  });
+}
+
+// Checkpoints card, on the Programa (overview) tab — client-detail.js has
+// no single combined "all encounters" tab the way the client's own
+// Encontros page does, so this lives on the tab that already serves as her
+// general overview. Same row/picker convention as the per-encounter cards.
+async function hydrateCheckpointsCard() {
+  const el = document.getElementById('drive-checkpoints');
+  if (!el) return;
+  const realClientId = await resolveRealClientId();
+  if (!realClientId) { el.innerHTML = ''; return; }
+  const [{ artifacts }, { artifacts: unlinked }] = await Promise.all([loadArtifactsForClient(realClientId), loadUnlinkedArtifacts()]);
+  const linked = artifacts.filter((a) => a.is_checkpoint);
+  const slotId = `checkpoint:${realClientId}`;
+  el.innerHTML = card(`
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm text-white/50">Checkpoints (Google Drive)</p>
+      ${linked.length ? `<span class="text-xs" style="color:var(--muted);">${linked.length}</span>` : ''}
+    </div>
+    ${linked.length ? linked.map(driveSlotRow).join('') : ''}
+    <div class="${linked.length ? 'mt-3 pt-3' : ''}" ${linked.length ? 'style="border-top:1px solid var(--line);"' : ''}>
+      ${driveSlotPicker(slotId, unlinked)}
+    </div>
+  `, 'mb-6');
+  el.querySelector(`[data-attach-drive-slot="${slotId}"]`)?.addEventListener('click', async () => {
+    const artifactId = el.querySelector(`[data-drive-slot-picker="${slotId}"]`).value;
+    if (!artifactId) { toast('Selecione um arquivo primeiro.', { tone: 'error' }); return; }
+    const profile = await getCurrentProfile();
+    const { error } = await linkArtifactToSlot(artifactId, realClientId, profile.id, { isCheckpoint: true });
+    if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
+    toast('Arquivo vinculado como checkpoint.');
+    hydrateCheckpointsCard();
+  });
+  el.querySelectorAll('[data-unlink-drive-artifact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await unlinkArtifact(btn.dataset.unlinkDriveArtifact);
+      if (error) { toast('Erro ao desvincular.', { tone: 'error' }); return; }
+      toast('Vínculo removido.');
+      hydrateCheckpointsCard();
+    });
+  });
 }
 
 // Production Audit Remediation Pass (Critical 2): fired-and-forgotten after
@@ -1632,6 +1760,8 @@ function renderProgramTab() {
       </form>
     `, 'mb-6')}
 
+    <div id="drive-checkpoints"></div>
+
     ${card(`
       <p class="text-sm text-white/50 mb-3">Notas Internas</p>
       <p class="text-xs text-white/20 mb-3">Visível para Nay e para a assistente — nunca para a cliente.</p>
@@ -2015,6 +2145,7 @@ function renderEncounterTab(n) {
         ${enc.agendaItemId ? `<a href="agenda.html?item=${enc.agendaItemId}" class="btn-text">Abrir na Agenda</a>` : `<a href="agenda.html" class="btn-text">Ir para Agenda →</a>`}
       </div>
     `, 'mb-6')}
+    <div id="drive-slot-e${n}"></div>
     ${renderEncounterRecordingCard(enc)}
     ${renderScheduleRequestSection(n, enc)}
     ${renderEncounterExtra(n)}
@@ -2285,6 +2416,9 @@ function render() {
   content.innerHTML = shell(RENDERERS[activeTab]());
   applyReadOnlyLockdown();
   if (activeTab === 'financial') hydrateRealFinancialSummary();
+  if (activeTab === 'program') hydrateCheckpointsCard();
+  const encounterMatch = /^e([1-8])$/.exec(activeTab);
+  if (encounterMatch) hydrateEncounterDriveCard(Number(encounterMatch[1]));
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { deliverablePreviewShown = false; activeTab = btn.dataset.tab; render(); });
   });
