@@ -5,13 +5,21 @@
 //
 // Three tiers, by hostname only (see PRODUCTION_HOSTNAMES/DEMO_HOSTNAMES):
 //   development — localhost / 127.0.0.1 (a developer's own machine)
-//   demo        — persea-os.pachecootami.workers.dev (the shared staging
-//                 URL — a deliberately rich, mock-data-populated experience
-//                 for Nay to explore before real clients exist)
-//   production  — app.naymurta.com (not live yet — listed ahead of time so
-//                 this file doesn't need editing again the day it goes
-//                 live; until that hostname actually resolves here, nothing
-//                 currently visits this code path in "production" mode)
+//   demo        — persea-os.pachecootami.workers.dev AND app.naymurta.com
+//                 (the branded custom domain, connected as a Cloudflare
+//                 Custom Domain on the same Worker) — both serve the exact
+//                 same rich, mock-data-populated experience. Deliberately
+//                 NOT in PRODUCTION_HOSTNAMES yet: most client-facing pages
+//                 (Jornada, Encontros, Conteúdos, etc.) still read MockDB,
+//                 not real Supabase data (see the delivery report tracking
+//                 that conversion) — flipping this hostname into real
+//                 "production" mode before that's done would show a real
+//                 client "esta área ainda está sendo preparada" instead of
+//                 her actual journey. Move it to PRODUCTION_HOSTNAMES only
+//                 once that conversion is actually finished.
+//   production  — nothing yet. Add the real hostname here (likely
+//                 app.naymurta.com itself, once ready) the day the client
+//                 experience is genuinely backed by real data end to end.
 //
 // This is environment detection only — hostname, nothing secret — never
 // put a real credential in a frontend module. Anything that isn't
@@ -24,8 +32,8 @@
 // legitimate dev/demo tooling. Actual security boundaries (auth, RLS,
 // financial correctness) never depend on this module — they hold
 // regardless of environment.
-const PRODUCTION_HOSTNAMES = ['app.naymurta.com'];
-const DEMO_HOSTNAMES = ['persea-os.pachecootami.workers.dev'];
+const PRODUCTION_HOSTNAMES = [];
+const DEMO_HOSTNAMES = ['persea-os.pachecootami.workers.dev', 'app.naymurta.com'];
 
 export function isLocalDevelopment() {
   return /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
