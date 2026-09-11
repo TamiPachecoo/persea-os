@@ -1,5 +1,10 @@
-import { MockDB } from '../shared/mock-db.js';
+// Production Data Migration — Batch 2: converted off MockDB onto the real
+// `pitches` table (exact column match: pitch_10s/30s/60s, pitch_networking,
+// instagram_bio, linkedin_summary — all admin-authored, one row per
+// client). RLS confirmed (pitches_client_read, scoped to profiles.client_id)
+// before writing this.
 import { getCurrentClientContext } from '../shared/client-context.js';
+import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, toast, stepEyebrow, initScrollReveal, enableTilt, initClientSwitcher } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'pitch' });
@@ -8,7 +13,7 @@ const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'pitch.html', title: 'Seu Pitch' });
 initClientSwitcher();
 
-const pitches = MockDB.getPitches(activeClientId);
+const { data: pitches } = await supabase.from('pitches').select('*').eq('client_id', activeClientId).maybeSingle();
 const content = document.getElementById('app-content');
 
 const LABELS = {
@@ -19,8 +24,8 @@ const LABELS = {
 if (!pitches) {
   content.innerHTML = card(`<p class="text-white/50">Suas variações de pitch ainda não foram geradas — elas aparecerão aqui assim que sua consultora publicá-las.</p>`);
 } else {
-  const entries = Object.entries(LABELS);
-  content.innerHTML = `
+  const entries = Object.entries(LABELS).filter(([key]) => pitches[key]);
+  content.innerHTML = entries.length ? `
     <div class="grid md:grid-cols-2 gap-6">
       ${entries.map(([key, label], i) => `
         <div class="card tilt-card reveal-scroll">
@@ -32,7 +37,7 @@ if (!pitches) {
         </div>
       `).join('')}
     </div>
-  `;
+  ` : card(`<p class="text-white/50">Suas variações de pitch ainda não foram geradas — elas aparecerão aqui assim que sua consultora publicá-las.</p>`);
 
   content.querySelectorAll('[data-copy]').forEach((btn) => {
     btn.addEventListener('click', () => {

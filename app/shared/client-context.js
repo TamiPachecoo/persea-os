@@ -30,7 +30,7 @@ import { isProductionEnvironment } from './environment.js';
 // MockDB in production (explicit product requirement). Add a page's own
 // identifier here only once its render() genuinely reads its own Supabase
 // tables end to end, never before.
-const PRODUCTION_READY_PAGES = new Set(['encontros']);
+const PRODUCTION_READY_PAGES = new Set(['encontros', 'pitch', 'questionnaire']);
 
 function renderNotice(message, detail) {
   document.body.innerHTML = `

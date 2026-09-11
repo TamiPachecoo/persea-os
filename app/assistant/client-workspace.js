@@ -11,6 +11,16 @@ import {
   IMAGE_STATUS_LABEL, AGENDA_TYPE_LABEL,
 } from '../shared/mock-db.js';
 import { renderShell, card, toast, formatDate, formatDateTime, openModal, isValidHttpUrl, externalLinkAttrs, brl } from '../shared/ui.js';
+import { requireProfile } from '../shared/supabase-auth.js';
+
+// Security gap fix (Database Foundation audit, item 1): this page had no
+// auth check at all — only ever reached via assistant/clients.js's own
+// links, which does gate on 'assistant', but a page must never rely on
+// how it's linked to for its own access control. Same requireProfile
+// pattern as every sibling assistant page (see assistant/clients.js);
+// nothing admin-facing links here (checked), so 'assistant' only, not a
+// second/invented auth system.
+if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 
 const NF_BADGE_CLASS = { not_requested: 'badge-locked', requested: 'badge-progress', issued: 'badge-completed' };
 
