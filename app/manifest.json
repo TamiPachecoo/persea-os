@@ -1,5 +1,5 @@
 {
-  "name": "PERSEA OS",
+  "name": "PERSEA",
   "short_name": "PERSEA",
   "description": "Sistema Operacional da Mentoria PERSEA",
   "start_url": "/login.html",
@@ -9,7 +9,9 @@
   "background_color": "#0c0a09",
   "theme_color": "#0c0a09",
   "icons": [
-    { "src": "shared/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "shared/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "shared/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "shared/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "shared/assets/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "shared/assets/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

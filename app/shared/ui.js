@@ -8,6 +8,20 @@ import { signOut } from './supabase-auth.js';
 
 export { isDemoEnvironment, isProductionEnvironment, isNonProduction };
 
+// Registers the minimal service worker (see /sw.js) from every page — this
+// module is imported by all 44 admin/assistant/client/login entry files,
+// so this is the one place that reaches every page without editing each
+// HTML file individually. Root-scoped ('/'), so registering from any page
+// covers the whole app once installed. Silently no-ops on browsers without
+// serviceWorker support (older Safari, some in-app browsers) — this is
+// pure installability/update-hygiene polish, never required for the app
+// to function.
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  });
+}
+
 // Kept as its original name/behavior (real auth is what actually protects a
 // page — this only decides whether a *convenience* shortcut renders at
 // all) for the handful of things that must stay local-only specifically:
