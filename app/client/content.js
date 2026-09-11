@@ -1,14 +1,16 @@
-// Conteúdos — premium visual gateway to Hubla, NOT a replacement for it.
-// Hubla stays responsible for lessons/videos/progress/completion; this page
-// only helps a client find the right topic and hands her off in a new tab.
-// Deliberately shows no locked/unlocked state, no progress bar, no
-// completion %, no "next lesson", no watched status — Persea OS has no way
-// of knowing what happened inside Hubla, and the UI must not imply it does.
-import { MockDB } from '../shared/mock-db.js';
+// Production Data Migration — Batch 3, Priority 5: converted off MockDB
+// onto real Supabase metadata. Still a pure gateway to Hubla — PERSEA does
+// not host course content — but the category cards/recommendations now
+// come from real `content_categories`/`resources`/`resource_assignments`/
+// `tenant_settings` instead of MockDB fixtures. Every access CTA still
+// routes through hublaHref() (falls back to https://app.hub.la/ when a
+// specific category/resource has no configured link yet) — never a fake
+// internal lesson page.
 import { getCurrentClientContext } from '../shared/client-context.js';
+import { supabase } from '../shared/supabase-client.js';
 import {
   renderShell, card, initClientSwitcher, externalLinkAttrs,
-  contentCardInner, lockedStateCard, hublaHref,
+  contentCardInner, hublaHref,
 } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content' });
@@ -25,50 +27,49 @@ function heroCta(url) {
 
 function categoryCard(cat) {
   const label = `Acessar ${cat.title} na Hubla (abre em nova aba)`;
-  return `<a ${externalLinkAttrs(hublaHref(cat.hublaUrl))} class="content-card" aria-label="${label}">${contentCardInner(cat)}</a>`;
+  // contentCardInner reads cat.hublaUrl/coverImage (its established shape)
+  // — mapped from the real columns here rather than changing that shared
+  // helper's contract, which admin/content.js also depends on.
+  const shaped = { title: cat.title, description: cat.description, hublaUrl: cat.hubla_url, coverImage: cat.cover_image_url, coverTone: cat.cover_tone };
+  return `<a ${externalLinkAttrs(hublaHref(cat.hubla_url))} class="content-card" aria-label="${label}">${contentCardInner(shaped)}</a>`;
 }
 
-// Recommendations Nay has attached to this client's own resources/tasks —
-// a separate Persea workflow layered on top of the gateway above (see
-// admin/content.js), not a Hubla-lesson tracker. Kept as a plain link-out,
-// with no completion checkbox here — that belongs to Tarefas, not this page.
-function recommendedSection() {
-  const assignments = MockDB.getAssignmentsForClient(activeClientId).filter((a) => !a.completed);
-  if (!assignments.length) return '';
+async function recommendedSection() {
+  const { data: assignments } = await supabase.from('resource_assignments')
+    .select('*, resources(*)').eq('client_id', activeClientId).eq('completed', false);
+  if (!assignments || !assignments.length) return '';
   return `
     <div class="mb-10">
       <p class="text-sm text-white/50 mb-4">Recomendado para você</p>
       <div class="grid md:grid-cols-2 gap-4">
         ${assignments.map((a) => card(`
-          <p class="font-medium text-sm mb-1">${a.resource.title}</p>
+          <p class="font-medium text-sm mb-1">${a.resources?.title || ''}</p>
           ${a.reason ? `<p class="text-xs text-white/40 mb-3">${a.reason}</p>` : ''}
-          <a ${externalLinkAttrs(hublaHref(a.resource.hublaUrl))} class="btn-ghost inline-block" style="padding:8px 14px; font-size:12px;">Abrir na Hubla ↗</a>
+          <a ${externalLinkAttrs(hublaHref(a.resources?.hubla_url))} class="btn-ghost inline-block" style="padding:8px 14px; font-size:12px;">Abrir na Hubla ↗</a>
         `)).join('')}
       </div>
     </div>
   `;
 }
 
-function render() {
-  if (MockDB.needsOnboardingCompletion(activeClientId)) {
-    content.innerHTML = lockedStateCard('Conteúdos');
-    return;
-  }
-
-  const categories = MockDB.getContentCategories();
-  const tenant = MockDB.getTenant();
+async function render() {
+  const [{ data: categories }, { data: tenant }, recommendedHtml] = await Promise.all([
+    supabase.from('content_categories').select('*').eq('is_visible', true).order('display_order'),
+    supabase.from('tenant_settings').select('hubla_all_content_url').limit(1).maybeSingle(),
+    recommendedSection(),
+  ]);
 
   content.innerHTML = `
     <div class="mb-10">
       <p class="text-white/40 text-sm mb-1">Central de Conteúdos</p>
       <h1 class="text-3xl font-serif">Conteúdos da Metodologia PERSEA</h1>
       <p class="text-sm text-white/40 mt-2 mb-5 max-w-xl">Acesse suas aulas e materiais disponíveis na Hubla.</p>
-      ${heroCta(tenant.hublaAllContentUrl)}
+      ${heroCta(tenant?.hubla_all_content_url)}
     </div>
 
-    ${recommendedSection()}
+    ${recommendedHtml}
 
-    ${categories.length ? `
+    ${categories && categories.length ? `
       <div class="content-grid">${categories.map(categoryCard).join('')}</div>
     ` : card('<p class="text-sm text-white/30">Ainda não há conteúdos disponíveis — volte em breve.</p>')}
   `;

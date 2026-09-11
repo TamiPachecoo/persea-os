@@ -1,9 +1,12 @@
-// Conteúdo — the client's practical content work inside the mentoring
-// journey. Distinct from content.html (the Conteúdos gateway to Hubla):
-// this is a submission/feedback shell, not a lesson library. Kept
-// deliberately simple per spec — no content methodology invented here.
-import { MockDB, PROGRAM_ACTIVITY_STATUS_LABEL, PROGRAM_ACTIVITY_STATUS_BADGE_CLASS } from '../shared/mock-db.js';
+// Production Data Migration — Batch 3: converted off MockDB onto the real
+// `content_activities` table (one row per client, exact status vocabulary
+// match — not_started/in_progress/submitted/feedback_available/completed;
+// full client read/write RLS already scoped to profiles.client_id).
+// PROGRAM_ACTIVITY_STATUS_LABEL/_BADGE_CLASS are static presentation-only
+// dictionaries, not per-client data.
+import { PROGRAM_ACTIVITY_STATUS_LABEL, PROGRAM_ACTIVITY_STATUS_BADGE_CLASS } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
+import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, toast, initClientSwitcher, formatDateTime } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content-activity' });
@@ -13,8 +16,13 @@ document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', 
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
-function render() {
-  const activity = MockDB.getContentActivity(clientId);
+async function loadActivity() {
+  const { data } = await supabase.from('content_activities').select('*').eq('client_id', clientId).maybeSingle();
+  return data || { client_id: clientId, status: 'not_started', submission: null, feedback: null, updated_at: null };
+}
+
+async function render() {
+  const activity = await loadActivity();
 
   content.innerHTML = `
     <a href="program.html" class="btn-text mb-6 inline-block">&larr; Seu Programa</a>
@@ -39,14 +47,18 @@ function render() {
     ${activity.feedback ? card(`
       <p class="text-sm text-white/50 mb-2">Devolutiva da Nay</p>
       <p class="text-sm text-white/70">${activity.feedback}</p>
-      ${activity.updatedAt ? `<p class="text-xs text-white/20 mt-3">${formatDateTime(activity.updatedAt)}</p>` : ''}
+      ${activity.updated_at ? `<p class="text-xs text-white/20 mt-3">${formatDateTime(activity.updated_at)}</p>` : ''}
     `, 'mb-6') : card('<p class="text-sm" style="color:var(--muted);">A devolutiva aparece aqui assim que Nay revisar seu envio.</p>', 'mb-6')}
   `;
 
-  content.querySelector('#save-submission').addEventListener('click', () => {
+  content.querySelector('#save-submission').addEventListener('click', async () => {
     const text = content.querySelector('#content-submission').value.trim();
     if (!text) { toast('Escreva algo antes de enviar.', { tone: 'error' }); return; }
-    MockDB.saveContentActivitySubmission(clientId, text);
+    const row = { client_id: clientId, submission: text, status: 'submitted', updated_at: new Date().toISOString() };
+    const { error } = activity.updated_at || activity.submission
+      ? await supabase.from('content_activities').update(row).eq('client_id', clientId)
+      : await supabase.from('content_activities').insert(row);
+    if (error) { toast('Não foi possível enviar agora.', { tone: 'error' }); return; }
     toast('Enviado! Nay será avisada.');
     render();
   });

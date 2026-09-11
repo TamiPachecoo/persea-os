@@ -1,19 +1,19 @@
-// Guia de Atividades — a single tenant-level PDF teaching clients how to
-// take the initial photos. Deliberately lightweight: viewing/downloading it
-// isn't gated behind a complicated completion requirement, just an honest
-// optional "Já consultei o guia" acknowledgement.
-//
-// Rendered as an actual page-turning book (see initFlipbook) when
-// pre-rasterized page images are available — falls back to a flat PDF
-// <embed>, and finally to an honest "not published yet" state, so the page
-// still works if only the raw PDF (or nothing) has been published.
-import { MockDB } from '../shared/mock-db.js';
+// Production Data Migration — Batch 3: converted off MockDB onto the real
+// `activity_guide_versions` (tenant-level, is_current flags the published
+// one) + `activity_guide_pages` (page_number/image_url — the flipbook
+// source). Both readable by any authenticated user (shared reference
+// content, not per-client). Acknowledgement (clients.guide_acknowledged)
+// has no client-self-write policy in this schema — same situation as
+// images.js's note field — shown read-only rather than granting a new
+// broad write to `clients` for one boolean.
 import { getCurrentClientContext } from '../shared/client-context.js';
-import { renderShell, card, toast, initClientSwitcher, isValidAssetSrc, assetLinkAttrs, formatDate } from '../shared/ui.js';
+import { supabase } from '../shared/supabase-client.js';
+import { renderShell, card, initClientSwitcher, isValidAssetSrc, assetLinkAttrs, formatDate } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'activity-guide' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
+const client = __clientCtx.client;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Guia de Atividades' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
@@ -124,20 +124,24 @@ function initFlipbook(pages) {
   paintStatic();
 }
 
-function render() {
-  const guide = MockDB.getActivityGuide();
-  const acknowledged = MockDB.isGuideAcknowledged(clientId);
-  const hasPages = Array.isArray(guide.pages) && guide.pages.length > 0;
-  const pdfOk = isValidAssetSrc(guide.pdfUrl);
+async function render() {
+  const { data: version } = await supabase.from('activity_guide_versions').select('*').eq('is_current', true).maybeSingle();
+  const { data: pageRows } = version
+    ? await supabase.from('activity_guide_pages').select('*').eq('guide_version_id', version.id).order('page_number')
+    : { data: [] };
+  const pages = (pageRows || []).map((p) => p.image_url).filter(Boolean);
+  const acknowledged = !!client.guide_acknowledged;
+  const hasPages = pages.length > 0;
+  const pdfOk = isValidAssetSrc(version?.pdf_url);
 
   content.innerHTML = `
     <a href="program.html" class="btn-text mb-6 inline-block">&larr; Seu Programa</a>
     <p class="text-sm text-white/40 max-w-xl mb-8">Veja como preparar e fotografar as imagens que serão analisadas pela equipe.</p>
 
     ${card(`
-      ${hasPages ? flipbookMarkup(guide.pages) : pdfOk ? `
+      ${hasPages ? flipbookMarkup(pages) : pdfOk ? `
         <div class="mb-5" style="border:1px solid var(--line); border-radius:4px; overflow:hidden;">
-          <embed src="${guide.pdfUrl}" type="application/pdf" style="width:100%; height:520px;" />
+          <embed src="${version.pdf_url}" type="application/pdf" style="width:100%; height:520px;" />
         </div>
       ` : `
         <p class="text-sm" style="color:var(--muted);">O guia em PDF ainda não foi publicado pela equipe — ele aparecerá aqui assim que estiver pronto.</p>
@@ -145,29 +149,21 @@ function render() {
       ${hasPages || pdfOk ? `
         <div class="flex flex-wrap items-center justify-center gap-3 mt-6">
           ${pdfOk ? `
-            <a ${assetLinkAttrs(guide.pdfUrl)} class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver PDF completo ↗</a>
-            <a href="${guide.pdfUrl}" download class="btn-ghost">Baixar PDF</a>
+            <a ${assetLinkAttrs(version.pdf_url)} class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver PDF completo ↗</a>
+            <a href="${version.pdf_url}" download class="btn-ghost">Baixar PDF</a>
           ` : ''}
         </div>
-        <p class="text-xs text-white/20 mt-4 text-center">Versão ${guide.version}${guide.publishedAt ? ` · publicada em ${formatDate(guide.publishedAt)}` : ''}</p>
+        <p class="text-xs text-white/20 mt-4 text-center">Versão ${version.version}${version.published_at ? ` · publicada em ${formatDate(version.published_at)}` : ''}</p>
       ` : ''}
     `, 'mb-6')}
 
-    <label class="flex items-center gap-3 text-sm" style="cursor:pointer; color:${acknowledged ? 'var(--gold)' : 'var(--cream)'};">
-      <input type="checkbox" id="ack-guide" ${acknowledged ? 'checked' : ''} style="accent-color:var(--terracotta);" />
+    <label class="flex items-center gap-3 text-sm" style="color:${acknowledged ? 'var(--gold)' : 'var(--cream)'};">
+      <input type="checkbox" id="ack-guide" ${acknowledged ? 'checked' : ''} disabled style="accent-color:var(--terracotta);" />
       Já consultei o guia
     </label>
   `;
 
-  if (hasPages) initFlipbook(guide.pages);
-
-  content.querySelector('#ack-guide').addEventListener('change', (e) => {
-    if (e.target.checked) {
-      MockDB.acknowledgeActivityGuide(clientId);
-      toast('Marcado — obrigada por conferir o guia.');
-    }
-    render();
-  });
+  if (hasPages) initFlipbook(pages);
 }
 
 render();
