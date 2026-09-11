@@ -3,37 +3,40 @@
 // scattered `/^(localhost|127\.0\.0\.1)$/.test(location.hostname)` checks
 // that used to live in shared/ui.js and half a dozen individual pages.
 //
-// Three tiers, by hostname only (see PRODUCTION_HOSTNAMES/DEMO_HOSTNAMES):
+// Four hostnames recognized, by tier (see PRODUCTION_HOSTNAMES/DEMO_HOSTNAMES):
 //   development — localhost / 127.0.0.1 (a developer's own machine)
-//   demo        — persea-os.pachecootami.workers.dev AND app.naymurta.com
-//                 (the branded custom domain, connected as a Cloudflare
-//                 Custom Domain on the same Worker) — both serve the exact
-//                 same rich, mock-data-populated experience. Deliberately
-//                 NOT in PRODUCTION_HOSTNAMES yet: most client-facing pages
-//                 (Jornada, Encontros, Conteúdos, etc.) still read MockDB,
-//                 not real Supabase data (see the delivery report tracking
-//                 that conversion) — flipping this hostname into real
-//                 "production" mode before that's done would show a real
-//                 client "esta área ainda está sendo preparada" instead of
-//                 her actual journey. Move it to PRODUCTION_HOSTNAMES only
-//                 once that conversion is actually finished.
-//   production  — nothing yet. Add the real hostname here (likely
-//                 app.naymurta.com itself, once ready) the day the client
-//                 experience is genuinely backed by real data end to end.
+//   demo        — persea-os.pachecootami.workers.dev (existing Workers
+//                 staging/demo deployment) AND persea-os-pages.pages.dev
+//                 (the newer Cloudflare Pages deployment, same git source,
+//                 used for pre-domain-connection staging/testing) — both
+//                 serve the same rich, mock-data-populated experience.
+//                 Deliberately NOT in PRODUCTION_HOSTNAMES yet: most
+//                 client-facing pages (Jornada, Encontros, Conteúdos, etc.)
+//                 still read MockDB, not real Supabase data (see the
+//                 delivery report tracking that conversion) — flipping
+//                 either hostname into real "production" mode before that's
+//                 done would show a real client "esta área ainda está
+//                 sendo preparada" instead of her actual journey.
+//   production  — app.naymurta.com, the branded custom domain intended to
+//                 go live once DNS is connected and the client-facing
+//                 pages are genuinely backed by real data end to end. Not
+//                 yet connected at the DNS level as of this pass — listing
+//                 it here only affects in-app classification, it does not
+//                 make the domain reachable.
 //
 // This is environment detection only — hostname, nothing secret — never
 // put a real credential in a frontend module. Anything that isn't
 // recognized as demo or production is treated as development-like (see
-// isNonProduction below): the two demo/staging hostnames are the only
-// ones this list needs to grow as new preview/staging URLs show up, and
+// isNonProduction below): the demo/staging hostnames are the only ones
+// this list needs to grow as new preview/staging URLs show up, and
 // erring toward "extra convenience features render" on an unrecognized
 // *local* host is the safe direction — erring the other way (locking an
 // unrecognized host into production-strict mode) would silently hide
 // legitimate dev/demo tooling. Actual security boundaries (auth, RLS,
 // financial correctness) never depend on this module — they hold
 // regardless of environment.
-const PRODUCTION_HOSTNAMES = [];
-const DEMO_HOSTNAMES = ['persea-os.pachecootami.workers.dev', 'app.naymurta.com'];
+const PRODUCTION_HOSTNAMES = ['app.naymurta.com'];
+const DEMO_HOSTNAMES = ['persea-os.pachecootami.workers.dev', 'persea-os-pages.pages.dev'];
 
 export function isLocalDevelopment() {
   return /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
