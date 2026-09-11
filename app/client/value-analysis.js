@@ -15,7 +15,7 @@ import {
   VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
 } from '../shared/value-analysis-schema.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'value-analysis' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'value-analysis.html', title: 'Leitura Estratégica de Valor' });

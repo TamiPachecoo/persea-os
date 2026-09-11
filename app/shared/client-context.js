@@ -17,7 +17,20 @@
 // asks for, it is not itself a security boundary.
 import { MockDB, getActiveClientId } from './mock-db.js';
 import { requireProfile } from './supabase-auth.js';
+import { supabase } from './supabase-client.js';
 import { isProductionEnvironment } from './environment.js';
+
+// Production Data Migration — Batch 1: pages converted off MockDB onto real
+// Supabase tables (see each page's own comments for exactly which tables).
+// A page not in this set still gets a real client identity/session check
+// (so auth/RLS are exercised correctly either way) but is intentionally
+// stopped with an honest "not available yet" notice rather than being
+// allowed to fall through into MockDB — MockDB has no row under a real
+// client's UUID, and a real client's data must NEVER silently come from
+// MockDB in production (explicit product requirement). Add a page's own
+// identifier here only once its render() genuinely reads its own Supabase
+// tables end to end, never before.
+const PRODUCTION_READY_PAGES = new Set(['encontros']);
 
 function renderNotice(message, detail) {
   document.body.innerHTML = `
@@ -56,44 +69,68 @@ function renderAccessPendingGate(clientId) {
   });
 }
 
-// Returns { clientId, mode: 'demo' | 'production', profile } — profile is
-// null in demo (no real session involved there). Returns null if this
-// function has already redirected/rendered a stop state (no real session,
-// wrong role, or a real client profile with no linked client_id yet) —
-// callers should `throw new Error('not authorized')` immediately after a
-// null result, same convention as requireProfile itself.
-export async function getCurrentClientContext(loginPath = '../login.html') {
-  let clientId;
-  let profile = null;
-  const mode = isProductionEnvironment() ? 'production' : 'demo';
-  if (mode === 'demo') {
-    clientId = getActiveClientId();
-  } else {
-    profile = await requireProfile('client', loginPath);
-    if (!profile) return null; // requireProfile already redirected to login
-    if (!profile.client_id) {
-      renderNotice(
-        'Sua conta ainda não está vinculada a um cadastro de cliente.',
-        'Fale com a equipe PERSEA para concluir sua ativação.',
-      );
+// Returns { clientId, mode: 'demo' | 'production', profile, client } —
+// profile is null in demo (no real session involved there); client is the
+// MockDB shape in demo, or the real `clients` row (via a scoped Supabase
+// query, protected by clients_self_read RLS) in production. Returns null
+// if this function has already redirected/rendered a stop state (no real
+// session, wrong role, a real client profile with no linked client_id yet,
+// or a page not yet converted to real data) — callers should
+// `throw new Error('not authorized')` immediately after a null result,
+// same convention as requireProfile itself.
+//
+// `page` must be passed in production so this can tell an already-
+// converted page from one that would otherwise fall through to MockDB —
+// see PRODUCTION_READY_PAGES above. Optional in demo (ignored there).
+export async function getCurrentClientContext(loginPath = '../login.html', { page } = {}) {
+  if (!isProductionEnvironment()) {
+    const clientId = getActiveClientId();
+    const client = MockDB.getClient(clientId);
+    // Client Painel removal: this used to only ever fire on client/
+    // dashboard.js, guaranteed to be the first page a freshly-activated
+    // client saw. Checked here instead so it still fires correctly no
+    // matter which client page she lands on first — see
+    // renderAccessPendingGate. Demo-only: a real production client only
+    // ever reaches a client-role login after her real invite was already
+    // accepted (see invite-client/autentique-status), so there is no
+    // equivalent "pending" state to gate on in production.
+    if (client?.accessStatus === 'pending') {
+      renderAccessPendingGate(clientId);
       return null;
     }
-    clientId = profile.client_id;
+    return { clientId, mode: 'demo', profile: null, client };
   }
 
-  const client = MockDB.getClient(clientId);
+  const profile = await requireProfile('client', loginPath);
+  if (!profile) return null; // requireProfile already redirected to login
+  if (!profile.client_id) {
+    renderNotice(
+      'Sua conta ainda não está vinculada a um cadastro de cliente.',
+      'Fale com a equipe PERSEA para concluir sua ativação.',
+    );
+    return null;
+  }
+  const clientId = profile.client_id;
 
-  // Known, deliberate limitation (see the Final Core Production
-  // Architecture Pass report): the rich client journey experience
-  // (dashboard, program, questionnaire, playbook, etc.) still reads
-  // through MockDB, which has nothing under a real Supabase client's UUID
-  // — that per-page migration hasn't happened yet. Rather than let each of
-  // those ~20 pages crash on `undefined.someProperty`, this is the one
-  // place that catches it and shows an honest "not ready yet" notice
-  // instead of a broken page. Remove this check page-by-page as each one
-  // is actually converted to read its real Supabase equivalent. Demo mode
-  // never hits this — every demo client always exists in MockDB.
-  if (mode === 'production' && !client) {
+  // Real Supabase row, not MockDB — RLS (clients_self_read) already scopes
+  // this to exactly her own row; no separate client-side filter needed.
+  const { data: client, error } = await supabase.from('clients').select('*').eq('id', clientId).maybeSingle();
+  if (error || !client) {
+    renderNotice(
+      'Não foi possível carregar seus dados agora.',
+      'Tente novamente em instantes ou fale com a equipe PERSEA.',
+    );
+    return null;
+  }
+
+  // Production Data Migration: a page not yet converted off MockDB must
+  // never be allowed to read it for a real client (MockDB has nothing
+  // under a real UUID anyway, but this makes the boundary explicit and
+  // intentional rather than incidental). Shown instead of a broken/blank
+  // page — this is a feature-availability notice, not a "no data yet"
+  // empty state (that distinction matters: the page genuinely isn't wired
+  // to Supabase yet, it isn't that this specific client has nothing).
+  if (!page || !PRODUCTION_READY_PAGES.has(page)) {
     renderNotice(
       'Esta área ainda está sendo preparada para clientes reais.',
       'Volte em breve — a equipe PERSEA foi avisada.',
@@ -101,14 +138,5 @@ export async function getCurrentClientContext(loginPath = '../login.html') {
     return null;
   }
 
-  // Client Painel removal: this used to only ever fire on client/
-  // dashboard.js, guaranteed to be the first page a freshly-activated
-  // client saw. Checked here instead so it still fires correctly no matter
-  // which client page she lands on first — see renderAccessPendingGate.
-  if (client?.accessStatus === 'pending') {
-    renderAccessPendingGate(clientId);
-    return null;
-  }
-
-  return { clientId, mode, profile };
+  return { clientId, mode: 'production', profile, client };
 }

@@ -13,7 +13,7 @@ import {
   renderPhaseTracker, wirePhaseTrackerNav,
 } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'program' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Programa' });

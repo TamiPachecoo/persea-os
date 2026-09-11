@@ -6,7 +6,7 @@ import { MockDB, ONBOARDING_STAGE_LABEL, CONTRACT_DURATION_LABEL, WHATSAPP_STATU
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, stepEyebrow, initClientSwitcher } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'onboarding' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'onboarding.html', title: 'Onboarding' });

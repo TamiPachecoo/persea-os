@@ -6,7 +6,7 @@ import { MockDB, PROGRAM_ACTIVITY_STATUS_LABEL, PROGRAM_ACTIVITY_STATUS_BADGE_CL
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, toast, initClientSwitcher, formatDateTime } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content-activity' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Conteúdo' });

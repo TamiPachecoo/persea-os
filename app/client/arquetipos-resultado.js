@@ -11,7 +11,7 @@ import {
   renderArchetypeRadar, archetypePortrait, archetypeIntensityBar, initScrollReveal, isNonProduction,
 } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'arquetipos-resultado' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Mapa de Arquétipos' });

@@ -2,7 +2,7 @@ import { MockDB } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, formatDateTime, initClientSwitcher } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'activity' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'activity.html', title: 'Atividade' });

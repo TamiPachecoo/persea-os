@@ -7,11 +7,11 @@
 import { MockDB } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
 import {
-  renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl,
-  contentCardInner, lockedStateCard,
+  renderShell, card, initClientSwitcher, externalLinkAttrs,
+  contentCardInner, lockedStateCard, hublaHref,
 } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'content.html', title: 'Conteúdos' });
@@ -20,17 +20,12 @@ initClientSwitcher();
 const content = document.getElementById('app-content');
 
 function heroCta(url) {
-  return isValidHttpUrl(url)
-    ? `<a ${externalLinkAttrs(url)} class="btn-primary inline-block">Abrir todos os conteúdos na Hubla</a>`
-    : `<button type="button" class="btn-ghost" disabled title="Link geral ainda não configurado">Abrir todos os conteúdos na Hubla</button>`;
+  return `<a ${externalLinkAttrs(hublaHref(url))} class="btn-primary inline-block">Abrir todos os conteúdos na Hubla</a>`;
 }
 
 function categoryCard(cat) {
-  const linkOk = isValidHttpUrl(cat.hublaUrl);
-  const label = `Acessar ${cat.title} na Hubla${linkOk ? ' (abre em nova aba)' : ''}`;
-  return linkOk
-    ? `<a ${externalLinkAttrs(cat.hublaUrl)} class="content-card" aria-label="${label}">${contentCardInner(cat)}</a>`
-    : `<div class="content-card content-card-disabled" role="group" aria-label="${cat.title} — link em breve">${contentCardInner(cat)}</div>`;
+  const label = `Acessar ${cat.title} na Hubla (abre em nova aba)`;
+  return `<a ${externalLinkAttrs(hublaHref(cat.hublaUrl))} class="content-card" aria-label="${label}">${contentCardInner(cat)}</a>`;
 }
 
 // Recommendations Nay has attached to this client's own resources/tasks —
@@ -47,9 +42,7 @@ function recommendedSection() {
         ${assignments.map((a) => card(`
           <p class="font-medium text-sm mb-1">${a.resource.title}</p>
           ${a.reason ? `<p class="text-xs text-white/40 mb-3">${a.reason}</p>` : ''}
-          ${isValidHttpUrl(a.resource.hublaUrl)
-            ? `<a ${externalLinkAttrs(a.resource.hublaUrl)} class="btn-ghost inline-block" style="padding:8px 14px; font-size:12px;">Abrir na Hubla ↗</a>`
-            : '<span class="text-xs text-white/30">Link em breve</span>'}
+          <a ${externalLinkAttrs(hublaHref(a.resource.hublaUrl))} class="btn-ghost inline-block" style="padding:8px 14px; font-size:12px;">Abrir na Hubla ↗</a>
         `)).join('')}
       </div>
     </div>

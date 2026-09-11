@@ -397,6 +397,19 @@ export function externalLinkAttrs(url) {
   return isValidHttpUrl(url) ? `href="${url}" target="_blank" rel="noopener noreferrer"` : '';
 }
 
+// Product decision: PERSEA does not duplicate Hubla's own course/content
+// delivery — every content/course/class access action hands off to Hubla,
+// never to a fake internal page pretending to host it. A specific
+// per-category/per-resource hublaUrl (set by admin) is preferred when
+// valid (it lands the client on the exact right course); anything unset
+// or invalid falls back to the general Hubla app rather than rendering as
+// a dead "em breve"/disabled control — every content CTA must always go
+// somewhere real. See client/content.js, client/images.js.
+export const HUBLA_FALLBACK_URL = 'https://app.hub.la/';
+export function hublaHref(url) {
+  return isValidHttpUrl(url) ? url : HUBLA_FALLBACK_URL;
+}
+
 // A src/href is "usable" either as an admin-entered http(s)/data URL
 // (isValidHttpUrl) or as a bundled local asset path shipped with the app
 // itself (e.g. '../shared/assets/guia-atividades.pdf') — same trust level
@@ -675,7 +688,6 @@ export function contentCardCoverStyle(cat) {
 // clickable/interactive wrapper (an <a> for clients, a management div for
 // admin) so this stays a single source of truth for the card's look.
 export function contentCardInner(cat) {
-  const linkOk = isValidHttpUrl(cat.hublaUrl);
   const hasImage = isValidAssetSrc(cat.coverImage);
   return `
     <div class="content-card-cover" style="${contentCardCoverStyle(cat)}">
@@ -683,10 +695,7 @@ export function contentCardInner(cat) {
       <div class="content-card-overlay">
         <p class="content-card-title">${cat.title || 'Sem título'}</p>
         ${cat.description ? `<p class="content-card-desc">${cat.description}</p>` : ''}
-        <span class="content-card-cta">
-          ${linkOk ? 'Acessar na Hubla' : 'Em breve'}
-          ${linkOk ? '<span class="content-card-ext" aria-hidden="true">↗</span>' : ''}
-        </span>
+        <span class="content-card-cta">Acessar na Hubla<span class="content-card-ext" aria-hidden="true">↗</span></span>
       </div>
     </div>
   `;

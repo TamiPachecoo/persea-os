@@ -11,7 +11,7 @@ import {
 } from '../shared/mock-db.js';
 import {
   renderShell, card, toast, formatDate, openModal, isValidHttpUrl,
-  externalLinkAttrs, contentCardInner,
+  externalLinkAttrs, contentCardInner, hublaHref,
 } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 
@@ -115,9 +115,7 @@ function renderGatewaySection() {
           <button type="button" id="toggle-manage" class="btn-ghost">${manageMode ? 'Sair do modo de gerenciamento' : 'Gerenciar conteúdos'}</button>
         </div>
       </div>
-      ${isValidHttpUrl(tenant.hublaAllContentUrl)
-        ? `<a ${externalLinkAttrs(tenant.hublaAllContentUrl)} class="btn-primary inline-block mt-2">Abrir todos os conteúdos na Hubla</a>`
-        : `<button type="button" class="btn-ghost mt-2" disabled>Abrir todos os conteúdos na Hubla</button>`}
+      <a ${externalLinkAttrs(hublaHref(tenant.hublaAllContentUrl))} class="btn-primary inline-block mt-2">Abrir todos os conteúdos na Hubla</a>
     </div>
 
     ${manageMode ? card(`

@@ -960,7 +960,7 @@ function renderArchetypeQuizTab() {
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-3 pt-3" style="border-top:1px solid var(--line);">
-        ${status === 'completed' ? `<a href="#" id="preview-as-client" class="btn-ghost">Pré-visualizar como a cliente ↗</a>` : ''}
+        ${status === 'completed' ? `<button type="button" id="preview-as-client" class="btn-ghost">Pré-visualizar como a cliente ↗</button>` : ''}
         ${status === 'completed' ? `<button type="button" id="unlock-retake" class="btn-text">Liberar novo teste</button>` : ''}
         ${status === 'completed' ? `<button type="button" id="print-result" class="btn-text no-print">Imprimir resultado</button>` : ''}
       </div>

@@ -13,7 +13,7 @@ import { MockDB } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl, boardEmptyState, mountPinterestBoard } from '../shared/ui.js';
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'brand-direction' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'brand-direction.html', title: 'Direção da Marca' });

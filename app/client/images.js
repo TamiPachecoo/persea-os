@@ -5,7 +5,7 @@
 // swap this for real object storage without touching this screen's shape.
 import { MockDB, IMAGE_STATUS_LABEL, GUIDE_STATUS_LABEL, HUBLA_STATUS_LABEL } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
-import { renderShell, card, toast, initClientSwitcher, formatDateTime, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
+import { renderShell, card, toast, initClientSwitcher, formatDateTime, isValidHttpUrl, externalLinkAttrs, hublaHref } from '../shared/ui.js';
 
 const MAX_FILE_MB = 8;
 const IMAGE_STATUS_BADGE = {
@@ -13,7 +13,7 @@ const IMAGE_STATUS_BADGE = {
   em_analise: 'badge-progress', novas_solicitadas: 'badge-locked', aprovado: 'badge-completed',
 };
 
-const __clientCtx = await getCurrentClientContext();
+const __clientCtx = await getCurrentClientContext('../login.html', { page: 'images' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Imagens' });
@@ -80,10 +80,10 @@ function renderDeliveredMaterials() {
         </a>
       ` : ''}
       ${hubla.status === 'granted' ? `
-        <div class="flex items-center justify-between py-2">
+        <a ${externalLinkAttrs(hublaHref())} class="flex items-center justify-between py-2 hover:bg-white/5 -mx-2 px-2 rounded transition-colors">
           <span>Acesso à plataforma Hubla</span>
-          <span class="badge badge-completed">${HUBLA_STATUS_LABEL.granted}</span>
-        </div>
+          <span class="badge badge-completed">${HUBLA_STATUS_LABEL.granted} ↗</span>
+        </a>
       ` : ''}
     </div>
   `, 'mb-6');
