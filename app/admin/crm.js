@@ -13,7 +13,7 @@ import {
 import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink, isProductionEnvironment } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
-import { deriveClientStatus } from '../shared/client-status.js';
+import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 
 // Production Migration Batch 4: app.naymurta.com never shows MockDB
 // clients/leads. Real client creation + registration-link generation
@@ -40,13 +40,17 @@ async function loadRealClients() {
 
 function productionClientRow(c) {
   const tierLabel = c.tier === 'premium' ? 'Premium' : 'Essential';
+  const nextActionLabel = c._status.nextAction ? NEXT_ACTION_LABEL[c._status.nextAction] : null;
   return `
-    <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+    <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
       <div>
         <p class="font-medium">${c.full_name}</p>
         <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}</p>
       </div>
-      <span class="badge ${c._status.badgeClass}">${c._status.label}</span>
+      <div class="flex items-center gap-3">
+        ${nextActionLabel ? `<span class="text-xs" style="color:var(--gold);">${nextActionLabel} →</span>` : ''}
+        <span class="badge ${c._status.badgeClass}">${c._status.label}</span>
+      </div>
     </a>
   `;
 }
