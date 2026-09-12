@@ -10,8 +10,122 @@ import {
   LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL, VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL,
   PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_LABEL_BY_SLUG, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink, isProductionEnvironment } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
+import { deriveClientStatus } from '../shared/client-status.js';
+
+// Production Migration Batch 4: app.naymurta.com never shows MockDB
+// clients/leads. Real client creation + registration-link generation
+// (below) is the only piece of this page converted this batch — the
+// Leads/VIP-pipeline half stays MockDB-only and is simply not shown in
+// production yet (an honest gap, not faked data), since that conversion
+// wasn't in scope for this pass.
+async function loadRealClients() {
+  const { data: clients } = await supabase.from('clients').select('*').eq('is_demo', false).order('created_at', { ascending: false });
+  const rows = clients || [];
+  const ids = rows.map((c) => c.id);
+  const [{ data: partyInfos }, { data: contracts }] = await Promise.all([
+    ids.length ? supabase.from('party_info').select('client_id, submitted').in('client_id', ids) : Promise.resolve({ data: [] }),
+    ids.length ? supabase.from('contracts').select('client_id, status, created_at').in('client_id', ids).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+  ]);
+  const partyByClient = new Map((partyInfos || []).map((p) => [p.client_id, p.submitted]));
+  const contractByClient = new Map(); // first write per client wins — contracts already ordered newest-first
+  (contracts || []).forEach((c) => { if (!contractByClient.has(c.client_id)) contractByClient.set(c.client_id, c.status); });
+  return rows.map((c) => ({
+    ...c,
+    _status: deriveClientStatus({ accessStatus: c.access_status, partyInfoSubmitted: !!partyByClient.get(c.id), contractStatus: contractByClient.get(c.id) }),
+  }));
+}
+
+function productionClientRow(c) {
+  const tierLabel = c.tier === 'premium' ? 'Premium' : 'Essential';
+  return `
+    <a href="client-detail.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+      <div>
+        <p class="font-medium">${c.full_name}</p>
+        <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}</p>
+      </div>
+      <span class="badge ${c._status.badgeClass}">${c._status.label}</span>
+    </a>
+  `;
+}
+
+function openRegistrationLinkModal(url) {
+  const { el } = openModal({
+    title: 'Cliente criada',
+    bodyHtml: `
+      <p class="text-sm text-white/50 mb-4">Envie este link para a cliente concluir o cadastro. Ele expira em 7 dias e só pode ser usado uma vez.</p>
+      <div class="flex items-center gap-2">
+        <input id="reg-link-field" class="field text-sm" readonly value="${url}" />
+        <button type="button" id="copy-reg-link" class="btn-ghost shrink-0">Copiar</button>
+      </div>
+    `,
+  });
+  el.querySelector('#copy-reg-link').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(url); toast('Link copiado.'); } catch { toast('Não foi possível copiar.', { tone: 'error' }); }
+  });
+}
+
+function openCreateClientModal() {
+  const { el, close } = openModal({
+    title: 'Novo Cliente',
+    bodyHtml: `
+      <form id="create-client-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Nome Completo</label>
+          <input name="full_name" class="field" required />
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Email (opcional)</label>
+            <input name="email" type="email" class="field" />
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Programa</label>
+            <select name="tier" class="field">
+              <option value="essential">Persea Essential</option>
+              <option value="premium">Persea Premium</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Criar Cliente</button>
+        </div>
+      </form>
+    `,
+  });
+  el.querySelector('#create-client-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const { data, error } = await supabase.functions.invoke('create-client-registration', {
+      body: { full_name: fd.get('full_name'), email: fd.get('email') || null, tier: fd.get('tier') },
+    });
+    if (error || data?.error) { toast(data?.error || 'Não foi possível criar a cliente agora.', { tone: 'error' }); return; }
+    close();
+    openRegistrationLinkModal(data.registration_url);
+    renderProductionCRM();
+  });
+}
+
+async function renderProductionCRM() {
+  const clients = await loadRealClients();
+  content.innerHTML = `
+    <div class="mb-8">
+      <p class="text-white/40 text-sm mb-1">CRM</p>
+      <h1 class="text-3xl font-serif">Clientes</h1>
+    </div>
+    ${card(`
+      <div class="flex items-center justify-between">
+        <p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'}</p>
+        <button id="new-client" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Cliente</button>
+      </div>
+    `, 'mb-6')}
+    ${clients.length ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
+      : card('<p class="text-sm" style="color:var(--muted);">Nenhum cliente ainda. Clique em "Novo Cliente" para começar o cadastro da primeira cliente real.</p>')}
+  `;
+  content.querySelector('#new-client').addEventListener('click', openCreateClientModal);
+}
 
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 const STAGE_CLASS = {
@@ -390,4 +504,8 @@ function render() {
   }
 }
 
-render();
+if (isProductionEnvironment()) {
+  renderProductionCRM();
+} else {
+  render();
+}
