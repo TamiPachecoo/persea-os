@@ -155,6 +155,58 @@ function nextActionCard(nextAction) {
   `, 'mb-6');
 }
 
+// Admin-only, matching delete-client's own role check — this is more
+// destructive than anything else on this page (real login, contrato,
+// pagamentos, cadastro, tudo) so it gets a tighter bar than the
+// admin/assistant-shared actions above.
+function dangerZoneCard() {
+  if (profile.role !== 'admin') return '';
+  return card(`
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <p class="text-sm" style="color:var(--terracotta);">Zona de Risco</p>
+        <p class="text-xs mt-1" style="color:var(--muted);">Exclui permanentemente esta cliente e todos os dados relacionados (contrato, pagamentos, cadastro, acesso, questionários, tarefas, imagens, direção de marca, análise de valor). Não pode ser desfeito.</p>
+      </div>
+      <button id="delete-client" class="btn-ghost" style="border-color:var(--error); color:var(--error);">Excluir Cliente</button>
+    </div>
+  `, 'mb-6');
+}
+
+function openDeleteClientModal(client) {
+  const { el, close } = openModal({
+    title: 'Excluir Cliente — Ação Irreversível',
+    bodyHtml: `
+      <p class="text-sm text-white/70 mb-3">Você está prestes a excluir <strong>${client.full_name}</strong> permanentemente.</p>
+      <p class="text-sm text-white/50 mb-4">Isto remove definitivamente: contrato, pagamentos, cadastro, acesso de login (se existir), questionários, tarefas, imagens, direção de marca, análise de valor e todo o restante ligado a esta cliente. Não há como desfazer esta ação.</p>
+      <label class="text-xs text-white/40 block mb-1">Digite <strong>DELETE</strong> para confirmar</label>
+      <input id="delete-confirm-input" class="field" autocomplete="off" />
+      <div class="flex justify-end gap-3 pt-4">
+        <button type="button" id="cancel-delete" class="btn-ghost">Cancelar</button>
+        <button type="button" id="confirm-delete" class="btn-primary" style="background:var(--error); border-color:var(--error);" disabled>Excluir Permanentemente</button>
+      </div>
+    `,
+  });
+  const input = el.querySelector('#delete-confirm-input');
+  const confirmBtn = el.querySelector('#confirm-delete');
+  input.addEventListener('input', () => { confirmBtn.disabled = input.value !== 'DELETE'; });
+  el.querySelector('#cancel-delete').addEventListener('click', close);
+  confirmBtn.addEventListener('click', async () => {
+    if (input.value !== 'DELETE') return;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Excluindo…';
+    const { data, error } = await supabase.functions.invoke('delete-client', { body: { client_id: clientId, confirm: 'DELETE' } });
+    if (error || data?.error) {
+      toast(data?.error || 'Não foi possível excluir agora.', { tone: 'error' });
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Excluir Permanentemente';
+      return;
+    }
+    close();
+    toast(`${data.deleted_full_name} foi excluída permanentemente.`);
+    location.href = 'crm.html';
+  });
+}
+
 async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
@@ -202,12 +254,15 @@ async function render() {
         <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite de acesso</button>
       </div>
     `, 'mb-6') : ''}
+
+    ${dangerZoneCard()}
   `;
 
   content.querySelector('#generate-link')?.addEventListener('click', generateLink);
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
   content.querySelector('#prepare-contract')?.addEventListener('click', () => prepareContract(client));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
+  content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
 }
 
 render();
