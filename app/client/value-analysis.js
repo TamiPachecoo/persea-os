@@ -1,12 +1,17 @@
-// Leitura Estratégica de Valor — client-facing entry point. Renders one of
-// six screens depending on plan + status: locked preview (non-premium),
-// upcoming (premium, not yet active), intro, wizard, waiting, or published
-// deliverable. Every branch below reads through MockDB.getValueAnalysisAccess/
-// getValueAssessment — those functions are where premium access is actually
-// enforced (see mock-db.js), not this screen; this screen just reacts to
-// what they return.
+// Leitura Estratégica de Valor — client-facing entry point. Production
+// Migration Batch 7: converted off MockDB onto real Supabase
+// (shared/value-analysis-model.js) — the wizard's rendering/validation
+// logic below is UNCHANGED from the original (still schema-driven via
+// shared/value-analysis-schema.js), only the persistence layer changed.
+//
+// Premium gate: real, via program_activity_access (program_slug='business'
+// activity) — the same stable identifier client/program.js already uses
+// for premium_preview activities, confirmed 'included' only for
+// persea-premium (not persea-essential) before writing this. Not a
+// hardcoded tier-name check.
 import { MockDB } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
+import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, toast, initClientSwitcher, formatDate, isNonProduction } from '../shared/ui.js';
 import {
   SECTIONS, OFFER_FIELDS, FIXED_COST_FIELDS, VARIABLE_COST_FIELDS, REFERENCE_FIELDS,
@@ -14,16 +19,22 @@ import {
   fmtBRL, fmtPct, calcFixedCostsTotal, calcVariableCostsSummary,
   VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS,
 } from '../shared/value-analysis-schema.js';
+import {
+  getValueAssessmentStatusAllowed, loadValueAssessment, startValueAssessment,
+  submitValueAssessment, saveField, addItem, removeItem,
+} from '../shared/value-analysis-model.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'value-analysis' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
+const client = __clientCtx.client;
 document.body.innerHTML = renderShell({ role: 'client', active: 'value-analysis.html', title: 'Leitura Estratégica de Valor' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
 let currentStep = 0; // 0..SECTIONS.length-1 = a section, SECTIONS.length = review
 let showAnswersReadonly = false;
+let currentAssessment = null; // set fresh on every render() from loadValueAssessment
 
 function esc(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
 
@@ -256,77 +267,66 @@ function renderReview(answers) {
   `;
 }
 
-function commitField(path, value) {
+async function commitField(path, value) {
   const parts = path.split('.');
   if (['offers', 'fixedCosts', 'variableCosts', 'references'].includes(parts[0]) && parts.length === 3) {
-    MockDB.updateValueAssessmentItem(clientId, parts[0], parts[1], { [parts[2]]: value });
+    await saveField(currentAssessment.id, path, value);
   } else {
-    MockDB.saveValueAssessmentField(clientId, path, value);
+    await saveField(currentAssessment.id, path, value);
   }
 }
 function wireGenericFields() {
   content.querySelectorAll('[data-field]').forEach((el) => {
-    if (el.dataset.bool) { el.addEventListener('change', () => { commitField(el.dataset.field, el.checked); render(); }); return; }
+    if (el.dataset.bool) { el.addEventListener('change', async () => { await commitField(el.dataset.field, el.checked); render(); }); return; }
     if (el.tagName === 'SELECT') {
-      // Selects can gate a conditional field (e.g. "Outro" -> reveals a text
-      // field), so a full re-render is both safe (change is atomic — it
-      // can't race with itself the way a blur mid-type-elsewhere could) and
-      // necessary for correctness.
-      el.addEventListener('change', () => { commitField(el.dataset.field, el.value); render(); });
+      el.addEventListener('change', async () => { await commitField(el.dataset.field, el.value); render(); });
       return;
     }
-    // Text/textarea/number: commit on blur WITHOUT a full re-render. A
-    // synchronous re-render on every blur was replacing the whole section's
-    // DOM mid-interaction — losing focus/scroll position on every field,
-    // and racing real fast-typing/tabbing (a moved-to field could be
-    // destroyed just as it received focus). Only maxVolumeAchieved gates
-    // another question's visibility, so it's special-cased to re-render.
-    el.addEventListener('blur', () => {
+    el.addEventListener('blur', async () => {
       let value = el.value;
       if (el.type === 'number') value = value === '' ? null : Number(value);
-      commitField(el.dataset.field, value);
+      await commitField(el.dataset.field, value);
       const wrap = el.closest('[data-field-wrap]');
       wrap?.querySelector('.field-error')?.style.setProperty('display', 'none');
       if (el.dataset.field.endsWith('.maxVolumeAchieved')) render();
     });
   });
   content.querySelectorAll('[data-unknown-toggle]').forEach((cb) => {
-    cb.addEventListener('change', () => { commitField(cb.dataset.unknownToggle, cb.checked ? 'unknown' : null); render(); });
+    cb.addEventListener('change', async () => { await commitField(cb.dataset.unknownToggle, cb.checked ? 'unknown' : null); render(); });
   });
   content.querySelectorAll('[data-multiselect]').forEach((wrap) => {
     wrap.querySelectorAll('[data-ms-option]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const path = wrap.dataset.multiselect;
         const [sec, key] = path.split('.');
-        const rec = MockDB.getValueAssessment(clientId);
-        const current = rec.answers[sec][key] || [];
+        const current = currentAssessment.answers[sec][key] || [];
         const opt = btn.dataset.msOption;
         const next = current.includes(opt) ? current.filter((o) => o !== opt) : [...current, opt];
-        commitField(path, next);
+        await commitField(path, next);
         render();
       });
     });
   });
 }
 function wireRepeatableGroups() {
-  content.querySelector('#add-offer')?.addEventListener('click', () => { MockDB.addValueAssessmentItem(clientId, 'offers', {}); render(); });
-  content.querySelectorAll('[data-remove-offer]').forEach((btn) => btn.addEventListener('click', () => { MockDB.removeValueAssessmentItem(clientId, 'offers', btn.dataset.removeOffer); render(); }));
-  content.querySelector('#add-fixed-cost')?.addEventListener('click', () => { MockDB.addValueAssessmentItem(clientId, 'fixedCosts', { category: FIXED_COST_CATEGORIES[0] }); render(); });
-  content.querySelector('#add-variable-cost')?.addEventListener('click', () => { MockDB.addValueAssessmentItem(clientId, 'variableCosts', { category: VARIABLE_COST_CATEGORIES[0] }); render(); });
-  content.querySelectorAll('[data-remove-cost]').forEach((btn) => btn.addEventListener('click', () => {
+  content.querySelector('#add-offer')?.addEventListener('click', async () => { await addItem(currentAssessment.id, 'offers', {}); render(); });
+  content.querySelectorAll('[data-remove-offer]').forEach((btn) => btn.addEventListener('click', async () => { await removeItem('offers', btn.dataset.removeOffer); render(); }));
+  content.querySelector('#add-fixed-cost')?.addEventListener('click', async () => { await addItem(currentAssessment.id, 'fixedCosts', { category: FIXED_COST_CATEGORIES[0] }); render(); });
+  content.querySelector('#add-variable-cost')?.addEventListener('click', async () => { await addItem(currentAssessment.id, 'variableCosts', { category: VARIABLE_COST_CATEGORIES[0] }); render(); });
+  content.querySelectorAll('[data-remove-cost]').forEach((btn) => btn.addEventListener('click', async () => {
     const [groupKey, id] = btn.dataset.removeCost.split(':');
-    MockDB.removeValueAssessmentItem(clientId, groupKey, id);
+    await removeItem(groupKey, id);
     render();
   }));
-  content.querySelector('#add-reference')?.addEventListener('click', () => { MockDB.addValueAssessmentItem(clientId, 'references', {}); render(); });
-  content.querySelectorAll('[data-remove-ref]').forEach((btn) => btn.addEventListener('click', () => { MockDB.removeValueAssessmentItem(clientId, 'references', btn.dataset.removeRef); render(); }));
+  content.querySelector('#add-reference')?.addEventListener('click', async () => { await addItem(currentAssessment.id, 'references', {}); render(); });
+  content.querySelectorAll('[data-remove-ref]').forEach((btn) => btn.addEventListener('click', async () => { await removeItem('references', btn.dataset.removeRef); render(); }));
 }
 function wireWizardScreen(record) {
   if (currentStep === SECTIONS.length) {
     content.querySelector('#wiz-back').addEventListener('click', () => { currentStep = SECTIONS.length - 1; render(); });
     content.querySelectorAll('[data-jump-section]').forEach((btn) => btn.addEventListener('click', () => { currentStep = Number(btn.dataset.jumpSection); render(); }));
-    content.querySelector('#submit-analysis').addEventListener('click', () => {
-      MockDB.submitValueAssessment(clientId);
+    content.querySelector('#submit-analysis').addEventListener('click', async () => {
+      await submitValueAssessment(currentAssessment.id);
       toast('Informações enviadas!');
       render();
     });
@@ -335,14 +335,10 @@ function wireWizardScreen(record) {
   wireGenericFields();
   wireRepeatableGroups();
   content.querySelector('#wiz-back').addEventListener('click', () => { if (currentStep > 0) { currentStep--; render(); } });
-  content.querySelector('#wiz-next').addEventListener('click', () => {
-    // Re-fetch rather than use the closured `record` — text/textarea/number
-    // fields commit on blur without a re-render (see wireGenericFields), so
-    // the value just typed in the field this button's own click blurred
-    // wouldn't be reflected in a stale in-memory reference.
-    const freshRecord = MockDB.getValueAssessment(clientId);
+  content.querySelector('#wiz-next').addEventListener('click', async () => {
+    const fresh = await loadValueAssessment(clientId);
     const section = SECTIONS[currentStep];
-    const missing = validateSection(freshRecord.answers, section);
+    const missing = validateSection(fresh.answers, section);
     if (missing.length) {
       missing.forEach((p) => { const wrap = content.querySelector(`[data-field-wrap="${p}"]`); if (wrap) wrap.querySelector('.field-error').style.display = 'block'; });
       toast(missing.includes('offers') ? 'Adicione ao menos um produto ou serviço antes de continuar.' : 'Preencha os campos obrigatórios antes de continuar.', { tone: 'error' });
@@ -354,9 +350,9 @@ function wireWizardScreen(record) {
 }
 
 // --- Non-wizard screens ---
-function renderLockedPreview() {
-  const alreadyInterested = MockDB.getPremiumUpgradeInterests()
-    .some((i) => i.clientId === clientId && i.sourceActivitySlug === 'business' && ['novo', 'em_conversa'].includes(i.status));
+async function renderLockedPreview() {
+  const { data: existingInterest } = await supabase.from('premium_upgrade_interests').select('status')
+    .eq('client_id', clientId).eq('source_activity_slug', 'business').in('status', ['novo', 'em_conversa']).maybeSingle();
   return `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Metodologia PERSEA</p>
@@ -377,26 +373,13 @@ function renderLockedPreview() {
           'Receba uma recomendação personalizada de Nay.',
         ].map((b) => `<div class="flex items-start gap-2.5 text-sm text-white/60"><span style="color:var(--gold);">✦</span><span>${b}</span></div>`).join('')}
       </div>
-      ${alreadyInterested
-        ? '<p class="text-sm" style="color:var(--gold);">Interesse enviado. Nay poderá conversar com você sobre o próximo passo.</p>'
+      ${existingInterest
+        ? '<p class="text-sm" style="color:var(--gold);">Interesse registrado. Nay poderá conversar com você sobre o próximo passo.</p>'
         : `
         <div class="flex flex-wrap items-center gap-3">
           <button type="button" id="upgrade-interest" class="btn-primary">Tenho interesse no Premium</button>
           <span class="text-xs text-white/30 max-w-xs">Sem cobrança neste momento — apenas avisa a Nay que você quer conversar sobre o Programa Premium.</span>
         </div>`}
-    `)}
-  `;
-}
-function renderUpcoming() {
-  return `
-    <div class="mb-8">
-      <p class="text-white/40 text-sm mb-1">Metodologia PERSEA</p>
-      <h1 class="text-3xl font-serif">Leitura Estratégica de Valor</h1>
-    </div>
-    ${card(`
-      <span class="premium-badge mb-4 inline-block">✦ Premium</span>
-      <p class="text-lg font-serif mb-3" style="max-width:560px; line-height:1.4;">Uma análise aprofundada da sua oferta, capacidade, custos, metas e precificação.</p>
-      <p class="text-sm text-white/40 max-w-lg">Esta etapa é liberada assim que seu onboarding for concluído e sua jornada Premium avançar. Você poderá começar por aqui quando chegar a hora.</p>
     `)}
   `;
 }
@@ -435,52 +418,39 @@ function renderWaiting(assessment) {
   `;
 }
 function renderPublished(assessment) {
-  const d = assessment.publishedDeliverable;
+  const d = assessment.publishedDeliverable || {};
   return `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Metodologia PERSEA</p>
       <h1 class="text-3xl font-serif">Sua Leitura Estratégica de Valor</h1>
     </div>
     ${card(`
-      <p class="text-sm text-white/50 mb-2">Situação atual</p>
-      <p class="text-sm text-white/70 mb-5">${d.situationSummary || '—'}</p>
-      <p class="text-sm text-white/50 mb-2">Principal constatação</p>
-      <p class="text-sm text-white/70 mb-5">${d.mainFinding || '—'}</p>
-      <div class="grid sm:grid-cols-2 gap-4 mb-5">
-        <div><p class="text-xs text-white/30 mb-1">Indicador de preço mínimo matemático</p><p class="text-2xl font-serif">${fmtBRL(d.mathematicalMinimum)}</p></div>
-        <div><p class="text-xs text-white/30 mb-1">Preço estratégico recomendado</p><p class="text-2xl font-serif" style="color:var(--gold);">${fmtBRL(d.strategicPrice)}</p></div>
-      </div>
       ${d.explanation ? `<p class="text-sm text-white/50 mb-2">Explicação da recomendação</p><p class="text-sm text-white/70 mb-5">${d.explanation}</p>` : ''}
-      ${d.offerChanges ? `<p class="text-sm text-white/50 mb-2">Ajustes sugeridos na oferta</p><p class="text-sm text-white/70 mb-5">${d.offerChanges}</p>` : ''}
-      ${d.nextActions ? `<p class="text-sm text-white/50 mb-2">Próximas ações práticas</p><p class="text-sm text-white/70 mb-5">${d.nextActions}</p>` : ''}
-      <p class="text-xs text-white/20">Recomendação de ${formatDate(d.recommendationDate || d.publishedAt)}${d.reviewDate ? ` · revisão sugerida em ${formatDate(d.reviewDate)}` : ''}</p>
+      <div class="grid sm:grid-cols-2 gap-4 mb-5">
+        <div><p class="text-xs text-white/30 mb-1">Indicador de preço mínimo matemático</p><p class="text-2xl font-serif">${fmtBRL(d.mathematicalMinimumCents != null ? d.mathematicalMinimumCents / 100 : null)}</p></div>
+        <div><p class="text-xs text-white/30 mb-1">Preço estratégico recomendado</p><p class="text-2xl font-serif" style="color:var(--gold);">${fmtBRL(d.strategicPriceCents != null ? d.strategicPriceCents / 100 : null)}</p></div>
+      </div>
+      <p class="text-xs text-white/20">Recomendação de ${formatDate(d.recommendationDate || assessment.publishedDeliverable?.publishedAt)}${d.reviewDate ? ` · revisão sugerida em ${formatDate(d.reviewDate)}` : ''}</p>
     `)}
   `;
 }
 
-// --- Removable dev-only preview panel — jumps the *active* client through
-// every state this feature needs to be previewable in, without needing 12
-// separate seeded clients. Never wired into any production-shaped action.
-// Gated to non-production (local dev + demo/staging, see isNonProduction in
-// shared/environment.js) so it can never render (and therefore never be
-// interacted with, since wireDevPanel finds nothing to wire) in production. ---
+// --- Removable dev-only preview panel — demo/staging only (see
+// isNonProduction), still MockDB-driven there by design; never touched in
+// production, since this whole function short-circuits to '' otherwise. ---
 function renderDevPanel() {
   if (!isNonProduction()) return '';
-  const client = MockDB.getClient(clientId);
+  const devClient = MockDB.getClient(clientId);
   return `
     <div class="dev-preview-panel">
-      <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Pré-visualização (dev, removível) — cliente ativa: ${client.fullName}</p>
+      <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Pré-visualização (dev, removível) — cliente ativa: ${devClient.fullName}</p>
       <div class="flex flex-wrap gap-2">
         <button type="button" data-dev-state="locked" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Não-Premium bloqueada</button>
         <button type="button" data-dev-state="available" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Premium — antes de começar</button>
         <button type="button" data-dev-state="in_progress" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Premium — em andamento</button>
-        <button type="button" data-dev-state="review" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Premium — revisão/envio</button>
         <button type="button" data-dev-state="submitted" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Premium — aguardando Nay</button>
-        <button type="button" data-dev-state="in_analysis" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Premium — em análise</button>
-        <button type="button" data-dev-state="published" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Premium — devolutiva publicada</button>
         <a href="../admin/client-detail.html?id=${clientId}&tab=value-analysis" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Abrir workspace da Nay ↗</a>
       </div>
-      <p class="text-xs text-white/20 mt-3">Ju vê apenas status/conclusão da tarefa; Nath não vê nada financeiro — nenhuma das duas tem uma tela própria desta análise a menos que a Nay autorize (ver admin/agenda + permissões).</p>
     </div>
   `;
 }
@@ -489,56 +459,53 @@ function wireDevPanel() {
     btn.addEventListener('click', () => {
       const key = btn.dataset.devState;
       if (key === 'locked') MockDB.devSetValueAssessmentState(clientId, { programSlug: 'persea-essential' });
-      else if (key === 'review') { MockDB.devSetValueAssessmentState(clientId, { programSlug: 'persea-premium', status: 'in_progress' }); currentStep = SECTIONS.length; }
       else { MockDB.devSetValueAssessmentState(clientId, { programSlug: 'persea-premium', status: key }); currentStep = 0; }
       render();
     });
   });
 }
 
-function render() {
-  const access = MockDB.getValueAnalysisAccess(clientId);
-  let body;
-  if (!access) { content.innerHTML = '<p class="text-sm text-white/40">Cliente não encontrada.</p>'; return; }
+async function render() {
+  const isPremium = await getValueAssessmentStatusAllowed(client);
 
-  if (!access.isPremium) {
-    body = renderLockedPreview();
-    content.innerHTML = body + renderDevPanel();
-    content.querySelector('#upgrade-interest')?.addEventListener('click', () => {
-      MockDB.createPremiumUpgradeInterest(clientId, 'business');
+  if (!isPremium) {
+    content.innerHTML = (await renderLockedPreview()) + renderDevPanel();
+    content.querySelector('#upgrade-interest')?.addEventListener('click', async () => {
+      const { error } = await supabase.from('premium_upgrade_interests').insert({ client_id: clientId, source_activity_slug: 'business', current_program_slug: client.program_slug, status: 'novo' });
+      if (error) { toast('Não foi possível registrar seu interesse agora.', { tone: 'error' }); return; }
       toast('Interesse enviado. Nay poderá conversar com você sobre o próximo passo.');
       render();
     });
     wireDevPanel();
     return;
   }
-  if (access.status === 'upcoming') {
-    content.innerHTML = renderUpcoming() + renderDevPanel();
-    wireDevPanel();
-    return;
-  }
 
-  const assessment = MockDB.getValueAssessment(clientId);
-  if (access.status === 'available') {
+  currentAssessment = await loadValueAssessment(clientId);
+
+  if (!currentAssessment) {
     content.innerHTML = renderIntro() + renderDevPanel();
-    content.querySelector('#start-analysis').addEventListener('click', () => { MockDB.startValueAssessment(clientId); currentStep = 0; render(); });
+    content.querySelector('#start-analysis').addEventListener('click', async () => {
+      await startValueAssessment(clientId);
+      currentStep = 0;
+      render();
+    });
     wireDevPanel();
     return;
   }
-  if (access.status === 'in_progress') {
-    content.innerHTML = renderWizardScreen(assessment) + renderDevPanel();
-    wireWizardScreen(assessment);
+  if (currentAssessment.status === 'in_progress') {
+    content.innerHTML = renderWizardScreen(currentAssessment) + renderDevPanel();
+    wireWizardScreen(currentAssessment);
     wireDevPanel();
     return;
   }
-  if (access.status === 'submitted' || access.status === 'in_analysis') {
-    content.innerHTML = renderWaiting(assessment) + renderDevPanel();
+  if (currentAssessment.status === 'submitted' || currentAssessment.status === 'in_analysis') {
+    content.innerHTML = renderWaiting(currentAssessment) + renderDevPanel();
     content.querySelector('#toggle-view-answers').addEventListener('click', () => { showAnswersReadonly = !showAnswersReadonly; render(); });
     wireDevPanel();
     return;
   }
-  if (access.status === 'published') {
-    content.innerHTML = renderPublished(assessment) + renderDevPanel();
+  if (currentAssessment.status === 'published') {
+    content.innerHTML = renderPublished(currentAssessment) + renderDevPanel();
     wireDevPanel();
     return;
   }

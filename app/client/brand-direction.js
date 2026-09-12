@@ -1,32 +1,48 @@
-// Direção da Marca — redesigned as an inspiration workspace: the Pinterest
-// mood board rendered large and prominent (not a link card), with "Minhas
-// Ideias" beside it so the page becomes a place inspiration turns into
-// actual content ideas, not just something the client looks at.
-//
-// Read-only except for "Minhas Ideias" (brandIdeas) — everything else here
-// (positioning, keywords, tone, references, guidance, belongs/doesn't
-// belong, the mood-board intro, the Pinterest URL itself) is admin-owned,
-// edited on client-detail.js's Brand Direction tab. MockDB enforces this by
-// construction: saveBrandIdeas() only ever touches the brandIdeas field —
-// there is no client-callable path into saveBrandDirection().
-import { MockDB } from '../shared/mock-db.js';
+// Direção da Marca — Production Migration Batch 7: converted off MockDB.
+// Read-only for everything Nay-produced (brand_directions +
+// brand_direction_keywords/references/style_notes — all admin-write-only
+// by RLS, confirmed before writing this; belongs/doesn't-belong map to
+// brand_direction_style_notes.polarity). The ONE genuinely client-owned
+// field, "Minhas Ideias", lives on clients.brand_ideas — writable via a
+// new narrow trigger-enforced policy (clients_client_self_update, see
+// migration) that rejects any column other than brand_ideas for a
+// client-role actor, since a plain client-self UPDATE grant on `clients`
+// would otherwise also expose access_status/tier/etc.
 import { getCurrentClientContext } from '../shared/client-context.js';
+import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, initClientSwitcher, externalLinkAttrs, isValidHttpUrl, boardEmptyState, mountPinterestBoard } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'brand-direction' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
+const client = __clientCtx.client;
 document.body.innerHTML = renderShell({ role: 'client', active: 'brand-direction.html', title: 'Direção da Marca' });
 initClientSwitcher();
-
-const bd = MockDB.getBrandDirection(activeClientId);
-const ideas = MockDB.getBrandIdeas(activeClientId);
 const content = document.getElementById('app-content');
+
+const [{ data: bdRow }, { data: keywords }, { data: references }, { data: styleNotes }] = await Promise.all([
+  supabase.from('brand_directions').select('*').eq('client_id', activeClientId).maybeSingle(),
+  supabase.from('brand_direction_keywords').select('keyword').eq('client_id', activeClientId).order('sort_order'),
+  supabase.from('brand_direction_references').select('reference').eq('client_id', activeClientId).order('sort_order'),
+  supabase.from('brand_direction_style_notes').select('*').eq('client_id', activeClientId).order('sort_order'),
+]);
+
+const bd = {
+  pinterestUrl: bdRow?.pinterest_url || null,
+  moodBoardIntro: bdRow?.mood_board_intro || null,
+  positioningSummary: bdRow?.positioning_summary || null,
+  tone: bdRow?.tone || null,
+  guidance: bdRow?.guidance || null,
+  keywords: (keywords || []).map((k) => k.keyword),
+  references: (references || []).map((r) => r.reference),
+  belongs: (styleNotes || []).filter((n) => n.polarity === 'belongs').map((n) => n.text),
+  doesntBelong: (styleNotes || []).filter((n) => n.polarity === 'doesnt_belong').map((n) => n.text),
+};
+const ideas = client.brand_ideas || '';
 
 const hasAnyContent = Boolean(
   bd.pinterestUrl || bd.moodBoardIntro || bd.positioningSummary || bd.tone || bd.guidance ||
-  (bd.keywords || []).length || (bd.references || []).length ||
-  (bd.belongs || []).length || (bd.doesntBelong || []).length
+  bd.keywords.length || bd.references.length || bd.belongs.length || bd.doesntBelong.length,
 );
 
 function renderWorkspace() {
@@ -41,7 +57,7 @@ function renderWorkspace() {
         <div class="board-area" id="board-area">${linkOk ? '' : boardEmptyState()}</div>
         <div class="flex items-center justify-between mt-4 flex-wrap gap-3">
           <div class="flex items-center gap-2 flex-wrap">
-            ${(bd.keywords || []).map((k) => `<span class="badge badge-progress">${k}</span>`).join('')}
+            ${bd.keywords.map((k) => `<span class="badge badge-progress">${k}</span>`).join('')}
           </div>
           ${linkOk ? `<a ${externalLinkAttrs(bd.pinterestUrl)} class="btn-ghost">Abrir no Pinterest</a>` : ''}
         </div>
@@ -65,7 +81,7 @@ function renderSupportingSections() {
         <p class="text-sm text-white/50 mb-3">Tom de Comunicação</p>
         <p class="text-sm">${bd.tone}</p>
       `) : ''}
-      ${(bd.references || []).length ? card(`
+      ${bd.references.length ? card(`
         <p class="text-sm text-white/50 mb-3">Direção Visual</p>
         <ul class="list-disc list-inside space-y-1 text-sm">${bd.references.map((r) => `<li>${r}</li>`).join('')}</ul>
       `) : ''}
@@ -79,11 +95,11 @@ function renderSupportingSections() {
       <p class="text-sm">${bd.guidance}</p>
     `, 'mb-6') : ''}
     <div class="grid md:grid-cols-2 gap-6">
-      ${(bd.belongs || []).length ? card(`
+      ${bd.belongs.length ? card(`
         <p class="text-sm text-white/50 mb-3">O que pertence a esta marca</p>
         <ul class="list-disc list-inside space-y-1 text-sm">${bd.belongs.map((b) => `<li>${b}</li>`).join('')}</ul>
       `) : ''}
-      ${(bd.doesntBelong || []).length ? card(`
+      ${bd.doesntBelong.length ? card(`
         <p class="text-sm text-white/50 mb-3">O que não pertence a esta marca</p>
         <ul class="list-disc list-inside space-y-1 text-sm">${bd.doesntBelong.map((b) => `<li>${b}</li>`).join('')}</ul>
       `) : ''}
@@ -98,7 +114,7 @@ if (!hasAnyContent) {
     </div>
     ${card(`
       <div style="text-align:center; padding:52px 24px;">
-        <p class="font-serif" style="font-size:1.7rem;">Sua Direção de Marca está a caminho</p>
+        <p class="font-serif" style="font-size:1.7rem;">Sua Direção de Marca ainda está sendo preparada</p>
         <p class="text-sm text-white/40 mt-3 max-w-md mx-auto">Assim que sua consultora definir seu mural de inspiração, posicionamento e referências, tudo aparece aqui.</p>
       </div>
     `)}
@@ -106,7 +122,7 @@ if (!hasAnyContent) {
 } else {
   content.innerHTML = `
     <div class="mb-8">
-      <p class="text-white/40 text-sm mb-1">Seu espaço de inspiração e criação</p>
+      <p class="text-white/40 text-sm mb-1">Seu espaço de inspiração e criação${bdRow?.updated_at ? ` · Atualizado em ${new Date(bdRow.updated_at).toLocaleDateString('pt-BR')}` : ''}</p>
       <h1 class="text-3xl font-serif">Direção da Marca</h1>
     </div>
     ${renderWorkspace()}
@@ -123,9 +139,9 @@ if (!hasAnyContent) {
   ideasField.addEventListener('input', () => {
     ideasStatus.textContent = 'Salvando…';
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      MockDB.saveBrandIdeas(activeClientId, ideasField.value);
-      ideasStatus.textContent = 'Salvo.';
+    saveTimer = setTimeout(async () => {
+      const { error } = await supabase.from('clients').update({ brand_ideas: ideasField.value }).eq('id', activeClientId);
+      ideasStatus.textContent = error ? 'Não foi possível salvar.' : 'Salvo.';
     }, 500);
   });
 }
