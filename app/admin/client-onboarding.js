@@ -23,6 +23,37 @@ import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, toast, openModal, formatDateTime } from '../shared/ui.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
+import { loadValueAssessment } from '../shared/value-analysis-model.js';
+import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS, fmtBRL } from '../shared/value-analysis-schema.js';
+
+// Staff-side conversion of Business Survey / Brand Direction / Value
+// Analysis off MockDB (client-detail.js's MockDB.getBrandDirection/
+// getValueAssessment/getBusinessSurvey are the old, still-MockDB versions —
+// not converted in place there because client-detail.html is never reached
+// for a real client: admin/crm.js's production client list links to THIS
+// page, never to client-detail.html, for every real client — see
+// productionClientRow(). Rather than retrofit a real-client identity path
+// onto a 2500-line MockDB-shaped page that nothing routes to in production,
+// these three real-data sections live where real clients are actually
+// reviewed. client-detail.html stays exactly as-is (demo/legacy clients
+// only) — a disclosed architecture decision, not an oversight.
+//
+// Real, same-Supabase-row source of truth throughout: the client reads
+// business_surveys/business_survey_responses, brand_directions (+3 sibling
+// tables), and value_assessments (+ its answer/offer/cost tables) directly
+// (see client/business-survey.js, client/brand-direction.js,
+// client/value-analysis.js) — the exact same rows are read/written here,
+// never a second copy.
+const BUSINESS_SURVEY_STAFF_ROLES = ['admin', 'assistant']; // business_surveys_staff_all / business_survey_responses_staff_all RLS covers both
+// Brand Direction real RLS (unchanged from the client-side batch):
+// *_admin_write is ALL for admin, *_assistant_read/*_client_read are
+// SELECT-only — so assistant genuinely cannot write here; the UI reflects
+// that rather than fighting it.
+// Value Analysis real RLS: value_assessments/value_published_deliverables/
+// the internal analysis tables all have an admin-only policy and NO
+// assistant policy at all (confirmed via pg_policies before writing this —
+// not assumed) — assistant is not given any Value Analysis UI at all below,
+// rather than showing controls RLS would silently reject.
 
 const clientId = new URLSearchParams(location.search).get('id');
 
@@ -34,6 +65,7 @@ if (!profile || !['admin', 'assistant'].includes(profile.role)) {
 }
 document.body.innerHTML = renderShell({ role: profile.role, active: profile.role === 'assistant' ? 'leads.html' : 'crm.html', title: 'Onboarding' });
 const content = document.getElementById('app-content');
+const isAssistant = profile.role === 'assistant';
 
 if (!clientId) {
   content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Falta o parâmetro ?id= na URL.</p>');
@@ -57,6 +89,217 @@ async function loadAll() {
   const latestToken = tokens?.[0] || null;
   const tokenActive = latestToken && !latestToken.consumed_at && new Date(latestToken.expires_at).getTime() > Date.now();
   return { client, partyInfo, contract, latestToken, tokenActive };
+}
+
+async function loadBusinessSurvey() {
+  const [{ data: questions }, { data: survey }, { data: responses }] = await Promise.all([
+    supabase.from('business_survey_questions').select('*').order('sort_order'),
+    supabase.from('business_surveys').select('*').eq('client_id', clientId).maybeSingle(),
+    supabase.from('business_survey_responses').select('*').eq('client_id', clientId),
+  ]);
+  return { questions: questions || [], survey, responseByKey: new Map((responses || []).map((r) => [r.question_key, r.response])) };
+}
+
+function businessSurveyCard({ questions, survey, responseByKey }) {
+  if (!survey || survey.status !== 'submitted' || !questions.length) {
+    return card(`
+      <p class="text-sm text-white/50 mb-1">Questionário de Negócios</p>
+      <p class="text-xs" style="color:var(--muted);">Questionário de negócios ainda não respondido.</p>
+    `, 'mb-6');
+  }
+  return card(`
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Questionário de Negócios</p>
+      <p class="text-xs" style="color:var(--gold);">Enviado em ${formatDateTime(survey.submitted_at)}</p>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4">
+      ${questions.map((q) => `
+        <div>
+          <p class="text-xs text-white/30 mb-1">${q.label}</p>
+          <p class="text-sm">${responseByKey.get(q.key) || '—'}</p>
+        </div>
+      `).join('')}
+    </div>
+  `, 'mb-6');
+}
+
+async function loadBrandDirection() {
+  const [{ data: bdRow }, { data: keywords }, { data: references }, { data: styleNotes }] = await Promise.all([
+    supabase.from('brand_directions').select('*').eq('client_id', clientId).maybeSingle(),
+    supabase.from('brand_direction_keywords').select('*').eq('client_id', clientId).order('sort_order'),
+    supabase.from('brand_direction_references').select('*').eq('client_id', clientId).order('sort_order'),
+    supabase.from('brand_direction_style_notes').select('*').eq('client_id', clientId).order('sort_order'),
+  ]);
+  return { bdRow, keywords: keywords || [], references: references || [], styleNotes: styleNotes || [] };
+}
+
+function brandDirectionCard({ bdRow, keywords, references, styleNotes }) {
+  const belongs = styleNotes.filter((n) => n.polarity === 'belongs').map((n) => n.text);
+  const doesntBelong = styleNotes.filter((n) => n.polarity === 'doesnt_belong').map((n) => n.text);
+  const hasContent = Boolean(bdRow || keywords.length || references.length || styleNotes.length);
+
+  if (isAssistant) {
+    // Read-only, matching brand_directions_assistant_read — no form, no
+    // save controls, so there's nothing here that could look like it works
+    // and then silently be rejected by RLS.
+    if (!hasContent) {
+      return card(`<p class="text-sm text-white/50 mb-1">Direção de Marca</p><p class="text-xs" style="color:var(--muted);">Direção de Marca ainda não criada.</p>`, 'mb-6');
+    }
+    return card(`
+      <p class="text-sm text-white/50 mb-3">Direção de Marca <span class="text-xs text-white/30">(somente leitura)</span></p>
+      <div class="space-y-3 text-sm">
+        ${bdRow?.positioning_summary ? `<div><p class="text-xs text-white/30 mb-1">Posicionamento</p><p>${bdRow.positioning_summary}</p></div>` : ''}
+        ${bdRow?.tone ? `<div><p class="text-xs text-white/30 mb-1">Tom de Comunicação</p><p>${bdRow.tone}</p></div>` : ''}
+        ${bdRow?.guidance ? `<div><p class="text-xs text-white/30 mb-1">Orientações</p><p>${bdRow.guidance}</p></div>` : ''}
+        ${keywords.length ? `<div><p class="text-xs text-white/30 mb-1">Palavras-chave</p><p>${keywords.map((k) => k.keyword).join(', ')}</p></div>` : ''}
+        ${references.length ? `<div><p class="text-xs text-white/30 mb-1">Referências</p><p>${references.map((r) => r.reference).join(', ')}</p></div>` : ''}
+      </div>
+    `, 'mb-6');
+  }
+
+  // Admin: real edit form, writing the exact same rows client/brand-
+  // direction.js reads. Scalar fields upsert brand_directions (PK is
+  // client_id — no separate id column); the three list-shaped tables use a
+  // delete-all-then-reinsert per save, the smallest correct way to sync a
+  // freeform list of lines to a sort_order-keyed table without a second
+  // per-item CRUD UI.
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Direção de Marca <span class="text-xs text-white/30">— salvo aqui, visível para a cliente imediatamente</span></p>
+    <form id="bd-form" class="space-y-3">
+      <div><label class="text-xs text-white/40 block mb-1">Link do Pinterest</label><input name="pinterestUrl" class="field text-sm" value="${bdRow?.pinterest_url || ''}" placeholder="https://pinterest.com/..." /></div>
+      <div><label class="text-xs text-white/40 block mb-1">Introdução do Mural</label><textarea name="moodBoardIntro" rows="2" class="field text-sm">${bdRow?.mood_board_intro || ''}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">Posicionamento</label><textarea name="positioningSummary" rows="2" class="field text-sm">${bdRow?.positioning_summary || ''}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">Tom de Comunicação</label><textarea name="tone" rows="2" class="field text-sm">${bdRow?.tone || ''}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">Orientações da Nay</label><textarea name="guidance" rows="2" class="field text-sm">${bdRow?.guidance || ''}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">Palavras-chave <span class="text-white/20">(uma por linha)</span></label><textarea name="keywords" rows="3" class="field text-sm">${keywords.map((k) => k.keyword).join('\n')}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">Direção Visual / Referências <span class="text-white/20">(uma por linha)</span></label><textarea name="references" rows="3" class="field text-sm">${references.map((r) => r.reference).join('\n')}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">O que pertence a esta marca <span class="text-white/20">(uma por linha)</span></label><textarea name="belongs" rows="3" class="field text-sm">${belongs.join('\n')}</textarea></div>
+      <div><label class="text-xs text-white/40 block mb-1">O que não pertence a esta marca <span class="text-white/20">(uma por linha)</span></label><textarea name="doesntBelong" rows="3" class="field text-sm">${doesntBelong.join('\n')}</textarea></div>
+      <div class="flex justify-end pt-1"><button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar Direção de Marca</button></div>
+    </form>
+  `, 'mb-6');
+}
+
+async function saveBrandDirection(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+  const fd = new FormData(form);
+  const trim = (k) => (fd.get(k) || '').toString().trim() || null;
+  const lines = (k) => (fd.get(k) || '').toString().split('\n').map((s) => s.trim()).filter(Boolean);
+
+  const { error: bdErr } = await supabase.from('brand_directions').upsert({
+    client_id: clientId,
+    pinterest_url: trim('pinterestUrl'),
+    mood_board_intro: trim('moodBoardIntro'),
+    positioning_summary: trim('positioningSummary'),
+    tone: trim('tone'),
+    guidance: trim('guidance'),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'client_id' });
+
+  const keywordLines = lines('keywords');
+  const referenceLines = lines('references');
+  const belongsLines = lines('belongs');
+  const doesntBelongLines = lines('doesntBelong');
+
+  await Promise.all([
+    supabase.from('brand_direction_keywords').delete().eq('client_id', clientId),
+    supabase.from('brand_direction_references').delete().eq('client_id', clientId),
+    supabase.from('brand_direction_style_notes').delete().eq('client_id', clientId),
+  ]);
+  const inserts = [];
+  if (keywordLines.length) inserts.push(supabase.from('brand_direction_keywords').insert(keywordLines.map((keyword, i) => ({ client_id: clientId, keyword, sort_order: i }))));
+  if (referenceLines.length) inserts.push(supabase.from('brand_direction_references').insert(referenceLines.map((reference, i) => ({ client_id: clientId, reference, sort_order: i }))));
+  const styleRows = [
+    ...belongsLines.map((text, i) => ({ client_id: clientId, polarity: 'belongs', text, sort_order: i })),
+    ...doesntBelongLines.map((text, i) => ({ client_id: clientId, polarity: 'doesnt_belong', text, sort_order: i })),
+  ];
+  if (styleRows.length) inserts.push(supabase.from('brand_direction_style_notes').insert(styleRows));
+  const results = await Promise.all(inserts);
+
+  if (bdErr || results.some((r) => r.error)) {
+    toast('Não foi possível salvar agora.', { tone: 'error' });
+    btn.disabled = false;
+    btn.textContent = 'Salvar Direção de Marca';
+    return;
+  }
+  toast('Direção de Marca salva.');
+  render();
+}
+
+function valueAnalysisCard(va) {
+  if (!va) {
+    return card(`<p class="text-sm text-white/50 mb-1">Análise de Valor</p><p class="text-xs" style="color:var(--muted);">Análise de Valor ainda não iniciada.</p>`, 'mb-6');
+  }
+  const rows = [];
+  SECTIONS.forEach((s) => {
+    s.fields.forEach((f) => {
+      const v = va.answers[s.key]?.[f.key];
+      if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return;
+      const display = f.type === 'currency' ? fmtBRL(v) : Array.isArray(v) ? v.join(', ') : String(v);
+      rows.push(`<div><p class="text-xs text-white/30">${f.label}</p><p class="text-sm">${display}</p></div>`);
+    });
+  });
+  const dl = va.publishedDeliverable;
+  return card(`
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Análise de Valor <span class="text-xs text-white/30">(somente administradoras — RLS não concede acesso à assistente aqui)</span></p>
+      <span class="badge ${VALUE_ASSESSMENT_STATUS_BADGE_CLASS[va.status] || 'badge-progress'}">${VALUE_ASSESSMENT_STATUS_LABEL[va.status] || va.status}</span>
+    </div>
+    <p class="text-xs text-white/30 mb-2">Respostas da cliente</p>
+    <div class="grid sm:grid-cols-2 gap-3 mb-6">${rows.join('') || '<p class="text-xs" style="color:var(--muted);">Sem respostas registradas ainda.</p>'}</div>
+    <div class="pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-sm text-white/50 mb-3">Devolutiva Publicada <span class="text-xs text-white/30">— única coisa que a cliente vê desta análise</span></p>
+      ${dl ? `<p class="text-xs mb-3" style="color:var(--gold);">Publicada em ${formatDateTime(dl.publishedAt)}</p>` : ''}
+      <form id="value-publish-form" class="space-y-3">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="text-xs text-white/40 block mb-1">Preço estratégico (R$)</label><input name="strategicPrice" type="number" step="0.01" class="field text-sm" value="${dl?.strategicPriceCents != null ? (dl.strategicPriceCents / 100).toFixed(2) : ''}" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Mínimo matemático (R$)</label><input name="mathematicalMinimum" type="number" step="0.01" class="field text-sm" value="${dl?.mathematicalMinimumCents != null ? (dl.mathematicalMinimumCents / 100).toFixed(2) : ''}" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Data da recomendação</label><input name="recommendationDate" type="date" class="field text-sm" value="${dl?.recommendationDate || ''}" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Rever em</label><input name="reviewDate" type="date" class="field text-sm" value="${dl?.reviewDate || ''}" /></div>
+        </div>
+        <div><label class="text-xs text-white/40 block mb-1">Explicação para a cliente</label><textarea name="explanation" rows="3" class="field text-sm">${dl?.explanation || ''}</textarea></div>
+        <div class="flex justify-end pt-1"><button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${dl ? 'Atualizar Devolutiva' : 'Publicar Devolutiva'}</button></div>
+      </form>
+    </div>
+  `, 'mb-6');
+}
+
+async function publishValueDeliverable(e, assessmentId) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Publicando…';
+  const fd = new FormData(form);
+  const toCents = (k) => {
+    const raw = (fd.get(k) || '').toString().trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  };
+  const publishedAt = new Date().toISOString();
+  const { error } = await supabase.from('value_published_deliverables').upsert({
+    assessment_id: assessmentId,
+    strategic_price_cents: toCents('strategicPrice'),
+    mathematical_minimum_cents: toCents('mathematicalMinimum'),
+    explanation: (fd.get('explanation') || '').toString().trim() || null,
+    recommendation_date: fd.get('recommendationDate') || null,
+    review_date: fd.get('reviewDate') || null,
+    published_at: publishedAt,
+  }, { onConflict: 'assessment_id' });
+  if (error) {
+    toast('Não foi possível publicar agora.', { tone: 'error' });
+    btn.disabled = false;
+    btn.textContent = 'Publicar Devolutiva';
+    return;
+  }
+  await supabase.from('value_assessments').update({ status: 'published', published_at: publishedAt }).eq('id', assessmentId);
+  toast('Devolutiva publicada — a cliente já pode vê-la.');
+  render();
 }
 
 function openLinkModal(url, expiresAt) {
@@ -211,6 +454,12 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
+  const [surveyState, brandState, valueAssessment] = await Promise.all([
+    loadBusinessSurvey(),
+    loadBrandDirection(),
+    !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
+  ]);
+
   const status = deriveClientStatus({
     accessStatus: client.access_status,
     partyInfoSubmitted: !!partyInfo?.submitted,
@@ -255,6 +504,13 @@ async function render() {
       </div>
     `, 'mb-6') : ''}
 
+    <div class="mb-4 mt-2">
+      <p class="eyebrow">Trabalho da Cliente</p>
+    </div>
+    ${businessSurveyCard(surveyState)}
+    ${brandDirectionCard(brandState)}
+    ${!isAssistant ? valueAnalysisCard(valueAssessment) : ''}
+
     ${dangerZoneCard()}
   `;
 
@@ -263,6 +519,8 @@ async function render() {
   content.querySelector('#prepare-contract')?.addEventListener('click', () => prepareContract(client));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
   content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
+  content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);
+  content.querySelector('#value-publish-form')?.addEventListener('submit', (e) => publishValueDeliverable(e, valueAssessment.id));
 }
 
 render();
