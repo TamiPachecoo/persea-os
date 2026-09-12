@@ -3,7 +3,7 @@
 // and net. Per-client payment detail/actions live on that client's own
 // Financeiro tab (client-detail.html); this page is the overview.
 import { MockDB, PROGRAMS, PROGRAM_LABEL, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABEL, PAYMENT_STATUS_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, openModal, brl } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, openModal, brl, isNonProduction } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
@@ -40,7 +40,44 @@ async function loadRealKPIs() {
   const realPayments = (payments || []).filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
   const recebido = realPayments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
   const { aReceberCents, emAtrasoCents } = summarizeObligations(lines || []);
-  return { recebido, aReceber: aReceberCents, emAtraso: emAtrasoCents };
+  return { recebido, aReceber: aReceberCents, emAtraso: emAtrasoCents, lines: lines || [] };
+}
+
+// Real, production-safe "Cobrança por Cliente" — grouped from the exact
+// same `lines` loadActiveObligations already fetched for the KPIs above
+// (no second query, no second formula). Each client's own next unpaid
+// installment + whether anything of hers is overdue.
+function renderRealClientBilling(lines) {
+  const byClient = new Map();
+  for (const l of lines) {
+    const clientId = l.contracts?.client_id;
+    if (!clientId) continue;
+    if (!byClient.has(clientId)) byClient.set(clientId, { fullName: l.contracts?.clients?.full_name || '—', lines: [] });
+    byClient.get(clientId).lines.push(l);
+  }
+  if (!byClient.size) {
+    return card('<p class="text-sm" style="color:var(--muted);">Nenhum contrato financeiro ativo.</p>', 'mb-8');
+  }
+  const rows = Array.from(byClient.entries()).map(([clientId, { fullName, lines: clientLines }]) => {
+    const unpaid = clientLines.filter((l) => l.outstanding_cents > 0).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+    const overdue = unpaid.some((l) => l.due_date < new Date().toISOString().slice(0, 10));
+    return { clientId, fullName, next: unpaid[0], overdue };
+  });
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Cobrança por Cliente</p>
+    <div class="divide-y" style="border-color:var(--line);">
+      ${rows.map(({ clientId, fullName, next, overdue }) => `
+        <a href="client-onboarding.html?id=${clientId}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+          <p class="font-medium">${fullName}</p>
+          <div class="flex items-center gap-3">
+            ${next
+              ? `<span class="text-xs text-white/40">Vence ${formatDate(next.due_date)} · ${brl(next.amount_cents / 100)}</span><span class="badge ${overdue ? 'badge-locked' : 'badge-progress'}">${overdue ? 'Em atraso' : 'Pendente'}</span>`
+              : '<span class="text-xs" style="color:var(--muted);">Em dia</span>'}
+          </div>
+        </a>
+      `).join('')}
+    </div>
+  `, 'mb-8');
 }
 function renderRealKPIs({ recebido, aReceber, emAtraso, error }) {
   const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -205,24 +242,31 @@ function openExpenseModal() {
 }
 
 async function render() {
-  const summary = MockDB.getFinancialSummary();
   const realKPIs = await loadRealKPIs();
-  // System-Wide UX Simplification Pass: the real KPIs above are the reason
-  // anyone opens this page — the demo pipeline (KPIs, forecast, by-program,
-  // client billing, expenses: five more stacked sections) doesn't need to
-  // load fully open every time. Collapsed by default, everything still one
-  // click away, nothing removed.
+  // Production Migration Batch 6: the MockDB demo pipeline (KPIs, forecast,
+  // by-program, client billing, expenses) is now hard-gated to
+  // isNonProduction() — "clearly labeled" wasn't enough per the explicit
+  // "no demo financial numbers in production" rule; it must not render
+  // there at all, not just be disclosed. renderRealClientBilling below (new
+  // this pass) is production's actual per-client view, built from the same
+  // `lines` already fetched for the KPIs above — no second query/formula.
   content.innerHTML = `
     ${renderRealKPIs(realKPIs)}
-    <details class="mb-8">
-      <summary class="text-xs uppercase cursor-pointer" style="color:var(--muted); letter-spacing:.08em; list-style:none;">▸ Pipeline de Demonstração</summary>
-      <p class="text-xs text-white/20 mt-2 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
-      ${renderKPIs(summary)}
-      ${renderForecast()}
-      ${renderByProgram(summary)}
-      ${renderClientBilling()}
-      ${renderExpenses()}
-    </details>
+    ${renderRealClientBilling(realKPIs.lines || [])}
+    ${isNonProduction() ? (() => {
+      const summary = MockDB.getFinancialSummary();
+      return `
+        <details class="mb-8">
+          <summary class="text-xs uppercase cursor-pointer" style="color:var(--muted); letter-spacing:.08em; list-style:none;">▸ Pipeline de Demonstração</summary>
+          <p class="text-xs text-white/20 mt-2 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
+          ${renderKPIs(summary)}
+          ${renderForecast()}
+          ${renderByProgram(summary)}
+          ${renderClientBilling()}
+          ${renderExpenses()}
+        </details>
+      `;
+    })() : ''}
   `;
   content.querySelector('#new-expense')?.addEventListener('click', openExpenseModal);
   content.querySelectorAll('[data-delete-expense]').forEach((btn) => {
