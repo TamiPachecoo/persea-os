@@ -75,11 +75,25 @@ function openLinkModal(url, expiresAt) {
   });
 }
 
-async function generateLink() {
-  const { data, error } = await supabase.functions.invoke('generate-registration-link', { body: { client_id: clientId } });
-  if (error || data?.error) { toast(data?.error || 'Não foi possível gerar o link agora.', { tone: 'error' }); return; }
-  openLinkModal(data.registration_url, data.expires_at);
-  render();
+let generatingLink = false;
+async function generateLink(e) {
+  // Same double-click guard as admin/crm.js's "Criar Cliente" — this
+  // function always revokes any existing active token before issuing a
+  // new one (that's its whole job), so firing it twice in a row would
+  // silently burn a link the admin had just generated and not yet copied.
+  if (generatingLink) return;
+  generatingLink = true;
+  const btn = e?.target;
+  if (btn) btn.disabled = true;
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-registration-link', { body: { client_id: clientId } });
+    if (error || data?.error) { toast(data?.error || 'Não foi possível gerar o link agora.', { tone: 'error' }); return; }
+    openLinkModal(data.registration_url, data.expires_at);
+    render();
+  } finally {
+    generatingLink = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function prepareContract(client) {

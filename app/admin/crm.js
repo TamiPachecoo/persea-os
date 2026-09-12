@@ -101,14 +101,30 @@ function openCreateClientModal() {
   });
   el.querySelector('#create-client-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    // Bug fix: a double-click here (no visual feedback while the request
+    // is in flight) previously fired this handler twice, creating two real
+    // clients + two valid tokens from a single "Criar Cliente" action — an
+    // admin could easily copy/open the wrong one. The submit button is now
+    // disabled for the duration of the request, and a second submit event
+    // arriving before it resolves is ignored outright.
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
+    const originalLabel = submitBtn.textContent;
+    submitBtn.textContent = 'Criando…';
     const fd = new FormData(e.target);
-    const { data, error } = await supabase.functions.invoke('create-client-registration', {
-      body: { full_name: fd.get('full_name'), email: fd.get('email') || null, tier: fd.get('tier') },
-    });
-    if (error || data?.error) { toast(data?.error || 'Não foi possível criar a cliente agora.', { tone: 'error' }); return; }
-    close();
-    openRegistrationLinkModal(data.registration_url);
-    renderProductionCRM();
+    try {
+      const { data, error } = await supabase.functions.invoke('create-client-registration', {
+        body: { full_name: fd.get('full_name'), email: fd.get('email') || null, tier: fd.get('tier') },
+      });
+      if (error || data?.error) { toast(data?.error || 'Não foi possível criar a cliente agora.', { tone: 'error' }); return; }
+      close();
+      openRegistrationLinkModal(data.registration_url);
+      renderProductionCRM();
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalLabel;
+    }
   });
 }
 
