@@ -35,7 +35,7 @@ import { isProductionEnvironment } from './environment.js';
 // staff-only — Nay's own log, not a client journal). Production Migration:
 // Playbook + Quiz + Notes reported this gap rather than inventing schema —
 // see client/notes.js's own header comment.
-const PRODUCTION_READY_PAGES = new Set(['encontros', 'pitch', 'questionnaire', 'onboarding', 'images', 'homework', 'activity', 'activity-guide', 'content-activity', 'content', 'financial', 'business-survey', 'brand-direction', 'value-analysis', 'arquetipos', 'arquetipos-resultado', 'playbook', 'quiz']);
+const PRODUCTION_READY_PAGES = new Set(['encontros', 'pitch', 'questionnaire', 'onboarding', 'images', 'homework', 'activity', 'activity-guide', 'content-activity', 'content', 'financial', 'business-survey', 'brand-direction', 'value-analysis', 'arquetipos', 'arquetipos-resultado', 'playbook', 'quiz', 'program']);
 
 function renderNotice(message, detail) {
   document.body.innerHTML = `

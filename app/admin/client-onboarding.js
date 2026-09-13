@@ -27,6 +27,7 @@ import { loadValueAssessment } from '../shared/value-analysis-model.js';
 import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS, fmtBRL } from '../shared/value-analysis-schema.js';
 import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArchetypeResults } from '../shared/archetype-model.js';
 import { getVersions, getSections, createDraft, saveSectionContent, publishVersion, SECTION_DEFS } from '../shared/playbook-model.js';
+import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -430,6 +431,32 @@ async function publishPlaybookDraft(versionId, versionNumber) {
   catch { toast('Não foi possível publicar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = `Publicar v${versionNumber}`; }
 }
 
+const TIER_NAME = { premium: 'Persea Premium', essential: 'Persea Essencial' };
+
+// Program/Journey — staff summary, reusing the exact same shared/
+// program-model.js the client page uses (loadProgramState/loadNextMeeting)
+// — one real source of truth, not a second hand-rolled staff view. Compact
+// by design (per "do not recreate the entire client Program page for
+// staff") — status/phase/next-action/next-meeting only, no per-activity
+// card wall.
+async function programSummaryCard(client) {
+  const [state, nextMeeting] = await Promise.all([loadProgramState(clientId, client), loadNextMeeting(clientId)]);
+  const { programDef, progress } = state;
+  if (!programDef) {
+    return card(`<p class="text-sm text-white/50 mb-1">Programa</p><p class="text-xs" style="color:var(--muted);">Programa ainda não configurado.</p>`, 'mb-6');
+  }
+  return card(`
+    <p class="text-sm text-white/50 mb-4">Programa</p>
+    <div class="grid sm:grid-cols-2 gap-4 text-sm">
+      <div><p class="text-xs text-white/30">Plano</p><p>${TIER_NAME[client.tier] || programDef.name}</p></div>
+      <div><p class="text-xs text-white/30">Fase atual</p><p>Fase ${(client.phase_index || 0) + 1}</p></div>
+      <div><p class="text-xs text-white/30">Atividades</p><p>${progress.completedCount} de ${progress.totalIncluded} concluídas (${progress.pct}%)</p></div>
+      <div><p class="text-xs text-white/30">Próxima ação da cliente</p><p>${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia'}</p></div>
+      <div class="sm:col-span-2"><p class="text-xs text-white/30">Próximo encontro</p><p>${nextMeeting ? `${nextMeeting.title || 'Encontro agendado'} — ${formatDateTime(nextMeeting.item_date)}` : 'Não agendado'}</p></div>
+    </div>
+  `, 'mb-6');
+}
+
 function openLinkModal(url, expiresAt) {
   const { el } = openModal({
     title: 'Link de cadastro',
@@ -582,12 +609,13 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
     loadArchetypeState(),
     loadPlaybookState(),
+    programSummaryCard(client),
   ]);
 
   const status = deriveClientStatus({
@@ -637,6 +665,7 @@ async function render() {
     <div class="mb-4 mt-2">
       <p class="eyebrow">Trabalho da Cliente</p>
     </div>
+    ${programSummaryHtml}
     ${playbookCard(playbookState)}
     ${businessSurveyCard(surveyState)}
     ${brandDirectionCard(brandState)}
