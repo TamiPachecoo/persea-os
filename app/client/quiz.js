@@ -1,17 +1,26 @@
-import { MockDB } from '../shared/mock-db.js';
+// Quiz Rápido do Playbook — Production Migration: Playbook + Quiz + Notes.
+// This is the PLAYBOOK comprehension quiz (buildQuizQuestions derives its
+// questions from the real published playbook sections) — not the Teste de
+// Arquétipos (archetype_quiz_* tables, a completely separate feature; see
+// shared/archetype-model.js). Real Supabase via shared/playbook-model.js.
+// Scoring is recomputed server-round-trip-fresh from the real published
+// sections at submit time (submitQuizResult), never trusted as a bare
+// client-supplied integer — see that module's header comment.
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, progressBar, showMoodPrompt, enableTilt, animateCount, initClientSwitcher } from '../shared/ui.js';
+import { getPublishedPlaybook, getQuizResult, buildQuizQuestions, submitQuizResult } from '../shared/playbook-model.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'quiz' });
 if (!__clientCtx) throw new Error('not authorized');
-const activeClientId = __clientCtx.clientId;
+const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Quiz Rápido' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
-const questions = MockDB.buildQuizQuestions(activeClientId);
+const playbook = await getPublishedPlaybook(clientId);
+const questions = playbook ? buildQuizQuestions(playbook.sections) : [];
 let step = 0;
-let score = 0;
+let answers = {};
 let answered = false;
 
 function resultMessage(score, total) {
@@ -28,7 +37,7 @@ function renderIntro() {
     <p class="text-sm mb-6" style="color:var(--muted);">${questions.length} perguntinhas rápidas, sem pegadinha — é só para fixar o que é seu.</p>
     <button id="start-quiz" class="btn-primary">Começar</button>
   `);
-  document.getElementById('start-quiz').addEventListener('click', () => { step = 0; score = 0; renderQuestion(); });
+  document.getElementById('start-quiz').addEventListener('click', () => { step = 0; answers = {}; renderQuestion(); });
 }
 
 function renderQuestion() {
@@ -54,8 +63,8 @@ function selectOption(q, i) {
   if (answered) return;
   answered = true;
   const chosen = q.options[i];
+  answers[q.key] = chosen;
   const correct = chosen === q.correct;
-  if (correct) score += 1;
   document.querySelectorAll('[data-opt]').forEach((btn, idx) => {
     if (q.options[idx] === q.correct) btn.style.borderColor = 'var(--gold)';
     if (idx === i && !correct) btn.style.borderColor = 'var(--error)';
@@ -66,13 +75,15 @@ function selectOption(q, i) {
   }, 700);
 }
 
-function renderResult() {
-  MockDB.submitQuiz(activeClientId, score, questions.length);
-  const msg = resultMessage(score, questions.length);
+async function renderResult() {
+  let result;
+  try { result = await submitQuizResult(clientId, playbook.sections, answers); }
+  catch { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível salvar seu resultado agora. Tente novamente.</p>'); return; }
+  const msg = resultMessage(result.score, result.total);
   content.innerHTML = card(`
     <p style="font-size:2.4rem;" class="mb-3">${msg.emoji}</p>
     <p class="eyebrow mb-2">Resultado</p>
-    <h2 class="pg-title mb-3" style="font-size:1.8rem;"><span id="score-counter">0</span> de ${questions.length}</h2>
+    <h2 class="pg-title mb-3" style="font-size:1.8rem;"><span id="score-counter">0</span> de ${result.total}</h2>
     <p class="text-sm mb-6" style="color:var(--muted);">${msg.text}</p>
     <div class="flex gap-3">
       <a href="playbook.html" class="btn-primary">Voltar ao Playbook</a>
@@ -80,15 +91,30 @@ function renderResult() {
     </div>
   `);
   const scoreCounter = document.getElementById('score-counter');
-  if (scoreCounter) animateCount(scoreCounter, score, { duration: 900 });
-  showMoodPrompt({
-    label: 'Como você se sentiu fazendo o quiz?',
-    onSelect: (mood) => MockDB.logMood(activeClientId, 'quiz_completed', mood),
-  });
+  if (scoreCounter) animateCount(scoreCounter, result.score, { duration: 900 });
+  showMoodPrompt({ label: 'Como você se sentiu fazendo o quiz?', onSelect: () => {} });
 }
 
-if (!questions.length) {
+if (!playbook) {
+  content.innerHTML = card(`<p class="text-white/50">Seu Playbook precisa estar disponível antes de iniciar esta atividade.</p>`);
+} else if (!questions.length) {
   content.innerHTML = card(`<p class="text-white/50">Seu playbook ainda não está publicado — o quiz fica disponível assim que ele chegar até você.</p>`);
 } else {
-  renderIntro();
+  const existing = await getQuizResult(clientId);
+  if (existing) {
+    const msg = resultMessage(existing.score, existing.total);
+    content.innerHTML = card(`
+      <p style="font-size:2.4rem;" class="mb-3">${msg.emoji}</p>
+      <p class="eyebrow mb-2">Resultado</p>
+      <h2 class="pg-title mb-3" style="font-size:1.8rem;">${existing.score} de ${existing.total}</h2>
+      <p class="text-sm mb-6" style="color:var(--muted);">${msg.text}</p>
+      <div class="flex gap-3">
+        <button id="retry-quiz" class="btn-ghost">Refazer o quiz</button>
+        <a href="playbook.html" class="btn-primary">Voltar ao Playbook</a>
+      </div>
+    `);
+    document.getElementById('retry-quiz').addEventListener('click', () => { step = 0; answers = {}; renderQuestion(); });
+  } else {
+    renderIntro();
+  }
 }

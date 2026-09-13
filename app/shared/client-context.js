@@ -30,7 +30,12 @@ import { isProductionEnvironment } from './environment.js';
 // MockDB in production (explicit product requirement). Add a page's own
 // identifier here only once its render() genuinely reads its own Supabase
 // tables end to end, never before.
-const PRODUCTION_READY_PAGES = new Set(['encontros', 'pitch', 'questionnaire', 'onboarding', 'images', 'homework', 'activity', 'activity-guide', 'content-activity', 'content', 'financial', 'business-survey', 'brand-direction', 'value-analysis', 'arquetipos', 'arquetipos-resultado']);
+// 'notes' is deliberately NOT here: the real schema has no client-personal-
+// notes table at all (the only notes-shaped table, whatsapp_notes, is
+// staff-only — Nay's own log, not a client journal). Production Migration:
+// Playbook + Quiz + Notes reported this gap rather than inventing schema —
+// see client/notes.js's own header comment.
+const PRODUCTION_READY_PAGES = new Set(['encontros', 'pitch', 'questionnaire', 'onboarding', 'images', 'homework', 'activity', 'activity-guide', 'content-activity', 'content', 'financial', 'business-survey', 'brand-direction', 'value-analysis', 'arquetipos', 'arquetipos-resultado', 'playbook', 'quiz']);
 
 function renderNotice(message, detail) {
   document.body.innerHTML = `

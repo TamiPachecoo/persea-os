@@ -1,74 +1,45 @@
-import { MockDB } from '../shared/mock-db.js';
+// Playbook de Marca Pessoal — Production Migration: Playbook + Quiz +
+// Notes. Real Supabase via shared/playbook-model.js. Deliberately simpler
+// than the MockDB/demo "book" experience (cover image, epigraph, narrative
+// chapters, chapter-PDF) — that whole shell is fixture-only decorative
+// content with no real per-client schema backing (see playbook-model.js's
+// header comment) — this reads the real 13 published sections directly, no
+// invented chapter prose. The format "vivenciar" experience and its
+// completion tracking ARE real (playbook_experiences) and are preserved.
 import { getCurrentClientContext } from '../shared/client-context.js';
-import { renderShell, card, formatDate, progressBar, toast, showMoodPrompt, stepEyebrow, initScrollReveal, enableTilt, initClientSwitcher } from '../shared/ui.js';
+import { renderShell, card, formatDate, formatDateTime, progressBar, toast, showMoodPrompt, initScrollReveal, enableTilt, initClientSwitcher } from '../shared/ui.js';
+import { getPublishedPlaybook, getExperience, completeExperience, getQuizResult, SECTION_DEFS, SECTION_LABEL, FORMATS } from '../shared/playbook-model.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'playbook' });
 if (!__clientCtx) throw new Error('not authorized');
-const activeClientId = __clientCtx.clientId;
+const clientId = __clientCtx.clientId;
+const client = __clientCtx.client;
 document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
 initClientSwitcher();
-
-const client = MockDB.getClient(activeClientId);
-const published = MockDB.getPublishedPlaybook(activeClientId);
-const book = MockDB.getBook(activeClientId);
 const content = document.getElementById('app-content');
 
-const FORMATS = {
-  podcast: { icon: '🎙️', label: 'Podcast', verb: 'Ouvindo', desc: 'Um episódio íntimo, narrado na voz da Nay, contando a sua própria história de marca.' },
-  video: { icon: '🎬', label: 'Vídeo', verb: 'Assistindo', desc: 'Uma apresentação visual do seu playbook, seção por seção.' },
-  audiobook: { icon: '📖', label: 'Audiobook', verb: 'Ouvindo', desc: 'O playbook inteiro narrado como um audiolivro, na ordem, do início ao fim.' },
-};
+const playbook = await getPublishedPlaybook(clientId);
+let experience = playbook ? await getExperience(clientId) : null;
+let quizResult = playbook ? await getQuizResult(clientId) : null;
 
-// view: 'cover' | 'toc' | 'chapter'
-let view = 'cover';
-let currentChapterIndex = 0;
+let view = 'toc'; // 'toc' | 'section'
+let currentSectionKey = null;
 let playerFormat = null;
 let playerTimer = null;
 let forceChoice = false;
 
 function narrationLines() {
-  if (!published) return [];
-  return [published.sections.identity, published.sections.mission, published.sections.positioning, published.sections.pitch_30s];
+  if (!playbook) return [];
+  return [playbook.sections.identity, playbook.sections.mission, playbook.sections.positioning, playbook.sections.pitch_30s].filter(Boolean);
 }
 
-// --- Cover ---
-function renderCover() {
-  content.innerHTML = `
-    <div class="book-stage">
-      <div id="book-cover" class="book-cover" style="background-image:url('${book.coverImage}');">
-        <span class="book-cover-hint">Toque para abrir</span>
-        <div class="book-cover-content">
-          <p class="book-cover-mark">PERSEA</p>
-          <h1 class="book-cover-title">${book.title}</h1>
-          <p class="book-cover-author">${book.author}</p>
-        </div>
-      </div>
-    </div>
-    <p class="text-center text-sm" style="color:var(--muted);">Feito especialmente para <span style="color:var(--cream);">${client.fullName}</span></p>
-  `;
-  document.getElementById('book-cover').addEventListener('click', openBook);
-}
-
-function openBook() {
-  const cover = document.getElementById('book-cover');
-  cover.classList.add('opening');
-  setTimeout(() => {
-    view = 'toc';
-    renderPage();
-  }, 550);
-}
-
-// --- Table of contents ---
 function renderExperienceCard() {
-  const exp = MockDB.getPlaybookExperience(activeClientId);
-  const quiz = MockDB.getQuiz(activeClientId);
-
   if (playerFormat) {
     const f = FORMATS[playerFormat];
     const lines = narrationLines();
     return card(`
       <p class="eyebrow mb-2">${f.icon} ${f.verb} como ${f.label}</p>
-      <p id="caption" class="font-serif text-lg mb-5" style="min-height:3.2em;">${lines[0]}</p>
+      <p id="caption" class="font-serif text-lg mb-5" style="min-height:3.2em;">${lines[0] || ''}</p>
       <div id="player-progress">${progressBar(0)}</div>
       <div class="flex items-center gap-3 mt-4">
         <button id="player-finish" class="btn-ghost">Concluir agora</button>
@@ -77,11 +48,11 @@ function renderExperienceCard() {
     `, 'mb-8');
   }
 
-  if (!exp.completedAt || forceChoice) {
+  if (!experience.completed_at || forceChoice) {
     return card(`
       <p class="eyebrow mb-2">Prefere vivenciar em vez de ler? ✨</p>
       <h2 class="pg-title mb-2" style="font-size:1.4rem;">Escolha um formato</h2>
-      <p class="text-sm mb-2" style="color:var(--muted);">Disponível apenas aqui na plataforma — não faz parte do PDF para download.</p>
+      <p class="text-sm mb-2" style="color:var(--muted);">Uma forma alternativa de revisitar o essencial do seu playbook.</p>
       <div class="grid md:grid-cols-3 gap-3 mt-4">
         ${Object.entries(FORMATS).map(([key, f]) => `
           <button data-format="${key}" class="card tilt-card text-left" style="cursor:pointer;">
@@ -94,17 +65,17 @@ function renderExperienceCard() {
     `, 'mb-8');
   }
 
-  const f = FORMATS[exp.format];
+  const f = FORMATS[experience.format];
   return card(`
     <div class="flex items-center justify-between flex-wrap gap-4">
       <div>
         <p class="eyebrow mb-1">${f.icon} Vivenciado em ${f.label}</p>
-        <p class="text-sm" style="color:var(--muted);">em ${formatDate(exp.completedAt)}</p>
+        <p class="text-sm" style="color:var(--muted);">em ${formatDate(experience.completed_at)}</p>
       </div>
       <div class="flex items-center gap-3">
         <button id="replay-experience" class="btn-ghost">Vivenciar em outro formato</button>
-        ${quiz.completedAt
-          ? `<a href="quiz.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver resultado do quiz (${quiz.score}/${quiz.total})</a>`
+        ${quizResult
+          ? `<a href="quiz.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver resultado do quiz (${quizResult.score}/${quizResult.total})</a>`
           : `<a href="quiz.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Fazer Quiz Rápido 🎯</a>`}
       </div>
     </div>
@@ -113,10 +84,10 @@ function renderExperienceCard() {
 
 function renderToc() {
   content.innerHTML = `
-    ${card(`
-      <p class="font-serif text-xl mb-1" style="font-style:italic;">"${book.epigraph.text}"</p>
-      <p class="text-xs" style="color:var(--muted);">${book.epigraph.cite}</p>
-    `, 'mb-8')}
+    <div class="mb-8">
+      <p class="text-white/40 text-sm mb-1">Feito especialmente para ${client.full_name}${playbook.version.published_at ? ` · Publicado em ${formatDate(playbook.version.published_at)}` : ''}</p>
+      <h1 class="text-3xl font-serif">Seu Playbook de Marca Pessoal</h1>
+    </div>
 
     ${renderExperienceCard()}
 
@@ -127,12 +98,11 @@ function renderToc() {
       </div>
       <p class="text-xs mb-2" style="color:var(--muted);">Escolha o que você quer ler agora — não precisa ser em ordem.</p>
       <div class="mt-2">
-        ${book.chapters.map((ch, i) => `
-          <div class="book-toc-item" data-chapter="${i}">
-            <span class="num">${String(ch.number).padStart(2, '0')}</span>
+        ${SECTION_DEFS.map(([key, label], i) => `
+          <div class="book-toc-item" data-section="${key}" ${!playbook.sections[key] ? 'style="opacity:.35; pointer-events:none;"' : ''}>
+            <span class="num">${String(i + 1).padStart(2, '0')}</span>
             <div class="meta">
-              <p class="ttl">${ch.title}</p>
-              <p class="sub">${ch.eyebrow}</p>
+              <p class="ttl">${label}</p>
             </div>
           </div>
         `).join('')}
@@ -140,43 +110,42 @@ function renderToc() {
     `)}
   `;
 
-  document.querySelectorAll('[data-chapter]').forEach((el) => {
+  content.querySelectorAll('[data-section]').forEach((el) => {
     el.addEventListener('click', () => {
-      currentChapterIndex = Number(el.dataset.chapter);
-      view = 'chapter';
+      currentSectionKey = el.dataset.section;
+      view = 'section';
       renderPage();
     });
   });
   wireExperienceEvents();
-  document.getElementById('download-pdf').addEventListener('click', downloadPdf);
+  content.querySelector('#download-pdf').addEventListener('click', downloadPdf);
 }
 
-// --- Chapter reader ---
-function renderChapter() {
-  const ch = book.chapters[currentChapterIndex];
-  const total = book.chapters.length;
+function renderSection() {
+  const idx = SECTION_DEFS.findIndex(([key]) => key === currentSectionKey);
+  const [key, label] = SECTION_DEFS[idx];
+  const total = SECTION_DEFS.length;
 
   content.innerHTML = `
     <button id="back-to-toc" class="btn-text mb-6">&larr; Voltar ao Sumário</button>
     <div class="book-page reveal">
-      ${stepEyebrow(ch.number, total, ch.eyebrow)}
-      <h2 class="pg-title mt-2 mb-6">${ch.title}</h2>
-      ${ch.paragraphs.map((p) => `<p>${p}</p>`).join('')}
-      ${ch.list ? `<ul>${ch.list.map((li) => `<li>${li}</li>`).join('')}</ul>` : ''}
+      <p class="text-xs text-white/30 mb-2">${String(idx + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}</p>
+      <h2 class="pg-title mt-2 mb-6">${label}</h2>
+      <p style="white-space:pre-wrap; line-height:1.8;">${playbook.sections[key] || ''}</p>
     </div>
     <div class="flex items-center justify-between mt-10 max-w-2xl mx-auto">
-      <button id="prev-chapter" class="btn-ghost" ${currentChapterIndex === 0 ? 'disabled' : ''}>&larr; Capítulo Anterior</button>
-      <span class="text-xs" style="color:var(--muted);">${currentChapterIndex + 1} / ${total}</span>
-      <button id="next-chapter" class="btn-ghost" ${currentChapterIndex === total - 1 ? 'disabled' : ''}>Próximo Capítulo &rarr;</button>
+      <button id="prev-section" class="btn-ghost" ${idx === 0 ? 'disabled' : ''}>&larr; Anterior</button>
+      <span class="text-xs" style="color:var(--muted);">${idx + 1} / ${total}</span>
+      <button id="next-section" class="btn-ghost" ${idx === total - 1 ? 'disabled' : ''}>Próxima &rarr;</button>
     </div>
   `;
 
   document.getElementById('back-to-toc').addEventListener('click', () => { view = 'toc'; renderPage(); });
-  document.getElementById('prev-chapter').addEventListener('click', () => {
-    if (currentChapterIndex > 0) { currentChapterIndex -= 1; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  document.getElementById('prev-section').addEventListener('click', () => {
+    if (idx > 0) { currentSectionKey = SECTION_DEFS[idx - 1][0]; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   });
-  document.getElementById('next-chapter').addEventListener('click', () => {
-    if (currentChapterIndex < total - 1) { currentChapterIndex += 1; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  document.getElementById('next-section').addEventListener('click', () => {
+    if (idx < total - 1) { currentSectionKey = SECTION_DEFS[idx + 1][0]; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   });
 }
 
@@ -184,10 +153,7 @@ function wireExperienceEvents() {
   document.querySelectorAll('[data-format]').forEach((btn) => {
     btn.addEventListener('click', () => startPlayer(btn.dataset.format));
   });
-  document.getElementById('replay-experience')?.addEventListener('click', () => {
-    forceChoice = true;
-    renderPage();
-  });
+  document.getElementById('replay-experience')?.addEventListener('click', () => { forceChoice = true; renderPage(); });
   document.getElementById('player-cancel')?.addEventListener('click', () => {
     clearInterval(playerTimer);
     playerFormat = null;
@@ -214,34 +180,20 @@ function startPlayer(format) {
     if (track) track.innerHTML = progressBar(pct);
     const captionIdx = Math.min(lines.length - 1, Math.floor((elapsed / totalMs) * lines.length));
     const caption = document.getElementById('caption');
-    if (caption) caption.textContent = lines[captionIdx];
+    if (caption && lines[captionIdx]) caption.textContent = lines[captionIdx];
     if (pct >= 100) finishPlayer();
   }, stepMs);
 }
 
-function finishPlayer() {
+async function finishPlayer() {
   clearInterval(playerTimer);
   const format = playerFormat;
   playerFormat = null;
-  MockDB.completePlaybookExperience(activeClientId, format);
+  try { await completeExperience(clientId, format); experience = await getExperience(clientId); }
+  catch { toast('Não foi possível salvar agora.', { tone: 'error' }); }
   toast('Playbook concluído! Que tal um quiz rápido?');
   renderPage();
-  showMoodPrompt({
-    label: 'Como você se sentiu vivenciando seu playbook?',
-    onSelect: (mood) => MockDB.logMood(activeClientId, 'playbook_experience', mood),
-  });
-}
-
-// --- PDF export (written chapters only — the podcast/video/audiobook stay platform-exclusive) ---
-async function toDataURL(url) {
-  const res = await fetch(url);
-  const blob = await res.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  showMoodPrompt({ label: 'Como você se sentiu vivenciando seu playbook?', onSelect: () => {} });
 }
 
 async function downloadPdf() {
@@ -256,63 +208,35 @@ async function downloadPdf() {
     const margin = 64;
     const maxWidth = pageW - margin * 2;
 
-    try {
-      const imgData = await toDataURL(book.coverImage);
-      doc.addImage(imgData, 'JPEG', 0, 0, pageW, pageH);
-      doc.setFillColor(12, 10, 9);
-      doc.setGState(new doc.GState({ opacity: 0.45 }));
-      doc.rect(0, 0, pageW, pageH, 'F');
-      doc.setGState(new doc.GState({ opacity: 1 }));
-    } catch (e) { /* image embed failed — fall back to text-only cover */ }
-
-    doc.setTextColor(242, 236, 224);
+    doc.setTextColor(20, 18, 16);
     doc.setFont('times', 'italic');
-    doc.setFontSize(34);
-    doc.text(book.title, margin, pageH - 160);
-    doc.setFontSize(13);
+    doc.setFontSize(28);
+    doc.text('Seu Playbook de Marca Pessoal', margin, 140);
     doc.setFont('helvetica', 'normal');
-    doc.text(book.subtitle, margin, pageH - 130);
-    doc.text(`Feito especialmente para ${client.fullName}`, margin, pageH - 100);
+    doc.setFontSize(12);
+    doc.text(`Feito especialmente para ${client.full_name}`, margin, 170);
     doc.setFontSize(10);
-    doc.text(book.author, margin, pageH - 70);
+    doc.text('NAY MURTA | PERSEA', margin, 195);
 
-    book.chapters.forEach((ch) => {
+    SECTION_DEFS.forEach(([key, label]) => {
+      if (!playbook.sections[key]) return;
       doc.addPage();
-      doc.setTextColor(20, 18, 16);
       let y = margin;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(`${String(ch.number).padStart(2, '0')} · ${ch.eyebrow}`, margin, y);
-      y += 26;
       doc.setFont('times', 'italic');
-      doc.setFontSize(22);
-      doc.text(ch.title, margin, y);
+      doc.setFontSize(20);
+      doc.text(label, margin, y);
       y += 34;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(11);
-      ch.paragraphs.forEach((p) => {
-        const lines = doc.splitTextToSize(p, maxWidth);
-        lines.forEach((line) => {
-          if (y > pageH - margin) { doc.addPage(); y = margin; }
-          doc.text(line, margin, y);
-          y += 16;
-        });
-        y += 10;
+      const lines = doc.splitTextToSize(playbook.sections[key], maxWidth);
+      lines.forEach((line) => {
+        if (y > pageH - margin) { doc.addPage(); y = margin; }
+        doc.text(line, margin, y);
+        y += 16;
       });
-      if (ch.list) {
-        ch.list.forEach((li) => {
-          const lines = doc.splitTextToSize(`•  ${li}`, maxWidth - 14);
-          lines.forEach((line, i) => {
-            if (y > pageH - margin) { doc.addPage(); y = margin; }
-            doc.text(line, margin + (i === 0 ? 0 : 14), y);
-            y += 16;
-          });
-          y += 6;
-        });
-      }
     });
 
-    doc.save(`${book.title.replace(/\s+/g, '-')}.pdf`);
+    doc.save('Playbook-PERSEA.pdf');
     toast('PDF baixado!');
   } catch (e) {
     toast('Não foi possível gerar o PDF neste navegador.', { tone: 'error' });
@@ -323,15 +247,12 @@ async function downloadPdf() {
 }
 
 function renderPage() {
-  if (!published || !book) {
-    content.innerHTML = card(`
-      <p class="text-white/50">Seu playbook ainda não foi publicado. Sua consultora ainda está refinando — volte em breve.</p>
-    `);
+  if (!playbook) {
+    content.innerHTML = card(`<p class="text-white/50">Seu Playbook ainda está sendo preparado.</p>`);
     return;
   }
-  if (view === 'cover') renderCover();
-  else if (view === 'toc') renderToc();
-  else renderChapter();
+  if (view === 'toc') renderToc();
+  else renderSection();
 }
 
 renderPage();
