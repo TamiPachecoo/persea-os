@@ -1,60 +1,33 @@
-// Seu Mapa de Arquétipos — the client's results page. Reads only
-// MockDB.getArchetypeResults(clientId), which already resolves the correct
-// gender-appropriate portrait set and computes scores fresh from stored
-// responses (see mock-db.js) — nothing here calculates or trusts a
-// client-supplied score. If the visual set isn't known yet (no profile
-// gender, never corrected by Nay), asks the one-time question first.
-import { MockDB, ARCHETYPE_VISUAL_SET_LABEL } from '../shared/mock-db.js';
+// Seu Mapa de Arquétipos — Production Migration: Archetypes + Quiz. Reads
+// only shared/archetype-model.js's loadArchetypeResults(clientId), which
+// computes scores fresh from the client's real stored responses (see that
+// module's header comment) — nothing here calculates or trusts a client-
+// supplied score. If the visual set isn't known yet, asks the one-time
+// question first (writes client_archetype_settings — see the new narrow
+// client-write RLS policy added this batch).
 import { getCurrentClientContext } from '../shared/client-context.js';
 import {
   renderShell, card, toast, initClientSwitcher, formatDate,
-  renderArchetypeRadar, archetypePortrait, archetypeIntensityBar, initScrollReveal, isNonProduction,
+  renderArchetypeRadar, archetypePortrait, archetypeIntensityBar, initScrollReveal,
 } from '../shared/ui.js';
+import { loadArchetypeResults, getLatestAttempt, needsVisualSetPrompt, setVisualSet } from '../shared/archetype-model.js';
+import { supabase } from '../shared/supabase-client.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'arquetipos-resultado' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Mapa de Arquétipos' });
 initClientSwitcher();
-
-// Dev-only preview controls — see arquetipos.js's identical panel for why.
-// Gated to non-production (local dev + demo/staging) — see isNonProduction in shared/environment.js.
-function renderDevPanel() {
-  if (!isNonProduction()) return '';
-  return `
-    <div class="dev-preview-panel max-w-4xl mx-auto">
-      <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Controles da demonstração (dev, removível)</p>
-      <div class="flex flex-wrap gap-2">
-        <button type="button" data-dev="completed" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Simular resultado concluído</button>
-        <button type="button" data-dev="tie" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Simular resultado com empate</button>
-        <button type="button" data-dev="female" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Coleção feminina</button>
-        <button type="button" data-dev="male" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Coleção masculina</button>
-        <button type="button" data-dev="reset" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Reiniciar teste</button>
-      </div>
-    </div>
-  `;
-}
-function wireDevPanel() {
-  document.querySelectorAll('[data-dev]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const action = btn.dataset.dev;
-      if (action === 'completed') MockDB.devSimulateArchetypeCompleted(clientId, { withTie: false });
-      if (action === 'tie') MockDB.devSimulateArchetypeCompleted(clientId, { withTie: true });
-      if (action === 'female') MockDB.setArchetypeVisualSet(clientId, 'female');
-      if (action === 'male') MockDB.setArchetypeVisualSet(clientId, 'male');
-      if (action === 'reset') { MockDB.devResetArchetypeQuiz(clientId); location.href = 'arquetipos.html'; return; }
-      toast('Estado da demonstração atualizado.');
-      // Scroll back to top before re-rendering — otherwise, if this was
-      // clicked from the panel at the bottom of the page, the featured
-      // cards near the top stay scrolled out of view and their
-      // .reveal-scroll fade-in never triggers (IntersectionObserver only
-      // fires once they're actually visible; see initScrollReveal).
-      window.scrollTo(0, 0);
-      render();
-    });
-  });
-}
 const content = document.getElementById('app-content');
+
+function renderIncomplete() {
+  content.innerHTML = card(`
+    <div style="text-align:center; padding:52px 24px;">
+      <p class="font-serif" style="font-size:1.5rem;">Finalize o Teste de Arquétipos para visualizar seu resultado.</p>
+      <a href="arquetipos.html" class="btn-primary inline-block mt-6" style="padding:11px 24px;font-size:13px;">Continuar o teste</a>
+    </div>
+  `, 'max-w-xl mx-auto mt-10');
+}
 
 function renderVisualSetPrompt() {
   content.innerHTML = `
@@ -67,9 +40,9 @@ function renderVisualSetPrompt() {
     </div>
   `;
   content.querySelectorAll('[data-set]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      MockDB.setArchetypeVisualSet(clientId, btn.dataset.set);
-      render();
+    btn.addEventListener('click', async () => {
+      try { await setVisualSet(clientId, btn.dataset.set); render(); }
+      catch { toast('Não foi possível salvar agora.', { tone: 'error' }); }
     });
   });
 }
@@ -125,30 +98,27 @@ function combinationParagraph(featured) {
   `;
 }
 
+// Personalized next-action (MockDB.getNextAction) depends on the full
+// program/phase model, which isn't converted this batch — rather than
+// invent a second one, this always points at Minha Jornada, exactly the
+// same honest fallback the demo version itself falls back to when no next
+// action is known.
 function renderNextAction() {
-  const next = MockDB.getNextAction(clientId);
-  const label = next ? next.label : 'Continuar minha jornada';
-  const route = next ? next.route : 'program.html';
   return `
     <div class="text-center mt-12">
-      <a href="${route}" class="btn-primary inline-block" style="padding:12px 28px;font-size:13.5px;">${label}</a>
+      <a href="program.html" class="btn-primary inline-block" style="padding:12px 28px;font-size:13.5px;">Continuar minha jornada</a>
     </div>
   `;
 }
 
-function render() {
-  const quiz = MockDB.getClientArchetypeQuiz(clientId);
-  const hasCompleted = quiz.attempts.some((a) => a.status === 'completed');
-  if (!hasCompleted) {
-    location.replace('arquetipos.html');
-    return;
-  }
-  if (MockDB.needsArchetypeVisualSetPrompt(clientId)) {
-    renderVisualSetPrompt();
-    return;
-  }
+async function render() {
+  const latest = await getLatestAttempt(clientId);
+  if (!latest || latest.status !== 'completed') { renderIncomplete(); return; }
 
-  const results = MockDB.getArchetypeResults(clientId);
+  const { data: settings } = await supabase.from('client_archetype_settings').select('visual_set').eq('client_id', clientId).maybeSingle();
+  if (needsVisualSetPrompt(settings)) { renderVisualSetPrompt(); return; }
+
+  const results = await loadArchetypeResults(clientId);
 
   content.innerHTML = `
     <div class="max-w-4xl mx-auto">
@@ -184,12 +154,9 @@ function render() {
       ${renderNextAction()}
 
       <p class="text-xs text-white/20 mt-10 mb-10 text-center max-w-md mx-auto">Este teste é uma ferramenta de reflexão e direcionamento de marca pessoal. Ele não é uma avaliação psicológica ou diagnóstico clínico.</p>
-
-      ${renderDevPanel()}
     </div>
   `;
   initScrollReveal();
-  wireDevPanel();
 }
 
 render();

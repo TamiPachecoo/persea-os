@@ -2,6 +2,7 @@ import { MockDB, setActiveClientId, DEFAULT_CLIENT_ID, MOOD_SCALE, ONBOARDING_ST
 import { renderShell, card, statusBadge, toast, formatDateTime, formatDate, renderPhaseTracker, isValidHttpUrl, externalLinkAttrs, boardEmptyState, mountPinterestBoard, renderSocialLinks, renderArchetypeRadar, archetypePortrait, openModal, renderRecordingBlock, brl } from '../shared/ui.js';
 import { requireProfile, getCurrentProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
+import { isProductionEnvironment } from '../shared/environment.js';
 import { loadActiveObligations, summarizeObligations } from '../shared/financial-model.js';
 import { loadArtifactsForClient, loadUnlinkedArtifacts, linkArtifactToSlot, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 import {
@@ -35,6 +36,27 @@ if (!(await requireProfile(role))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role, active: isAssistant ? 'clients.html' : 'crm.html' });
 
 const clientId = new URLSearchParams(location.search).get('id') || DEFAULT_CLIENT_ID;
+
+// Legacy-route hardening: this whole file is MockDB-shaped demo/legacy
+// architecture (see admin/client-onboarding.js's header comment) and is
+// never linked to for a real client in production — admin/crm.js's
+// production client list links to client-onboarding.html instead. But a
+// stale bookmark, an old link, or a pasted real id would otherwise hit
+// MockDB.getClient() below, which throws on any id with no MockDB fixture
+// (a real Supabase UUID always qualifies) and crashes the page outright.
+// Redirect to the real workspace instead of crashing. Guarded on
+// isProductionEnvironment() so staging/demo (workers.dev/pages.dev) is
+// completely unaffected — every MockDB legacy id there still opens exactly
+// as before; this only runs on app.naymurta.com.
+if (isProductionEnvironment()) {
+  const { data: realClient } = await supabase.from('clients').select('id').eq('id', clientId).maybeSingle();
+  if (realClient) {
+    const onboardingPath = isAssistant ? '../admin/client-onboarding.html' : 'client-onboarding.html';
+    location.replace(`${onboardingPath}?id=${clientId}`);
+    throw new Error('redirected legacy client-detail route to the real client workspace');
+  }
+}
+
 const client = MockDB.getClient(clientId);
 const phaseProgress = MockDB.getPhaseProgress(clientId);
 

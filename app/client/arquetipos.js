@@ -1,16 +1,20 @@
-// Teste de Arquétipos — the client-facing quiz-taking flow: intro, a 6-
-// section wizard (8 statements each, autosaved per answer), and a calm
-// confirmation screen. Scoring never happens here — see mock-db.js's
-// calcArchetypeScores/submitArchetypeQuiz, the actual trust boundary.
-// Reached from the Program Hub's "Teste de Arquétipos" activity card
-// (see PROGRAM_ACTIVITIES in mock-db.js) — one route for every state
-// (not started / resuming / already done), matching how every other
-// Program Hub activity in this app works.
-import {
-  MockDB, ARCHETYPE_QUIZ_SECTIONS, ARCHETYPE_SCALE_LABELS,
-} from '../shared/mock-db.js';
+// Teste de Arquétipos — Production Migration: Archetypes + Quiz. Same
+// wizard UX as the MockDB/demo version (intro → 6 sections of 8 statements,
+// autosaved per answer → confirmation), now backed by real Supabase via
+// shared/archetype-model.js. Scoring never happens here — see that module's
+// header comment for the real trust boundary (RLS + a DB-level CHECK on
+// score, plus submitAttempt() independently re-validating completeness
+// before allowing 'completed', exactly mirroring MockDB.submitArchetypeQuiz).
 import { getCurrentClientContext } from '../shared/client-context.js';
-import { renderShell, card, toast, initClientSwitcher, isNonProduction } from '../shared/ui.js';
+import { renderShell, card, toast, initClientSwitcher } from '../shared/ui.js';
+import {
+  getArchetypeQuestions, getOrCreateActiveAttempt, getAttemptResponses, saveResponse, submitAttempt, getLatestAttempt,
+} from '../shared/archetype-model.js';
+
+const ARCHETYPE_SCALE_LABELS = {
+  1: 'Pouco verdadeiro para mim', 2: 'Raramente verdadeiro', 3: 'Parcialmente verdadeiro',
+  4: 'Bastante verdadeiro', 5: 'Muito verdadeiro para mim',
+};
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'arquetipos' });
 if (!__clientCtx) throw new Error('not authorized');
@@ -19,41 +23,18 @@ document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', 
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
-let currentStep = 0; // 0..5 = a section (ARCHETYPE_QUIZ_SECTIONS is 6 sections of 8)
-let showMissingWarning = false;
+const questions = await getArchetypeQuestions();
+const sections = [];
+questions.forEach((q) => {
+  const idx = q.section_index - 1;
+  if (!sections[idx]) sections[idx] = { index: q.section_index, questions: [] };
+  sections[idx].questions.push(q);
+});
 
-// Dev-only preview controls — no real auth/profile data yet to drive these
-// states naturally. Removable wholesale once that's connected; see
-// MockDB.devSimulateArchetype*/devSetArchetypeGender (mock-db.js).
-// Gated to non-production (local dev + demo/staging) — see isNonProduction in shared/environment.js.
-function renderDevPanel() {
-  if (!isNonProduction()) return '';
-  return `
-    <div class="dev-preview-panel max-w-2xl mx-auto">
-      <p class="text-xs uppercase tracking-[.12em] mb-3" style="color:var(--muted);">🧪 Controles da demonstração (dev, removível)</p>
-      <div class="flex flex-wrap gap-2">
-        <button type="button" data-dev="female" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Simular cliente feminina</button>
-        <button type="button" data-dev="male" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Simular cliente masculina</button>
-        <button type="button" data-dev="progress" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Simular teste em andamento</button>
-        <button type="button" data-dev="reset" class="btn-ghost" style="padding:6px 12px;font-size:11.5px;">Reiniciar teste</button>
-      </div>
-    </div>
-  `;
-}
-function wireDevPanel() {
-  content.querySelectorAll('[data-dev]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const action = btn.dataset.dev;
-      if (action === 'female') MockDB.devSetArchetypeGender(clientId, 'feminino');
-      if (action === 'male') MockDB.devSetArchetypeGender(clientId, 'masculino');
-      if (action === 'progress') MockDB.devSimulateArchetypeInProgress(clientId);
-      if (action === 'reset') MockDB.devResetArchetypeQuiz(clientId);
-      currentStep = 0;
-      toast('Estado da demonstração atualizado.');
-      render();
-    });
-  });
-}
+let currentStep = 0;
+let showMissingWarning = false;
+let attempt = null;
+let responses = new Map();
 
 function renderIntro() {
   content.innerHTML = `
@@ -75,19 +56,18 @@ function renderIntro() {
         <button type="button" id="start-quiz" class="btn-primary" style="padding:11px 24px;font-size:13px;">Começar</button>
       `)}
       <p class="text-xs text-white/20 mt-6 mb-10 text-center">Este teste é uma ferramenta de reflexão e direcionamento de marca pessoal. Ele não é uma avaliação psicológica ou diagnóstico clínico.</p>
-      ${renderDevPanel()}
     </div>
   `;
-  content.querySelector('#start-quiz').addEventListener('click', () => {
-    MockDB.getOrCreateActiveArchetypeAttempt(clientId);
+  content.querySelector('#start-quiz').addEventListener('click', async () => {
+    attempt = await getOrCreateActiveAttempt(clientId);
+    responses = await getAttemptResponses(attempt.id);
     currentStep = 0;
     render();
   });
-  wireDevPanel();
 }
 
-function statementFieldset(q, attempt) {
-  const answered = attempt.responses[q.number];
+function statementFieldset(q) {
+  const answered = responses.get(q.number);
   const isMissing = showMissingWarning && !answered;
   return `
     <fieldset class="mb-7" ${isMissing ? 'style="border-left:2px solid var(--terracotta); padding-left:14px; margin-left:-16px;"' : ''}>
@@ -105,22 +85,23 @@ function statementFieldset(q, attempt) {
   `;
 }
 
-function renderWizard(attempt) {
-  const section = ARCHETYPE_QUIZ_SECTIONS[currentStep];
-  const progress = MockDB.getArchetypeAttemptProgress(attempt);
-  const isLastSection = currentStep === ARCHETYPE_QUIZ_SECTIONS.length - 1;
+function renderWizard() {
+  const section = sections[currentStep];
+  const answeredCount = responses.size;
+  const pct = Math.round((answeredCount / questions.length) * 100);
+  const isLastSection = currentStep === sections.length - 1;
 
   content.innerHTML = `
     <div class="max-w-2xl mx-auto">
       <div class="flex items-center justify-between mb-2">
-        <p class="text-xs text-white/30">Etapa ${section.index} de ${ARCHETYPE_QUIZ_SECTIONS.length} · Salvo automaticamente</p>
-        <p class="text-xs text-white/30">${progress.pct}% concluído</p>
+        <p class="text-xs text-white/30">Etapa ${section.index} de ${sections.length} · Salvo automaticamente</p>
+        <p class="text-xs text-white/30">${pct}% concluído</p>
       </div>
-      <div class="progress-track mb-8"><div class="progress-fill" style="width:${progress.pct}%;"></div></div>
+      <div class="progress-track mb-8"><div class="progress-fill" style="width:${pct}%;"></div></div>
 
       ${card(`
         <form id="wizard-form">
-          ${section.questions.map((q) => statementFieldset(q, attempt)).join('')}
+          ${section.questions.map((q) => statementFieldset(q)).join('')}
         </form>
       `, 'mb-6')}
 
@@ -131,7 +112,7 @@ function renderWizard(attempt) {
       <div class="flex items-center justify-between">
         <button type="button" id="wiz-back" class="btn-ghost" ${currentStep === 0 ? 'disabled' : ''}>&larr; Voltar</button>
         <div class="flex items-center gap-2">
-          ${ARCHETYPE_QUIZ_SECTIONS.map((s, i) => `<button type="button" data-jump="${i}" aria-label="Ir para etapa ${s.index}" class="rounded-full" style="width:8px;height:8px;padding:0;border:none;cursor:pointer;background:${i === currentStep ? 'var(--terracotta)' : 'var(--line)'};"></button>`).join('')}
+          ${sections.map((s, i) => `<button type="button" data-jump="${i}" aria-label="Ir para etapa ${s.index}" class="rounded-full" style="width:8px;height:8px;padding:0;border:none;cursor:pointer;background:${i === currentStep ? 'var(--terracotta)' : 'var(--line)'};"></button>`).join('')}
         </div>
         <button type="button" id="wiz-next" class="btn-primary" style="padding:9px 20px;font-size:12.5px;">${isLastSection ? 'Concluir' : 'Próxima →'}</button>
       </div>
@@ -139,12 +120,16 @@ function renderWizard(attempt) {
   `;
 
   content.querySelectorAll('input[type="radio"]').forEach((input) => {
-    input.addEventListener('change', (e) => {
-      MockDB.saveArchetypeResponse(clientId, attempt.id, Number(e.target.dataset.question), Number(e.target.value));
+    input.addEventListener('change', async (e) => {
+      const qNumber = Number(e.target.dataset.question);
+      const score = Number(e.target.value);
+      responses.set(qNumber, score);
       // Full re-render on every answer, same autosave pattern used by every
       // other wizard in this app (see value-analysis.js) — radios have no
       // cursor position to preserve, so this never feels jumpy in practice.
       render();
+      try { await saveResponse(attempt.id, qNumber, score); }
+      catch { toast('Não foi possível salvar esta resposta agora.', { tone: 'error' }); }
     });
   });
 
@@ -154,14 +139,13 @@ function renderWizard(attempt) {
   content.querySelectorAll('[data-jump]').forEach((btn) => {
     btn.addEventListener('click', () => { currentStep = Number(btn.dataset.jump); showMissingWarning = false; render(); });
   });
-  content.querySelector('#wiz-next').addEventListener('click', () => {
+  content.querySelector('#wiz-next').addEventListener('click', async () => {
     if (!isLastSection) { currentStep++; showMissingWarning = false; render(); return; }
-    const result = MockDB.submitArchetypeQuiz(clientId, attempt.id);
+    const result = await submitAttempt(attempt.id, questions.length);
     if (!result.ok) {
       showMissingWarning = true;
-      // Jump to the first section containing a missing answer.
       const firstMissing = result.missing[0];
-      currentStep = ARCHETYPE_QUIZ_SECTIONS.findIndex((s) => s.questions.some((q) => q.number === firstMissing));
+      currentStep = sections.findIndex((s) => s.questions.some((q) => q.number === firstMissing));
       toast('Faltam algumas afirmações antes de concluir.', { tone: 'error' });
       render();
       return;
@@ -181,21 +165,24 @@ function renderConfirmation() {
   `;
 }
 
-function render() {
-  const quiz = MockDB.getClientArchetypeQuiz(clientId);
-  const latest = quiz.attempts[quiz.attempts.length - 1];
-
-  if (latest && latest.status === 'completed') {
-    // Already has a result — this page's job here is done; the results
-    // page is the one dedicated place to view it.
-    location.replace('arquetipos-resultado.html');
+async function render() {
+  if (!attempt) {
+    const latest = await getLatestAttempt(clientId);
+    if (latest && latest.status === 'completed') { location.replace('arquetipos-resultado.html'); return; }
+    if (latest && latest.status === 'in_progress') {
+      attempt = latest;
+      responses = await getAttemptResponses(attempt.id);
+      renderWizard();
+      return;
+    }
+    renderIntro();
     return;
   }
-  if (latest && latest.status === 'in_progress') {
-    renderWizard(latest);
-    return;
-  }
-  renderIntro();
+  renderWizard();
 }
 
-render();
+if (!questions.length) {
+  content.innerHTML = card('<p class="text-white/50">O Teste de Arquétipos ainda não está disponível.</p>');
+} else {
+  render();
+}

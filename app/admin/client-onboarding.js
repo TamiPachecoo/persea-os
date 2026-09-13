@@ -25,6 +25,7 @@ import { renderShell, card, toast, openModal, formatDateTime } from '../shared/u
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { loadValueAssessment } from '../shared/value-analysis-model.js';
 import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS, fmtBRL } from '../shared/value-analysis-schema.js';
+import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArchetypeResults } from '../shared/archetype-model.js';
 
 // Staff-side conversion of Business Survey / Brand Direction / Value
 // Analysis off MockDB (client-detail.js's MockDB.getBrandDirection/
@@ -302,6 +303,52 @@ async function publishValueDeliverable(e, assessmentId) {
   render();
 }
 
+// Archetypes + Quiz — staff view (both admin and assistant; the real
+// archetype_quiz_attempts/_responses RLS already grants both roles ALL
+// access — this only *reads*, matching item 8's "do not give assistant
+// permission to alter scoring unless clearly intended": no editing UI is
+// built on top of the real staff write access RLS already happens to
+// allow). Same shared/archetype-model.js the client pages use — one real
+// source of truth, result computed fresh here too, never stored/trusted.
+async function loadArchetypeState() {
+  const latest = await getLatestAttempt(clientId);
+  if (!latest) return { status: 'not_started' };
+  if (latest.status === 'in_progress') {
+    const [responses, questions] = await Promise.all([getAttemptResponses(latest.id), getArchetypeQuestions()]);
+    return { status: 'in_progress', answered: responses.size, total: questions.length };
+  }
+  const results = await loadArchetypeResults(clientId);
+  return { status: 'completed', results };
+}
+
+function archetypeCard(state) {
+  if (state.status === 'not_started') {
+    return card(`<p class="text-sm text-white/50 mb-1">Teste de Arquétipos</p><p class="text-xs" style="color:var(--muted);">Teste de Arquétipos ainda não iniciado.</p>`, 'mb-6');
+  }
+  if (state.status === 'in_progress') {
+    return card(`
+      <p class="text-sm text-white/50 mb-1">Teste de Arquétipos</p>
+      <p class="text-xs" style="color:var(--muted);">Em andamento — ${state.answered} de ${state.total} afirmações respondidas.</p>
+    `, 'mb-6');
+  }
+  const r = state.results;
+  return card(`
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Teste de Arquétipos</p>
+      <p class="text-xs" style="color:var(--gold);">Concluído em ${formatDateTime(r.completedAt)}</p>
+    </div>
+    ${r.hasTie ? `<p class="text-xs mb-3" style="color:var(--gold);">Há um empate na faixa de destaque.</p>` : ''}
+    <p class="text-xs text-white/30 mb-2">Arquétipos em destaque</p>
+    <div class="flex flex-wrap gap-2 mb-4">
+      ${r.featured.map((f) => `<span class="badge badge-completed">${f.name} — ${f.rawScore}/20 (${f.percentage}%)</span>`).join('')}
+    </div>
+    <p class="text-xs text-white/30 mb-2">Mapa completo</p>
+    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+      ${r.scores.map((s) => `<div class="flex items-center justify-between"><span class="text-white/60">#${s.rank} ${s.name}</span><span class="text-white/30 text-xs">${s.rawScore}/20 · ${s.percentage}%</span></div>`).join('')}
+    </div>
+  `, 'mb-6');
+}
+
 function openLinkModal(url, expiresAt) {
   const { el } = openModal({
     title: 'Link de cadastro',
@@ -454,10 +501,11 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
+    loadArchetypeState(),
   ]);
 
   const status = deriveClientStatus({
@@ -509,6 +557,7 @@ async function render() {
     </div>
     ${businessSurveyCard(surveyState)}
     ${brandDirectionCard(brandState)}
+    ${archetypeCard(archetypeState)}
     ${!isAssistant ? valueAnalysisCard(valueAssessment) : ''}
 
     ${dangerZoneCard()}
