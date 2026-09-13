@@ -446,7 +446,10 @@ async function programSummaryCard(client) {
     return card(`<p class="text-sm text-white/50 mb-1">Programa</p><p class="text-xs" style="color:var(--muted);">Programa ainda não configurado.</p>`, 'mb-6');
   }
   return card(`
-    <p class="text-sm text-white/50 mb-4">Programa</p>
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Programa</p>
+      ${!isAssistant ? `<a href="agenda.html?client=${clientId}" class="btn-ghost">Agendar encontro</a>` : ''}
+    </div>
     <div class="grid sm:grid-cols-2 gap-4 text-sm">
       <div><p class="text-xs text-white/30">Plano</p><p>${TIER_NAME[client.tier] || programDef.name}</p></div>
       <div><p class="text-xs text-white/30">Fase atual</p><p>Fase ${(client.phase_index || 0) + 1}</p></div>

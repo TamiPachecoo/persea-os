@@ -13,6 +13,17 @@ import {
 import { renderShell, card, formatDateTime, formatDate, toast, openModal, functionErrorMessage } from '../shared/ui.js';
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
+import { isProductionEnvironment } from '../shared/environment.js';
+
+// Real agenda_items status/type vocabulary — same enum the database itself
+// enforces (confirmed via a check constraint before writing this, not
+// assumed): status in (upcoming, completed, rescheduled, cancelled), type
+// in (class, individual_meeting, checkpoint, group_meeting, online_event,
+// admin_task, deadline, photo_review). Reusing AGENDA_TYPES/AGENDA_TYPE_LABEL/
+// AGENDA_STATUSES/AGENDA_STATUS_LABEL/ENCOUNTER_LABEL from mock-db.js below
+// is safe here — they're pure label/vocabulary constants already verified
+// to match the real enum and the real encounter_defs content, not MockDB
+// data or logic.
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
@@ -706,7 +717,416 @@ async function render() {
   });
 }
 
-render();
+// ============================================================================
+// PRODUCTION REAL AGENDA — Production Migration: Admin Agenda blocker fix.
+// Everything above this line is untouched demo/staging behavior (MockDB),
+// exactly as before — see shared/environment.js. This is a parallel,
+// self-contained real-data path rather than a data-provider threaded
+// through the functions above, so demo/staging can never be affected by a
+// bug in this new code, and vice versa. Reuses the environment-agnostic
+// pieces that were already real either way: getCalendarStatus/
+// loadGoogleEvents (google-calendar-status/-list-events — staff-identity-
+// scoped, never client data), monthGridDays/WEEKDAY_LABELS/dateKey/pad2/
+// formatTime/dateKeyForGoogleEvent/AGENDA_TYPE_ICON (pure date/UI math, no
+// MockDB dependency at all).
+//
+// google-calendar-create-event (real, already returns a real Meet link —
+// confirmed by reading its source, not assumed) is reused unchanged for
+// the optional "also create on Google Calendar" checkbox. There is
+// deliberately NO google-calendar-update-event or -delete-event function —
+// confirmed via list_edge_functions, not assumed — so editing or
+// cancelling a PERSEA item that has a linked Google event does NOT attempt
+// to touch Google at all; the UI discloses this rather than faking sync
+// (see realAgendaModal's warning banner).
+let realCalendarStatus = { connected: false };
+
+async function loadRealClients() {
+  const { data } = await supabase.from('clients').select('id, full_name').eq('is_demo', false).order('full_name');
+  return data || [];
+}
+async function loadRealEncounterDefs() {
+  const { data } = await supabase.from('encounter_defs').select('*').order('number');
+  return data || [];
+}
+async function loadRealAgendaItems() {
+  const { data } = await supabase.from('agenda_items').select('*').order('item_date');
+  return data || [];
+}
+async function loadRealAgendaItem(id) {
+  const { data } = await supabase.from('agenda_items').select('*').eq('id', id).maybeSingle();
+  return data;
+}
+
+function buildItemsByDayReal(items) {
+  const byDay = {};
+  items.forEach((it) => {
+    const key = dateKey(new Date(it.item_date));
+    (byDay[key] || (byDay[key] = [])).push({ id: it.id, date: it.item_date, title: it.title, type: it.type, status: it.status });
+  });
+  googleEvents.forEach((e) => {
+    const key = dateKeyForGoogleEvent(e);
+    (byDay[key] || (byDay[key] = [])).push({
+      id: e.id, source: 'google', title: e.summary, date: e.all_day ? `${e.start}T00:00:00` : e.start,
+      all_day: e.all_day, html_link: e.html_link, status: 'upcoming',
+    });
+  });
+  Object.values(byDay).forEach((arr) => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
+  return byDay;
+}
+
+function renderCalendarReal(itemsByDay) {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const days = monthGridDays(year, month);
+  const todayKey = dateKey(new Date());
+  const monthLabel = viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  return card(`
+    <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <button type="button" id="cal-prev" class="btn-ghost" style="padding:6px 12px;" aria-label="Mês anterior">‹</button>
+        <p class="text-lg font-serif capitalize" style="min-width:180px;">${monthLabel}</p>
+        <button type="button" id="cal-next" class="btn-ghost" style="padding:6px 12px;" aria-label="Próximo mês">›</button>
+      </div>
+      <button type="button" id="cal-today" class="btn-text">Hoje</button>
+    </div>
+    <div class="cal-grid">
+      ${WEEKDAY_LABELS.map((l) => `<div class="cal-weekday">${l}</div>`).join('')}
+      ${days.map((d) => {
+        const key = dateKey(d);
+        const inMonth = d.getMonth() === month;
+        const items = itemsByDay[key] || [];
+        const visible = items.slice(0, MAX_CHIPS_PER_DAY);
+        const extra = items.length - visible.length;
+        return `
+          <div class="cal-cell ${inMonth ? '' : 'cal-cell-other-month'} ${key === todayKey ? 'cal-cell-today' : ''}" data-cal-day="${key}">
+            <p class="cal-day-num">${d.getDate()}</p>
+            <div class="cal-chips">
+              ${visible.map(calChip).join('')}
+              ${extra > 0 ? `<button type="button" data-cal-more="${key}" class="cal-more">+${extra} mais</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `, 'mb-8');
+}
+
+function renderPendenciasStripReal(items) {
+  const now = new Date();
+  const overdue = items.filter((it) => it.status === 'upcoming' && new Date(it.item_date) < now);
+  if (!overdue.length) return '';
+  return card(`
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm" style="color:var(--terracotta);">⚠ Pendências <span style="color:var(--muted);">(data já passou)</span></p>
+      <span class="text-xs" style="color:var(--muted);">${overdue.length}</span>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      ${overdue.map((it) => `
+        <button type="button" data-agenda-item="${it.id}" class="btn-ghost" style="padding:6px 12px; font-size:12px;">${AGENDA_TYPE_ICON[it.type] || ''} ${it.title} · ${formatDateTime(it.item_date)}</button>
+      `).join('')}
+    </div>
+  `, 'mb-6');
+}
+
+function openDayListModalReal(key, itemsByDay) {
+  const items = itemsByDay[key] || [];
+  const [y, m, d] = key.split('-').map(Number);
+  const label = new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const { el, close } = openModal({
+    title: label,
+    bodyHtml: `
+      <div class="divide-y" style="border-color:var(--line);">
+        ${items.map((it) => it.source === 'google' ? `
+          <a href="${it.html_link || '#'}" target="_blank" rel="noopener" class="w-full text-left flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors" style="display:flex;">
+            <div>
+              <p class="text-sm">📅 ${it.title}</p>
+              <p class="text-xs mt-0.5 text-white/30">${it.all_day ? 'Dia inteiro' : formatDateTime(it.date)} · Google Calendar</p>
+            </div>
+          </a>
+        ` : `
+          <button type="button" data-agenda-item="${it.id}" class="w-full text-left flex items-center justify-between py-2.5 hover:bg-white/5 -mx-1 px-1 rounded transition-colors">
+            <div>
+              <p class="text-sm">${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}</p>
+              <p class="text-xs mt-0.5 text-white/30">${formatDateTime(it.date)}</p>
+            </div>
+            ${it.status !== 'upcoming' ? `<span class="badge badge-locked">${AGENDA_STATUS_LABEL[it.status]}</span>` : ''}
+          </button>
+        `).join('')}
+      </div>
+      <div class="flex justify-end pt-4">
+        <button type="button" id="day-modal-new" class="btn-ghost">+ Novo Encontro Neste Dia</button>
+      </div>
+    `,
+  });
+  el.querySelectorAll('[data-agenda-item]').forEach((btn) => {
+    btn.addEventListener('click', () => { close(); openAgendaModalReal(btn.dataset.agendaItem); });
+  });
+  el.querySelector('#day-modal-new').addEventListener('click', () => { close(); openQuickScheduleModalReal(key); });
+}
+
+// Real "Novo encontro" — client selector excludes demo clients entirely
+// (is_demo=false), optional real Encontro (E1-E8) prefill from
+// encounter_defs (a convenience prefill of the title only — not a foreign
+// key/hard link, since agenda_items has no encounter_number column and
+// inventing one is out of scope for this fix; title/type is the documented
+// acceptable simplification for first-client launch). Google Calendar
+// creation reuses the exact same real function the demo path already
+// calls — never a second integration.
+async function openQuickScheduleModalReal(defaultDateKey, presetClientId) {
+  const [clients, encounterDefs] = await Promise.all([loadRealClients(), loadRealEncounterDefs()]);
+  const dateValue = defaultDateKey ? `${defaultDateKey}T09:00` : '';
+
+  const { el, close } = openModal({
+    title: 'Novo Encontro',
+    bodyHtml: `
+      <form id="quick-schedule-form-real" class="space-y-4">
+        ${!clients.length ? '<p class="text-xs" style="color:var(--terracotta);">Nenhuma cliente real cadastrada ainda — crie uma cliente pelo CRM primeiro, ou agende um evento geral sem cliente.</p>' : ''}
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Cliente</label>
+          <select id="qsr-client" name="clientId" class="field">
+            <option value="">— Evento geral (sem cliente) —</option>
+            ${clients.map((c) => `<option value="${c.id}" ${presetClientId === c.id ? 'selected' : ''}>${c.full_name}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Encontro (opcional — preenche o assunto)</label>
+          <select id="qsr-encounter" class="field">
+            <option value="">— Assunto livre —</option>
+            ${encounterDefs.map((e) => `<option value="E${e.number} — ${e.name}">E${e.number} — ${e.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Assunto</label>
+            <input id="qsr-title" name="title" class="field" required />
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Tipo</label>
+            <select name="type" class="field">
+              ${AGENDA_TYPES.map((t) => `<option value="${t}" ${t === 'individual_meeting' ? 'selected' : ''}>${AGENDA_TYPE_LABEL[t]}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Data e Hora</label>
+            <input type="datetime-local" name="date" class="field" value="${dateValue}" required />
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Duração (minutos)</label>
+            <input type="number" name="duration" class="field" value="60" min="15" step="5" />
+          </div>
+        </div>
+        ${realCalendarStatus.connected ? `
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="syncGoogle" checked /> Também criar no Google Calendar (com link do Meet)
+          </label>
+        ` : `<p class="text-xs" style="color:var(--muted);">Conecte o Google Calendar para gerar o link do Meet automaticamente, ou adicione o link manualmente abaixo.</p>`}
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link da Reunião <span class="text-white/20">(preenchido automaticamente se criar no Google acima)</span></label>
+          <input name="onlineLink" class="field" placeholder="https://..." />
+        </div>
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Agendar</button>
+        </div>
+      </form>
+    `,
+  });
+
+  el.querySelector('#qsr-encounter').addEventListener('change', (e) => {
+    if (e.target.value) el.querySelector('#qsr-title').value = e.target.value;
+  });
+
+  el.querySelector('#quick-schedule-form-real').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Agendando…';
+    const fd = new FormData(e.target);
+    const title = (fd.get('title') || '').trim();
+    const date = fd.get('date');
+    const durationMinutes = Number(fd.get('duration')) || 60;
+    if (!title || !date) { toast('Preencha o assunto e a data.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Agendar'; return; }
+
+    const startIso = new Date(date).toISOString();
+    const insertPayload = {
+      title, type: fd.get('type'), item_date: startIso, status: 'upcoming',
+      related_student_id: fd.get('clientId') || null, duration_minutes: durationMinutes,
+      online_link: (fd.get('onlineLink') || '').trim() || null,
+    };
+    const { data: created, error: insertErr } = await supabase.from('agenda_items').insert(insertPayload).select().single();
+    if (insertErr) { toast('Não foi possível agendar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Agendar'; return; }
+
+    if (fd.get('syncGoogle') && realCalendarStatus.connected) {
+      const endIso = new Date(new Date(date).getTime() + durationMinutes * 60 * 1000).toISOString();
+      const { data, error } = await supabase.functions.invoke('google-calendar-create-event', { body: { summary: title, start: startIso, end: endIso } });
+      if (error || data?.error) {
+        toast(`Encontro agendado — mas não foi possível criar no Google Calendar: ${data?.error || error.message}`, { tone: 'error' });
+      } else {
+        await supabase.from('agenda_items').update({ google_event_id: data.event_id, online_link: data.meet_url || insertPayload.online_link }).eq('id', created.id);
+        toast('Encontro agendado — criado também no Google Calendar, com link do Meet.');
+      }
+    } else {
+      toast('Encontro agendado.');
+    }
+    close();
+    renderProductionAgenda();
+  });
+}
+
+async function openAgendaModalReal(itemId) {
+  const item = await loadRealAgendaItem(itemId);
+  if (!item) { toast('Não foi possível carregar este item.', { tone: 'error' }); return; }
+  const clients = await loadRealClients();
+
+  const { el, close } = openModal({
+    title: 'Editar Encontro',
+    bodyHtml: `
+      ${item.google_event_id ? `<p class="text-xs mb-4" style="color:var(--muted);">Este encontro tem um evento vinculado no Google Calendar. Alterações aqui (data, título, cancelamento) não são sincronizadas automaticamente de volta ao Google — ajuste lá manualmente se necessário.</p>` : ''}
+      <form id="agenda-form-real" class="space-y-4">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Título</label>
+            <input name="title" class="field" value="${item.title || ''}" required />
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Tipo</label>
+            <select name="type" class="field">
+              ${AGENDA_TYPES.map((t) => `<option value="${t}" ${item.type === t ? 'selected' : ''}>${AGENDA_TYPE_LABEL[t]}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Data e Hora</label>
+            <input name="date" type="datetime-local" class="field" value="${(item.item_date || '').slice(0, 16)}" required />
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Status</label>
+            <select name="status" class="field">
+              ${AGENDA_STATUSES.map((s) => `<option value="${s}" ${item.status === s ? 'selected' : ''}>${AGENDA_STATUS_LABEL[s]}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Cliente Relacionada <span class="text-white/20">(ela verá isso em Encontros)</span></label>
+          <select name="relatedStudentId" class="field">
+            <option value="">— Nenhuma —</option>
+            ${clients.map((c) => `<option value="${c.id}" ${item.related_student_id === c.id ? 'selected' : ''}>${c.full_name}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <input name="topic" class="field" value="${item.topic || ''}" />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <input name="onlineLink" class="field" value="${item.online_link || ''}" placeholder="https://..." />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Notas de Preparação <span class="text-white/20">(interno)</span></label>
+          <textarea name="prepNotes" rows="2" class="field">${item.prep_notes || ''}</textarea>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Notas Gerais / da Reunião <span class="text-white/20">(interno)</span></label>
+          <textarea name="generalNotes" rows="2" class="field">${item.general_notes || ''}</textarea>
+        </div>
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar Alterações</button>
+        </div>
+      </form>
+    `,
+  });
+
+  el.querySelector('#agenda-form-real').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Salvando…';
+    const fd = new FormData(e.target);
+    const payload = {
+      title: fd.get('title'), type: fd.get('type'), item_date: new Date(fd.get('date')).toISOString(), status: fd.get('status'),
+      related_student_id: fd.get('relatedStudentId') || null, topic: fd.get('topic') || null,
+      online_link: (fd.get('onlineLink') || '').trim() || null,
+      prep_notes: fd.get('prepNotes') || null, general_notes: fd.get('generalNotes') || null,
+    };
+    const { error } = await supabase.from('agenda_items').update(payload).eq('id', itemId);
+    if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar Alterações'; return; }
+    close();
+    toast('Alterações salvas.');
+    renderProductionAgenda();
+  });
+}
+
+async function renderProductionAgenda() {
+  const calendarStatus = await getCalendarStatus();
+  realCalendarStatus = calendarStatus;
+  calendarConnected = calendarStatus.connected;
+  googleEvents = await loadGoogleEvents();
+  const items = await loadRealAgendaItems();
+  const itemsByDay = buildItemsByDayReal(items);
+
+  content.innerHTML = `
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
+      <div>
+        <p class="text-white/40 text-sm mb-1">Agenda</p>
+        <h1 class="text-3xl font-serif">Sua Agenda</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" id="new-agenda-item-real" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Encontro</button>
+        <a href="recordings.html" class="btn-ghost">Gravações e Transcrições →</a>
+      </div>
+    </div>
+    ${renderGoogleCalendarCard(calendarStatus)}
+    ${renderPendenciasStripReal(items)}
+    ${renderCalendarReal(itemsByDay)}
+  `;
+
+  content.querySelector('#connect-google-calendar')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Conectando...';
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth-start');
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Connect Google Calendar'; return; }
+    window.location.href = data.url;
+  });
+  content.querySelector('#reconnect-google-calendar')?.addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Reconectando...';
+    const { data: discData, error: discErr } = await supabase.functions.invoke('google-calendar-disconnect');
+    if (discErr || discData?.error) { toast(discData?.error || discErr.message, { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Reconectar Google'; return; }
+    const { data, error } = await supabase.functions.invoke('google-calendar-auth-start');
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Reconectar Google'; return; }
+    window.location.href = data.url;
+  });
+
+  content.querySelector('#new-agenda-item-real').addEventListener('click', () => openQuickScheduleModalReal(dateKey(new Date())));
+  content.querySelector('#cal-prev').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() - 1); renderProductionAgenda(); });
+  content.querySelector('#cal-next').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() + 1); renderProductionAgenda(); });
+  content.querySelector('#cal-today').addEventListener('click', () => { viewDate = new Date(); viewDate.setDate(1); viewDate.setHours(0, 0, 0, 0); renderProductionAgenda(); });
+  content.querySelectorAll('[data-cal-day]').forEach((cell) => {
+    cell.addEventListener('click', (e) => {
+      if (e.target.closest('[data-agenda-item]') || e.target.closest('[data-cal-more]') || e.target.closest('[data-google-event]')) return;
+      openQuickScheduleModalReal(cell.dataset.calDay);
+    });
+  });
+  content.querySelectorAll('[data-cal-more]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openDayListModalReal(btn.dataset.calMore, itemsByDay); });
+  });
+  content.querySelectorAll('[data-agenda-item]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openAgendaModalReal(btn.dataset.agendaItem); });
+  });
+}
+
+if (isProductionEnvironment()) {
+  renderProductionAgenda();
+  // Real client workspace shortcut (admin/client-onboarding.html's
+  // "Agendar encontro" button) — a link with ?client=<uuid>, not a second
+  // meeting-creation UI. Pre-opens the same real modal with that client
+  // already selected.
+  const presetClient = new URLSearchParams(location.search).get('client');
+  if (presetClient) openQuickScheduleModalReal(dateKey(new Date()), presetClient);
+} else {
+  render();
+}
 
 // google-calendar-callback redirects back here with ?calendar=connected|
 // denied|error(&reason=...) — surface it once, then scrub the URL so a
@@ -726,7 +1146,10 @@ if (calendarParam) {
   history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
 }
 
-// Deep-link from the Painel's exceptions card ("agenda.html?item=<id>") —
-// jump straight into that item's edit modal instead of making her hunt for it.
+// Deep-link ("agenda.html?item=<id>") — jump straight into that item's edit
+// modal instead of making her hunt for it.
 const deepLinkItemId = new URLSearchParams(location.search).get('item');
-if (deepLinkItemId) openAgendaModal(deepLinkItemId);
+if (deepLinkItemId) {
+  if (isProductionEnvironment()) openAgendaModalReal(deepLinkItemId);
+  else openAgendaModal(deepLinkItemId);
+}
