@@ -21,8 +21,11 @@
 // readable by both roles).
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
-import { renderShell, card, toast, openModal, formatDateTime } from '../shared/ui.js';
+import {
+  renderShell, card, toast, openModal, formatDateTime, formatDate, brl, isValidHttpUrl, externalLinkAttrs, functionErrorMessage,
+} from '../shared/ui.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
+import { loadActiveObligations } from '../shared/financial-model.js';
 import { loadValueAssessment } from '../shared/value-analysis-model.js';
 import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS, fmtBRL } from '../shared/value-analysis-schema.js';
 import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArchetypeResults } from '../shared/archetype-model.js';
@@ -610,6 +613,81 @@ function nextActionCard(nextAction) {
   `, 'mb-6');
 }
 
+// Financeiro — real E2E test found: a signed contract's payment obligations
+// (contract_payment_lines, via the same loadActiveObligations already used
+// by admin/financial.js and client/financial.js — never a second formula)
+// had no operational payment/checkout attached to them anywhere staff could
+// act on. This is that missing generation step, on the one workspace both
+// admin and assistant already share for a real client. Reuses
+// sumup-create-checkout (already real, already idempotent, already
+// derives the amount/client server-side from the payment line itself —
+// see that function's own header) and sumup-verify (the existing manual
+// reconciliation path) — no new payment infrastructure.
+const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito' };
+
+async function loadFinanceiro(contract) {
+  if (!contract) return null;
+  const [{ lines, error }, { data: payments }] = await Promise.all([
+    loadActiveObligations({ contractId: contract.id }),
+    supabase.from('payments').select('*').eq('client_id', clientId).order('created_at', { ascending: false }),
+  ]);
+  if (error) return { error };
+  // Newest payment per line wins — payments already ordered newest-first,
+  // so the first write for a given line is the current/most relevant one
+  // (a terminal failed/expired one is superseded by whatever comes next).
+  const paymentByLine = new Map();
+  (payments || []).forEach((p) => {
+    if (p.intended_payment_line_id && !paymentByLine.has(p.intended_payment_line_id)) paymentByLine.set(p.intended_payment_line_id, p);
+  });
+  return { lines: (lines || []).slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)), paymentByLine };
+}
+
+function financeiroLineRow(line, payment) {
+  const methodLabel = FIN_METHOD_LABEL[line.method] || line.method || 'A combinar';
+  const isPaid = line.effective_status === 'paid';
+  // A payment row's own status only ever drives the "link already
+  // generated, here's how to share/check it" controls below — whether the
+  // line itself is paid always comes from the ledger (effective_status,
+  // i.e. payment_allocations against confirmed payments), never guessed
+  // from a payment row alone.
+  const activePayment = !isPaid && payment && payment.status === 'pending' && isValidHttpUrl(payment.sumup_link_url) ? payment : null;
+  let actionHtml;
+  if (isPaid) {
+    actionHtml = `<span class="badge badge-completed">Pago${payment?.status === 'paid' && payment.paid_at ? ` em ${formatDate(payment.paid_at)}` : ''}</span>`;
+  } else if (activePayment) {
+    actionHtml = `
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class="badge badge-progress">Link gerado</span>
+        <a ${externalLinkAttrs(activePayment.sumup_link_url)} class="btn-ghost">Abrir link</a>
+        <button type="button" data-copy-link="${activePayment.sumup_link_url}" class="btn-ghost">Copiar link</button>
+        <button type="button" data-verify-payment="${activePayment.id}" class="btn-text">Verificar pagamento</button>
+      </div>`;
+  } else {
+    actionHtml = `<button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>`;
+  }
+  return `
+    <div class="py-4 border-b border-white/5 last:border-0">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''} · ${methodLabel}</p>
+          <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
+        </div>
+        ${actionHtml}
+      </div>
+    </div>
+  `;
+}
+
+function financeiroCard(finState) {
+  if (!finState) return '';
+  if (finState.error) return card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar o financeiro agora.</p>', 'mb-6');
+  const { lines, paymentByLine } = finState;
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Financeiro</p>
+    ${lines.length ? lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id))).join('') : '<p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>'}
+  `, 'mb-6');
+}
+
 // Admin-only, matching delete-client's own role check — this is more
 // destructive than anything else on this page (real login, contrato,
 // pagamentos, cadastro, tudo) so it gets a tighter bar than the
@@ -666,13 +744,14 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml, finState] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
     loadArchetypeState(),
     loadPlaybookState(),
     programSummaryCard(client),
+    loadFinanceiro(contract),
   ]);
 
   const status = deriveClientStatus({
@@ -719,6 +798,8 @@ async function render() {
       </div>
     `, 'mb-6') : ''}
 
+    ${financeiroCard(finState)}
+
     <div class="mb-4 mt-2">
       <p class="eyebrow">Trabalho da Cliente</p>
     </div>
@@ -740,6 +821,34 @@ async function render() {
   content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);
   content.querySelector('#value-publish-form')?.addEventListener('submit', (e) => publishValueDeliverable(e, valueAssessment.id));
   content.querySelector('#create-draft')?.addEventListener('click', createPlaybookDraft);
+  content.querySelectorAll('[data-generate-checkout]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const original = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Gerando…';
+      const { data, error } = await supabase.functions.invoke('sumup-create-checkout', {
+        body: { payment_line_id: btn.dataset.generateCheckout, use_outstanding_balance: true },
+      });
+      if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); btn.disabled = false; btn.textContent = original; return; }
+      toast(data.mock ? 'Link gerado (ambiente de teste — cliente demo).' : data.reused ? 'Já existia um link ativo para esta parcela — reaproveitado.' : 'Link de pagamento gerado.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-copy-link]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copyLink); toast('Link copiado.'); }
+      catch { toast('Não foi possível copiar automaticamente. Selecione o link manualmente.', { tone: 'error' }); }
+    });
+  });
+  content.querySelectorAll('[data-verify-payment]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const original = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Verificando…';
+      const { data, error } = await supabase.functions.invoke('sumup-verify', { body: { payment_id: btn.dataset.verifyPayment } });
+      if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); btn.disabled = false; btn.textContent = original; return; }
+      toast(data.status === 'paid' ? 'Pagamento confirmado — obrigado!' : `Ainda não confirmado (status: ${data.status}).`);
+      render();
+    });
+  });
   if (playbookState.active && playbookState.active.status === 'draft') {
     content.querySelectorAll('#playbook-form textarea').forEach((textarea) => {
       textarea.addEventListener('blur', () => saveSectionField(playbookState.active.id, textarea.name, textarea));
