@@ -142,6 +142,67 @@ function clientNav() {
   ];
 }
 
+// Real mobile E2E test found: below md (768px) the desktop nav above just
+// vanishes (`hidden md:flex`) with nothing replacing it — no persistent
+// nav at all on a phone. This is the client-only replacement: a fixed
+// bottom tab bar for the four routes she actually needs at a glance
+// (Início doubles as the Program Hub — no separate "Programa" entry, since
+// that would be the exact same destination), plus a "Mais" sheet for
+// everything else. Secondary routes below are real, already-shipped client
+// pages (client-onboarding.js's own workspace links here for the exact
+// same routes) — this is a navigation convenience, not a new access
+// boundary: each destination still enforces its own real
+// program_activity_access/RLS gating the moment it loads (see
+// shared/program-model.js), exactly as clicking through from the Program
+// Hub already does today. Content/labels only — see mobile-tab-bar in
+// theme.css for the fixed-position/safe-area handling.
+const MOBILE_TAB_ITEMS = [
+  ['program.html', 'Início', '🏠'],
+  ['encontros.html', 'Encontros', '📅'],
+  ['financial.html', 'Financeiro', '💳'],
+];
+const MOBILE_MAIS_ROUTES = [
+  ['content.html', 'Conteúdos'],
+  ['questionnaire.html', 'Extração de Marca'],
+  ['arquetipos.html', 'Arquétipos'],
+  ['business-survey.html', 'Negócios'],
+  ['playbook.html', 'Playbook'],
+  ['activity-guide.html', 'Guia de Atividades'],
+];
+
+function mobileClientNav(active, dir) {
+  const maisActive = MOBILE_MAIS_ROUTES.some(([href]) => href === active);
+  const tabsHtml = MOBILE_TAB_ITEMS.map(([href, label, icon]) => `
+    <a href="${dir}${href}" class="mobile-tab-link ${active === href ? 'active' : ''}">
+      <span class="mobile-tab-icon" aria-hidden="true">${icon}</span>
+      <span>${label}</span>
+    </a>
+  `).join('');
+  const sheetLinksHtml = MOBILE_MAIS_ROUTES.map(([href, label]) => `
+    <a href="${dir}${href}" class="mobile-nav-panel-link ${active === href ? 'active' : ''}">${label}</a>
+  `).join('');
+  return `
+    <nav class="mobile-tab-bar" aria-label="Navegação principal">
+      ${tabsHtml}
+      <button type="button" data-mobile-nav-toggle class="mobile-tab-link ${maisActive ? 'active' : ''}" aria-haspopup="true" aria-controls="mobile-nav-sheet">
+        <span class="mobile-tab-icon" aria-hidden="true">☰</span>
+        <span>Mais</span>
+      </button>
+    </nav>
+    <div class="mobile-nav-sheet" id="mobile-nav-sheet">
+      <div class="mobile-nav-scrim" data-mobile-nav-scrim></div>
+      <div class="mobile-nav-panel" role="dialog" aria-modal="true" aria-label="Mais opções">
+        <div class="mobile-nav-panel-header">
+          <span class="mobile-nav-panel-title">Mais</span>
+          <button type="button" data-mobile-nav-close class="btn-text">Fechar</button>
+        </div>
+        ${sheetLinksHtml}
+        <a href="/index.html" class="mobile-nav-panel-link mobile-logout-link">Sair</a>
+      </div>
+    </div>
+  `;
+}
+
 // The one onboarding-completion prompt, shown at the top of every
 // client-facing page's content (see renderShell) whenever the signed
 // contract isn't archived yet — Seu Programa/Conteúdos themselves also hard
@@ -281,7 +342,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
           </div>
         </div>
       </header>
-      <main class="max-w-6xl mx-auto px-6 py-12">
+      <main class="max-w-6xl mx-auto px-6 py-12 ${role === 'client' ? 'has-mobile-tab-bar' : ''}">
         ${role === 'client' ? onboardingGateBanner(active) : ''}
         ${title ? `
           <div class="mb-10">
@@ -291,6 +352,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
         ` : ''}
         <div id="app-content"></div>
       </main>
+      ${role === 'client' ? mobileClientNav(active, dir) : ''}
     </div>
   `;
 }
@@ -309,10 +371,29 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
 // client session — supabase.auth.signOut() is a harmless no-op when
 // there's no real session to clear.
 document.addEventListener('click', (e) => {
-  const link = e.target.closest('#logout-link');
+  const link = e.target.closest('#logout-link, .mobile-logout-link');
   if (!link) return;
   e.preventDefault();
   signOut().finally(() => { location.href = link.href; });
+});
+
+// Same delegated-on-`document` reasoning as #logout-link above: the
+// mobile "Mais" sheet's markup (mobileClientNav) doesn't exist in the DOM
+// until renderShell's returned string is inserted, so every client page
+// gets this open/close wiring for free just by importing ui.js — no
+// per-page init call needed (unlike initClientSwitcher, which stays
+// opt-in since it's demo-only). Toggling `.open` (not display) is what
+// lets the CSS slide-up transition in theme.css actually animate.
+document.addEventListener('click', (e) => {
+  const sheet = document.getElementById('mobile-nav-sheet');
+  if (!sheet) return;
+  if (e.target.closest('[data-mobile-nav-toggle]')) { sheet.classList.add('open'); return; }
+  if (e.target.closest('[data-mobile-nav-close]') || e.target.closest('[data-mobile-nav-scrim]')) { sheet.classList.remove('open'); return; }
+  // Picking a destination (or Sair, handled by the listener above) should
+  // also close the sheet — otherwise it's still open underneath after the
+  // page navigates away, visible for one frame on the next page's first
+  // paint (a fixed-position element, so it would survive naive re-renders).
+  if (e.target.closest('.mobile-nav-panel-link')) sheet.classList.remove('open');
 });
 
 // Every Edge Function call in this app follows the same `{ data, error } =

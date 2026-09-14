@@ -108,15 +108,15 @@ function meetingCard(it, recordingByAgendaId, driveArtifacts) {
   const linkOk = it.status === 'upcoming' && isValidHttpUrl(it.online_link);
   const meetingShape = recordingShapeFor(it, recordingByAgendaId.get(it.id), driveArtifacts);
   return card(`
-    <div class="flex items-start justify-between gap-4 mb-2">
-      <div>
+    <div class="flex items-start justify-between flex-wrap gap-2 mb-2">
+      <div class="min-w-0">
         <p class="text-xs" style="color:var(--terracotta);">${AGENDA_TYPE_ICON[it.type] || ''} ${AGENDA_TYPE_LABEL[it.type] || it.type}</p>
-        <p class="text-lg font-serif mt-1">${it.title}</p>
+        <p class="text-lg font-serif mt-1 break-words">${it.title}</p>
       </div>
-      <span class="badge ${AGENDA_STATUS_BADGE[it.status] || 'badge-locked'}">${AGENDA_STATUS_LABEL[it.status] || it.status}</span>
+      <span class="badge ${AGENDA_STATUS_BADGE[it.status] || 'badge-locked'} shrink-0">${AGENDA_STATUS_LABEL[it.status] || it.status}</span>
     </div>
     <p class="text-sm text-white/40 mb-1">${formatDateTime(it.item_date)}</p>
-    ${it.topic ? `<p class="text-sm text-white/50 mb-4 max-w-xl">${it.topic}</p>` : '<div class="mb-4"></div>'}
+    ${it.topic ? `<p class="text-sm text-white/50 mb-4 max-w-xl break-words">${it.topic}</p>` : '<div class="mb-4"></div>'}
     ${linkOk ? `<a ${externalLinkAttrs(it.online_link)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Entrar na Reunião ↗</a>` : ''}
     ${meetingShape.recording ? `<div class="mt-4 pt-4" style="border-top:1px solid var(--line);">${renderClientRecordingBlock(meetingShape)}</div>` : ''}
   `, 'mb-5');
@@ -132,7 +132,7 @@ async function renderMeetingRequestCard() {
   const requests = await loadMeetingRequests();
 
   mount.innerHTML = card(`
-    <div class="flex items-center justify-between mb-1">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
       <p class="text-sm text-white/50">Precisa tirar uma dúvida?</p>
       ${!showRequestForm ? `<button id="toggle-request" class="btn-ghost">Solicitar Reunião</button>` : ''}
     </div>
@@ -151,12 +151,12 @@ async function renderMeetingRequestCard() {
           const [label, badgeClass] = MEETING_STATUS_LABEL[r.status] || ['—', 'badge-locked'];
           const who = r.assigned_to === 'nay' ? ' · com a Nay' : r.assigned_to === 'assistant' ? ' · com a assistente' : '';
           return `
-            <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-              <div>
-                <p class="text-sm">${r.reason}</p>
+            <div class="flex items-center justify-between flex-wrap gap-2 py-2 border-b border-white/5 last:border-0">
+              <div class="min-w-0">
+                <p class="text-sm break-words">${r.reason}</p>
                 <p class="text-xs" style="color:var(--muted);">${formatDate(r.created_at)}${who}</p>
               </div>
-              <span class="badge ${badgeClass}">${label}</span>
+              <span class="badge ${badgeClass} shrink-0">${label}</span>
             </div>
           `;
         }).join('')}

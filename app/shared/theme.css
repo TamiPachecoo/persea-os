@@ -114,6 +114,13 @@ body{
   border-bottom:1px solid var(--line);
   position:sticky; top:0; z-index:40;
   background:rgba(12,10,9,.86); backdrop-filter:blur(10px);
+  /* client/*.html just gained viewport-fit=cover (needed for the bottom
+     tab bar's own env(safe-area-inset-bottom) below to resolve to a real
+     value on iPhones instead of 0) — that same meta tag also lets content
+     draw under the top notch/status bar in an installed iOS PWA, which it
+     couldn't before. Resolves to 0px everywhere viewport-fit=cover isn't
+     set (every non-client page, unaffected), so this is a no-op there. */
+  padding-top:env(safe-area-inset-top, 0px);
 }
 .brand-mark{
   font-family:'Playfair Display',serif; font-style:italic; font-weight:600;
@@ -126,6 +133,80 @@ body{
 }
 .nav-link:hover{ color:var(--cream); background:rgba(242,236,224,.04); }
 .nav-link.active{ color:var(--cream); background:rgba(184,134,58,.16); }
+
+/* Mobile client tab bar — real E2E test found the desktop nav (above)
+   simply disappears below md (768px, matches the Tailwind CDN breakpoint
+   already loaded on every page) with no replacement at all: `hidden
+   md:flex` hides it, and nothing else was ever added underneath. Client-
+   role only (see renderShell in ui.js) — admin/assistant desktop chrome is
+   completely untouched, this block never applies there. Sits below
+   .modal-backdrop's z-index:90 on purpose — an open modal already covers
+   the full viewport, so it visually (and correctly, per keyboard/focus
+   order) sits above this bar with no extra JS needed to "hide" it. */
+.mobile-tab-bar{
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  display:flex; align-items:stretch; justify-content:space-around;
+  background:rgba(12,10,9,.92); backdrop-filter:blur(10px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom, 0px);
+}
+.mobile-tab-link{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; padding:8px 4px 10px; min-height:56px; color:var(--muted);
+  font-size:10.5px; font-weight:500; letter-spacing:.02em; text-decoration:none;
+  background:none; border:none; font-family:inherit; cursor:pointer;
+}
+.mobile-tab-link .mobile-tab-icon{ font-size:19px; line-height:1; }
+.mobile-tab-link.active{ color:var(--gold); }
+
+/* Content needs enough bottom clearance that the fixed bar above never
+   covers the last card/button/form field. .has-mobile-tab-bar is added to
+   <main> by renderShell only for role:'client' (see ui.js) — the padding
+   itself only actually applies below the same breakpoint the tab bar
+   appears at, so desktop/tablet layout for those same pages is untouched. */
+@media (max-width:767px){
+  main.has-mobile-tab-bar{ padding-bottom:calc(84px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* "Mais" sheet — the compact drawer for secondary client routes. Hidden by
+   default (translated fully off-screen, not display:none, so the slide
+   transition has something to animate); .open is toggled by the single
+   delegated document click-listener in ui.js, the same pattern already
+   used for #logout-link, so every page that imports ui.js gets this for
+   free with no per-page wiring. Sits above the tab bar (z-index:41) but
+   below .modal-backdrop (90), matching the tab bar's own reasoning. */
+.mobile-nav-sheet{ position:fixed; inset:0; z-index:41; visibility:hidden; }
+.mobile-nav-sheet.open{ visibility:visible; }
+.mobile-nav-scrim{
+  position:absolute; inset:0; background:rgba(12,10,9,.6);
+  opacity:0; transition:opacity .2s ease;
+}
+.mobile-nav-sheet.open .mobile-nav-scrim{ opacity:1; }
+.mobile-nav-panel{
+  position:absolute; left:0; right:0; bottom:0;
+  background:var(--card); border-top:1px solid var(--line); border-radius:14px 14px 0 0;
+  padding:8px 8px calc(14px + env(safe-area-inset-bottom, 0px));
+  transform:translateY(100%); transition:transform .25s cubic-bezier(.22,1,.36,1);
+  max-height:80vh; overflow-y:auto;
+}
+.mobile-nav-sheet.open .mobile-nav-panel{ transform:translateY(0); }
+.mobile-nav-panel-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px 12px;
+}
+.mobile-nav-panel-title{
+  font-family:'Playfair Display',serif; font-style:italic; font-weight:600;
+  font-size:15px; color:var(--cream);
+}
+.mobile-nav-panel-link{
+  display:block; padding:13px 14px; border-radius:6px; font-size:14.5px;
+  color:var(--muted); text-decoration:none;
+}
+.mobile-nav-panel-link:hover, .mobile-nav-panel-link:active{ background:rgba(242,236,224,.04); color:var(--cream); }
+.mobile-nav-panel-link.active{ color:var(--gold); }
+@media (min-width:768px){
+  .mobile-tab-bar, .mobile-nav-sheet{ display:none !important; }
+}
 
 .eyebrow{
   font-size:10.5px; letter-spacing:.28em; text-transform:uppercase; color:var(--terracotta);
@@ -231,6 +312,19 @@ a.card:hover::before, button.card:hover::before, .card-interactive:hover::before
   font-size:16px; cursor:pointer; line-height:1;
 }
 .mood-dismiss:hover{ color:var(--cream); }
+/* Both .toast (above) and .mood-prompt sit at bottom:26px — exactly where
+   the mobile tab bar (see "Mobile client tab bar" above) now lives on
+   every client page. Raised clear of it on every role's mobile view
+   (harmless on admin/assistant too, which have no tab bar to collide
+   with — just a slightly higher toast there, arguably clearer of the
+   thumb anyway) rather than plumbing a role-specific selector through two
+   components that don't otherwise know about each other. Placed after
+   both base rules on purpose — same selector specificity, so source order
+   is what makes this win at narrow widths. */
+@media (max-width:767px){
+  .toast{ bottom:calc(84px + env(safe-area-inset-bottom, 0px)); }
+  .mood-prompt{ bottom:calc(84px + env(safe-area-inset-bottom, 0px)); }
+}
 .mood-emoji-row{ display:flex; gap:6px; }
 .mood-emoji-row button{
   font-size:21px; background:none; border:none; cursor:pointer; border-radius:6px;
