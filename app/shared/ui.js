@@ -156,10 +156,22 @@ function clientNav() {
 // shared/program-model.js), exactly as clicking through from the Program
 // Hub already does today. Content/labels only — see mobile-tab-bar in
 // theme.css for the fixed-position/safe-area handling.
+// Hand-drawn, not an icon font/library — kept to the same restrained
+// stroke language throughout (1.6px round-joined line, no fill except the
+// "Mais" glyph's own dots) so they read as one considered set rather than
+// mismatched clip-art. currentColor everywhere, so .mobile-tab-link/.active
+// (theme.css) alone drives the muted->gold state change already used for
+// every other active-nav treatment in this app — no separate icon palette.
+const MOBILE_TAB_ICON = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4.5l8 7"/><path d="M6 10.5V19a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1v-8.5"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.75" y="5.25" width="16.5" height="15" rx="2.25"/><path d="M8 3.5v3.5M16 3.5v3.5M3.75 9.75h16.5"/></svg>',
+  wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.5" width="18" height="12" rx="2.25"/><path d="M3 10.25h18"/><path d="M6.75 14.5h3.5"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+};
 const MOBILE_TAB_ITEMS = [
-  ['program.html', 'Início', '🏠'],
-  ['encontros.html', 'Encontros', '📅'],
-  ['financial.html', 'Financeiro', '💳'],
+  ['program.html', 'Início', MOBILE_TAB_ICON.home],
+  ['encontros.html', 'Encontros', MOBILE_TAB_ICON.calendar],
+  ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
 ];
 const MOBILE_MAIS_ROUTES = [
   ['content.html', 'Conteúdos'],
@@ -185,7 +197,7 @@ function mobileClientNav(active, dir) {
     <nav class="mobile-tab-bar" aria-label="Navegação principal">
       ${tabsHtml}
       <button type="button" data-mobile-nav-toggle class="mobile-tab-link ${maisActive ? 'active' : ''}" aria-haspopup="true" aria-controls="mobile-nav-sheet">
-        <span class="mobile-tab-icon" aria-hidden="true">☰</span>
+        <span class="mobile-tab-icon" aria-hidden="true">${MOBILE_TAB_ICON.more}</span>
         <span>Mais</span>
       </button>
     </nav>
