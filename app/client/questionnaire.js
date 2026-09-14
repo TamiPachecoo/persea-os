@@ -4,9 +4,33 @@
 // row per client's questionnaire — not shared reference data). RLS
 // confirmed (questionnaire_questions_client_rw, full read/write scoped to
 // profiles.client_id via the parent questionnaire) before writing this.
+//
+// Real bug found: this originally only ever READ an existing questionnaire
+// — nothing anywhere (no admin/assistant page, no invite-client, nothing)
+// ever INSERTED the first `questionnaires` row for a real client, so
+// renderEmpty()'s "ainda não foi preparado" was actually a permanent dead
+// end for every real client, forever, not a genuine "not ready yet" state.
+// Fixed the same way client/arquetipos.js already handles the exact same
+// shape of problem (see shared/archetype-model.js's getOrCreateActiveAttempt) —
+// lazily create it client-side on first visit, RLS already allows it
+// (questionnaires_client_rw/questionnaire_questions_client_rw are both
+// `ALL`, scoped to her own client_id, confirmed via pg_policies before
+// writing this). Unlike archetype's quiz questions (a real shared
+// `archetype_quiz_questions` reference table), there is no equivalent
+// reference table here — question text genuinely lives per-client-row by
+// design (see comment above) — so the canonical starting questions are
+// the same fixed "Extração de Marca" set already used for every demo
+// client's fresh (unanswered) MockDB seed.
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, toast, showMoodPrompt, stepEyebrow, initScrollReveal, initClientSwitcher } from '../shared/ui.js';
+
+const QUESTIONNAIRE_TEMPLATE = [
+  { question_text: 'Pelo que você quer ser conhecida daqui a 3 anos?', question_type: 'long_text' },
+  { question_text: 'O que parece mais verdadeiro sobre quem você é agora?', question_type: 'long_text' },
+  { question_text: 'Qual é a transformação que você ajuda as pessoas a fazerem?', question_type: 'long_text' },
+  { question_text: 'Avalie sua confiança atual na sua marca pessoal (1-10)', question_type: 'scale' },
+];
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'questionnaire' });
 if (!__clientCtx) throw new Error('not authorized');
@@ -16,8 +40,29 @@ initClientSwitcher();
 
 const content = document.getElementById('app-content');
 
+async function createQuestionnaire() {
+  const { data: created, error } = await supabase.from('questionnaires').insert({ client_id: activeClientId }).select().single();
+  if (error) {
+    // questionnaires.client_id is UNIQUE — a concurrent create (double
+    // tab/double-fast-reload) races here exactly like contract prep did
+    // (see admin/client-onboarding.js's prepareContract) — treat 23505 as
+    // "already created, go read it" rather than a failure.
+    if (error.code === '23505') {
+      const { data: existing } = await supabase.from('questionnaires').select('*').eq('client_id', activeClientId).maybeSingle();
+      return existing || null;
+    }
+    return null;
+  }
+  const { error: qErr } = await supabase.from('questionnaire_questions').insert(
+    QUESTIONNAIRE_TEMPLATE.map((q, i) => ({ questionnaire_id: created.id, sort_order: i, ...q })),
+  );
+  if (qErr) return null;
+  return created;
+}
+
 async function loadQuestionnaire() {
-  const { data: q } = await supabase.from('questionnaires').select('*').eq('client_id', activeClientId).maybeSingle();
+  let { data: q } = await supabase.from('questionnaires').select('*').eq('client_id', activeClientId).maybeSingle();
+  if (!q) q = await createQuestionnaire();
   if (!q) return null;
   const { data: questions } = await supabase.from('questionnaire_questions').select('*').eq('questionnaire_id', q.id).order('sort_order');
   return { ...q, questions: questions || [] };
