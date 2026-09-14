@@ -54,6 +54,20 @@ viewDate.setDate(1);
 viewDate.setHours(0, 0, 0, 0);
 
 function pad2(n) { return String(n).padStart(2, '0'); }
+// A <input type="datetime-local"> value has no timezone — the browser
+// reads/writes it as plain local wall-clock time. A stored item_date is a
+// real UTC timestamptz string; naively `.slice(0, 16)`-ing it hands the
+// input raw UTC digits, which it then displays *as if* they were already
+// local — a real bug found via a live E2E test (23:00 shown as 02:00 next
+// day, a 3h UTC-3 shift). This instead reads the UTC string into a Date
+// and re-extracts LOCAL components, the correct round-trip counterpart to
+// `new Date(inputValue).toISOString()` (already used correctly elsewhere
+// in this file for the create-meeting form).
+function toLocalDatetimeInputValue(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
 function dateKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 function formatTime(iso) { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
 
@@ -1000,7 +1014,7 @@ async function openAgendaModalReal(itemId) {
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
             <label class="text-xs text-white/40 block mb-1">Data e Hora</label>
-            <input name="date" type="datetime-local" class="field" value="${(item.item_date || '').slice(0, 16)}" required />
+            <input name="date" type="datetime-local" class="field" value="${toLocalDatetimeInputValue(item.item_date)}" required />
           </div>
           <div>
             <label class="text-xs text-white/40 block mb-1">Status</label>

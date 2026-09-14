@@ -422,13 +422,36 @@ async function saveSectionField(versionId, key, textarea) {
   finally { savingSection = null; }
 }
 
-async function publishPlaybookDraft(versionId, versionNumber) {
-  if (!confirm(`Publicar a v${versionNumber}? A cliente passará a ver esta versão imediatamente.`)) return;
-  const btn = content.querySelector('#publish-draft');
-  btn.disabled = true;
-  btn.textContent = 'Publicando…';
-  try { await publishVersion(clientId, versionId); toast('Playbook publicado.'); render(); }
-  catch { toast('Não foi possível publicar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = `Publicar v${versionNumber}`; }
+// A live E2E test found that clicking "Publicar" made the browser appear to
+// hang/lose connection — the native window.confirm() below blocks JS
+// execution synchronously waiting for a dialog response, which several
+// automated/embedded browser contexts never dismiss (no native dialog
+// surface to click), reading as a frozen page. Same delete-client modal
+// pattern (openModal, real Cancelar/confirm buttons) used elsewhere in this
+// file, so this is consistent with the rest of the app, not a one-off.
+function openPublishConfirmModal(versionId, versionNumber) {
+  const { el, close } = openModal({
+    title: 'Publicar Playbook',
+    bodyHtml: `
+      <p class="text-sm text-white/70 mb-4">Publicar a v${versionNumber}? A cliente passará a ver esta versão imediatamente.</p>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" id="cancel-publish" class="btn-ghost">Cancelar</button>
+        <button type="button" id="confirm-publish" class="btn-primary">Publicar</button>
+      </div>
+    `,
+  });
+  el.querySelector('#cancel-publish').addEventListener('click', close);
+  el.querySelector('#confirm-publish').addEventListener('click', async () => {
+    const btn = el.querySelector('#confirm-publish');
+    btn.disabled = true;
+    btn.textContent = 'Publicando…';
+    try { await publishVersion(clientId, versionId); close(); toast('Playbook publicado.'); render(); }
+    catch { toast('Não foi possível publicar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Publicar'; }
+  });
+}
+
+function publishPlaybookDraft(versionId, versionNumber) {
+  openPublishConfirmModal(versionId, versionNumber);
 }
 
 const TIER_NAME = { premium: 'Persea Premium', essential: 'Persea Essencial' };
