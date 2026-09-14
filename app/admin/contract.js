@@ -434,10 +434,14 @@ async function render() {
       status: 'completed', signed_file_path: path, signed_file_name: 'contrato-demo-assinado.txt', signed_file_uploaded_at: new Date().toISOString(),
     }).eq('id', contract.id);
     if (error) { toast(error.message, { tone: 'error' }); return; }
-    if (client.status !== 'active') await supabase.from('clients').update({ status: 'active' }).eq('id', clientId);
+    // Product-flow correction: this used to flip clients.status to
+    // 'active' right here, at signature — before any access/invite step.
+    // Deliberate handoff now: activation happens together with the real
+    // access grant, in invite-client, not at signature (matches the real
+    // autentique-status fix — see that function's header comment).
     await supabase.from('client_activity_log').insert({
       client_id: clientId, event_type: 'contract_signed',
-      text: 'Contrato assinado (demonstração) — simulação sem envio real à Autentique.', occurred_at: new Date().toISOString(),
+      text: 'Contrato assinado (demonstração) — simulação sem envio real à Autentique. Acesso ainda não concedido.', occurred_at: new Date().toISOString(),
     });
     toast('Assinatura simulada — contrato concluído.');
     render();
