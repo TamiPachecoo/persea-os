@@ -2,13 +2,75 @@
 // still open in her checklist (see getAssistantChecklist in mock-db.js),
 // linking into the per-client workspace where she actually does the work
 // (that page orders the same checklist by priority — see client-workspace.js).
-import { MockDB, PROGRAM_LABEL } from '../shared/mock-db.js';
-import { renderShell, card } from '../shared/ui.js';
+//
+// Real E2E test found: this whole file was 100% MockDB, no environment
+// branch at all — a real, activated client (is_demo=false, access_status
+// ='created') never appeared here regardless of her real state, while she'd
+// correctly stopped appearing in the real branch of assistant/leads.js's
+// Cadastros (see that file) the moment she activated. Fixed with a real
+// production path below: same access_status='created' criterion
+// deriveClientStatus uses for "Ativa" (shared/client-status.js) and
+// Cadastros' real branch excludes — so a real client falls into exactly one
+// of the two tabs, never both, never neither. Staging/demo below this
+// branch is unchanged — still the full MockDB client list.
+import { MockDB, PROGRAM_LABEL, PROGRAM_LABEL_BY_SLUG } from '../shared/mock-db.js';
+import { renderShell, card, formatDate, isProductionEnvironment } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
 
 if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'clients.html', title: 'Clientes' });
 const content = document.getElementById('app-content');
+
+async function loadRealActiveClients() {
+  const { data: clients } = await supabase.from('clients')
+    .select('id, full_name, email, program_slug, tier')
+    .eq('is_demo', false).eq('access_status', 'created')
+    .order('full_name', { ascending: true });
+  const rows = clients || [];
+  const ids = rows.map((c) => c.id);
+  // One bulk query for the whole visible list rather than N+1 — same
+  // pattern loadRealStatuses uses in leads.js.
+  const { data: meetings } = ids.length
+    ? await supabase.from('agenda_items').select('related_student_id, item_date, title')
+        .in('related_student_id', ids).eq('status', 'upcoming').order('item_date', { ascending: true })
+    : { data: [] };
+  const nextMeetingByClient = new Map(); // first write per client wins — already ordered soonest-first
+  (meetings || []).forEach((m) => { if (!nextMeetingByClient.has(m.related_student_id)) nextMeetingByClient.set(m.related_student_id, m); });
+  return rows.map((c) => ({ ...c, _nextMeeting: nextMeetingByClient.get(c.id) || null }));
+}
+
+function productionClientRow(c) {
+  const tierLabel = c.tier === 'premium' ? 'Premium' : 'Essential';
+  const programLabel = PROGRAM_LABEL_BY_SLUG[c.program_slug] || 'Programa a definir';
+  const meetingLabel = c._nextMeeting
+    ? `Próximo encontro: ${formatDate(c._nextMeeting.item_date)}${c._nextMeeting.title ? ` · ${c._nextMeeting.title}` : ''}`
+    : 'Nenhum encontro agendado';
+  return `
+    <a href="../admin/client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2">
+      <div>
+        <p class="font-medium">${c.full_name}</p>
+        <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel} · ${programLabel}</p>
+        <p class="text-xs text-white/20 mt-1">${meetingLabel}</p>
+      </div>
+      <span class="badge badge-completed">Ativa</span>
+    </a>
+  `;
+}
+
+async function renderProductionClientes() {
+  const clients = await loadRealActiveClients();
+  content.innerHTML = `
+    <div class="mb-8">
+      <p class="text-white/40 text-sm mb-1">Clientes</p>
+      <h1 class="text-3xl font-serif">Suas Clientes</h1>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais com acesso ativo ao Persea OS. Clique em uma cliente para abrir o workspace real dela.</p>
+    </div>
+    ${clients.length
+      ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
+      : card('<p class="text-sm" style="color:var(--muted);">Nenhuma cliente ativa no momento — assim que o acesso de uma cliente for criado em Cadastros, ela aparece aqui.</p>')}
+  `;
+}
 
 function clientRow(c) {
   const checklist = MockDB.getAssistantChecklist(c.id);
@@ -39,4 +101,8 @@ function render() {
   `;
 }
 
-render();
+if (isProductionEnvironment()) {
+  renderProductionClientes();
+} else {
+  render();
+}

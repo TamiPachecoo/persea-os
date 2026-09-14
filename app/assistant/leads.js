@@ -27,8 +27,16 @@ import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.j
 // mirroring admin/crm.js's own loadRealClients/productionClientRow (same
 // deriveClientStatus, not a second status machine) — staging/demo below
 // this branch is completely unchanged, still the full lead->bridge queue.
+// Real E2E test found: this returned EVERY real client regardless of
+// access_status, so a client who'd already activated (access_status=
+// 'created' — the same sole criterion deriveClientStatus uses for "Ativa")
+// stayed stuck in Cadastros forever alongside clients still onboarding.
+// Excluded here at the query level — assistant/clients.js's real Clientes
+// branch selects exactly the complementary set (access_status='created'),
+// so a real client falls into precisely one of the two tabs, never both,
+// never neither, purely from her existing persisted DB state.
 async function loadRealClients() {
-  const { data: clients } = await supabase.from('clients').select('*').eq('is_demo', false).order('created_at', { ascending: false });
+  const { data: clients } = await supabase.from('clients').select('*').eq('is_demo', false).neq('access_status', 'created').order('created_at', { ascending: false });
   const rows = clients || [];
   const ids = rows.map((c) => c.id);
   const [{ data: partyInfos }, { data: contracts }] = await Promise.all([
