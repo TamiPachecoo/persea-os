@@ -14,6 +14,7 @@ import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegi
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
+import { computeTeamNextStep } from '../shared/team-action-model.js';
 
 // Production Migration Batch 4: app.naymurta.com never shows MockDB
 // clients/leads. Real client creation + registration-link generation
@@ -32,22 +33,36 @@ async function loadRealClients() {
   const partyByClient = new Map((partyInfos || []).map((p) => [p.client_id, p.submitted]));
   const contractByClient = new Map(); // first write per client wins — contracts already ordered newest-first
   (contracts || []).forEach((c) => { if (!contractByClient.has(c.client_id)) contractByClient.set(c.client_id, c.status); });
-  return rows.map((c) => ({
+  const withStatus = rows.map((c) => ({
     ...c,
     _status: deriveClientStatus({ accessStatus: c.access_status, partyInfoSubmitted: !!partyByClient.get(c.id), contractStatus: contractByClient.get(c.id) }),
   }));
+  // Real gap found: deriveClientStatus deliberately stops at "Ativa" (see
+  // its own comment — everything past activation is program work, not
+  // onboarding pipeline), which meant an active client's row here showed
+  // literally nothing beyond that badge — no phase, no progress, no
+  // indication of what the team should do next. computeTeamNextStep
+  // (shared/team-action-model.js, also used by client-onboarding.js's own
+  // fuller card — one definition, not two) fills exactly that gap, for
+  // active clients only (a still-onboarding client has no program state
+  // to compute this from yet).
+  await Promise.all(withStatus.filter((c) => c._status.label === 'Ativa').map(async (c) => {
+    c._teamNextStep = await computeTeamNextStep(c, c.id);
+  }));
+  return withStatus;
 }
 
 function productionClientRow(c) {
   const tierLabel = c.tier === 'premium' ? 'Premium' : 'Essential';
   const nextActionLabel = c._status.nextAction ? NEXT_ACTION_LABEL[c._status.nextAction] : null;
   return `
-    <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
-      <div>
+    <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2">
+      <div class="min-w-0">
         <p class="font-medium">${c.full_name}</p>
-        <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}</p>
+        <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}${c.phase_index != null && c._teamNextStep ? ` · Fase ${c.phase_index + 1}` : ''}</p>
+        ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 shrink-0">
         ${nextActionLabel ? `<span class="text-xs" style="color:var(--gold);">${nextActionLabel} →</span>` : ''}
         <span class="badge ${c._status.badgeClass}">${c._status.label}</span>
       </div>

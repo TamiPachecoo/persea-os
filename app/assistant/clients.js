@@ -17,6 +17,7 @@ import { MockDB, PROGRAM_LABEL, PROGRAM_LABEL_BY_SLUG } from '../shared/mock-db.
 import { renderShell, card, formatDate, isProductionEnvironment } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
+import { computeTeamNextStep } from '../shared/team-action-model.js';
 
 if (!(await requireProfile('assistant'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'clients.html', title: 'Clientes' });
@@ -37,7 +38,11 @@ async function loadRealActiveClients() {
     : { data: [] };
   const nextMeetingByClient = new Map(); // first write per client wins — already ordered soonest-first
   (meetings || []).forEach((m) => { if (!nextMeetingByClient.has(m.related_student_id)) nextMeetingByClient.set(m.related_student_id, m); });
-  return rows.map((c) => ({ ...c, _nextMeeting: nextMeetingByClient.get(c.id) || null }));
+  const withMeeting = rows.map((c) => ({ ...c, _nextMeeting: nextMeetingByClient.get(c.id) || null }));
+  // Same real gap as admin/crm.js, same fix, same shared function — see
+  // shared/team-action-model.js's own header for why this exists at all.
+  await Promise.all(withMeeting.map(async (c) => { c._teamNextStep = await computeTeamNextStep(c, c.id); }));
+  return withMeeting;
 }
 
 function productionClientRow(c) {
@@ -48,12 +53,13 @@ function productionClientRow(c) {
     : 'Nenhum encontro agendado';
   return `
     <a href="../admin/client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2">
-      <div>
+      <div class="min-w-0">
         <p class="font-medium">${c.full_name}</p>
         <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel} · ${programLabel}</p>
         <p class="text-xs text-white/20 mt-1">${meetingLabel}</p>
+        ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
-      <span class="badge badge-completed">Ativa</span>
+      <span class="badge badge-completed shrink-0">Ativa</span>
     </a>
   `;
 }
