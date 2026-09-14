@@ -451,8 +451,33 @@ async function render() {
     e.target.textContent = 'Verificando...';
     const { data, error } = await supabase.functions.invoke('autentique-status', { body: { contract_id: contract.id } });
     if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Verificar Assinatura'; return; }
-    if (data.signed) { toast('Assinado! Contrato registrado.'); render(); }
-    else { toast('Ainda pendente de assinatura.'); e.target.disabled = false; e.target.textContent = 'Verificar Assinatura'; }
+    // Real bug found via live E2E test: this used to check a bare
+    // `signed` boolean derived from ALL signature records returned by
+    // Autentique, including non-required participants (e.g. the account
+    // owner, auto-listed with no signing action) — one such record never
+    // being "signed" permanently blocked completion even after the real,
+    // only-required signer had genuinely signed. autentique-status now
+    // returns a real normalized_status (see that function's
+    // classifyDocument) reflecting only actual required signers — this
+    // switches on that instead of the old raw boolean, per each real
+    // Autentique state rather than a generic "still pending" for every
+    // non-signed case.
+    const STATUS_MESSAGES = {
+      AWAITING_SIGNATURE: 'Ainda aguardando assinatura.',
+      AWAITING_APPROVAL: 'Assinatura recebida. Aguardando validação.',
+      DELIVERY_FAILED: 'Falha na entrega do convite de assinatura — verifique o e-mail da signatária.',
+      REJECTED: 'Assinatura recusada.',
+      ERROR: 'Não foi possível determinar o estado da assinatura — verifique diretamente na Autentique.',
+    };
+    if (data.normalized_status === 'COMPLETED') {
+      toast(data.already_processed ? 'Este contrato já estava registrado como assinado.' : 'Assinado! Contrato registrado.');
+      render();
+      return;
+    }
+    if (data.warning) toast(data.warning, { tone: 'error' });
+    else toast(STATUS_MESSAGES[data.normalized_status] || 'Ainda pendente de assinatura.', data.normalized_status === 'REJECTED' || data.normalized_status === 'DELIVERY_FAILED' || data.normalized_status === 'ERROR' ? { tone: 'error' } : undefined);
+    e.target.disabled = false;
+    e.target.textContent = 'Verificar Assinatura';
   });
   document.getElementById('upload').addEventListener('click', async () => {
     const fileInput = document.getElementById('signed-file');
