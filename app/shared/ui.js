@@ -124,7 +124,15 @@ export function statusBadge(status) {
 // is her landing page now (see login.js/set-password.js), so there's no
 // separate "home" nav entry to keep.
 function clientNav() {
-  const gated = MockDB.needsOnboardingCompletion(getActiveClientId());
+  // MockDB is a demo-only fixture store — in production its `clients` seed
+  // is deliberately empty (see productionEmptySeed in mock-db.js), so
+  // calling MockDB.needsOnboardingCompletion(getActiveClientId()) here for
+  // a real client (getActiveClientId() falls back to the MockDB demo seed
+  // id 'client-1', which doesn't exist in production) throws — crashing
+  // renderShell() before any page content renders (black screen on every
+  // client page). Production's real onboarding/contract gate is handled
+  // upstream (client-context.js / clients.status), not here.
+  const gated = isProductionEnvironment() ? false : MockDB.needsOnboardingCompletion(getActiveClientId());
   const lock = gated ? '🔒 ' : '';
   return [
     ['program.html', `${lock}Minha Jornada`],
@@ -147,6 +155,13 @@ function clientNav() {
 // handles the real content block underneath.
 function onboardingGateBanner(active) {
   if (active === 'onboarding.html') return '';
+  // Same MockDB-in-production hazard as clientNav() above: this banner is a
+  // pre-Phase-1 demo/MockDB concept (contract not yet archived). Production
+  // clients only ever reach a client-role page once clients.status/access
+  // already clears them (see client-context.js), so there's nothing for
+  // this banner to say there — and calling MockDB here for a real client
+  // would throw (empty production seed), not just render wrong.
+  if (isProductionEnvironment()) return '';
   const activeId = getActiveClientId();
   if (!MockDB.needsOnboardingCompletion(activeId)) return '';
   const stage = MockDB.getOnboarding(activeId).contract.status;

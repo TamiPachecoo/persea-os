@@ -23,6 +23,7 @@ const client = __clientCtx.client;
 document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Programa' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
+content.innerHTML = card('<p class="text-sm" style="color:var(--muted);">Carregando seu programa…</p>');
 
 function activityCard(a) {
   if (a.access !== 'included') return premiumPreviewCard(a);
@@ -215,7 +216,19 @@ async function render() {
   wirePhaseTrackerNav(content);
 }
 
-await render();
+try {
+  await render();
+} catch (err) {
+  // Never leave the client on a blank/black screen: log the real error for
+  // diagnosis, show a safe generic message with a retry action. See
+  // shared/ui.js's clientNav()/onboardingGateBanner() for the shared-
+  // bootstrap version of this same "never crash silently" guard.
+  console.error('Program Hub render failed', err);
+  content.innerHTML = card(`
+    <p class="text-sm mb-4" style="color:var(--muted);">Não foi possível carregar seu programa. Tente novamente.</p>
+    <button type="button" class="btn-primary" style="padding:9px 18px;font-size:12.5px;" onclick="location.reload()">Recarregar</button>
+  `);
+}
 
 if (location.hash.startsWith('#phase-section-')) {
   const target = content.querySelector(location.hash);
