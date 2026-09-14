@@ -74,7 +74,14 @@ async function load() {
     supabase.from('contracts').select('*').eq('client_id', clientId).maybeSingle(),
   ]);
   if (contract) {
-    const { data: paymentLines } = await supabase.from('contract_payment_lines').select('*').eq('contract_id', contract.id).order('seq');
+    // Scoped to the current ACTIVE version only — once a second edit
+    // supersedes a version (see wireCommercialTermsForm), its old lines
+    // remain in the table as real history but must never appear back in
+    // this editable form alongside the current ones.
+    const { data: activeVersion } = await supabase.from('payment_plan_versions').select('id').eq('contract_id', contract.id).eq('status', 'active').maybeSingle();
+    const { data: paymentLines } = activeVersion
+      ? await supabase.from('contract_payment_lines').select('*').eq('payment_plan_version_id', activeVersion.id).order('seq')
+      : { data: [] };
     contract.payment_lines = paymentLines || [];
   }
   return { client, contract };
@@ -204,12 +211,51 @@ function wireCommercialTermsForm(contract) {
     }).eq('id', contract.id);
     if (cErr) { toast(cErr.message, { tone: 'error' }); return; }
 
-    // Whole-plan replace, same convention as the CRM's own payment-plan
-    // generator — simplest correct way to handle reordered/edited/removed
-    // lines without needing stable per-line identity across edits.
-    await supabase.from('contract_payment_lines').delete().eq('contract_id', contract.id);
+    // Real bug found via live E2E test: this used to insert
+    // contract_payment_lines directly, with no payment_plan_versions row
+    // at all — every line's payment_plan_version_id stayed permanently
+    // NULL. shared/financial-model.js's loadActiveObligations (the one
+    // real "A Receber"/"Em Atraso" source for client/admin Financeiro)
+    // requires an INNER JOIN through payment_plan_versions.status='active'
+    // — a line with no version is invisible to it, silently: the client
+    // and Nay would both see R$0 owed despite a real signed contract
+    // value.
+    //
+    // NOT routed through the existing renegotiate_payment_plan RPC on
+    // purpose: that SECURITY DEFINER function hard-codes an admin-only
+    // check, but contracts/contract_payment_lines/payment_plan_versions'
+    // real RLS (*_staff_all) already grants BOTH admin and assistant write
+    // access here, and this page is genuinely reached from assistant/
+    // leads.js too — using the RPC would have silently regressed
+    // assistant's ability to set commercial terms during onboarding. That
+    // RPC is for a real post-signature renegotiation (a different, more
+    // sensitive action); this is the initial pre-signature terms entry, so
+    // it writes through the same plain, RLS-respecting table calls the
+    // rest of this page already uses.
+    //
+    // Also discovered while fixing this: trg_enforce_frozen_payment_plan_lines
+    // blocks any UPDATE/DELETE on a contract_payment_lines row once its
+    // version's status isn't 'draft' — including a version freshly created
+    // as 'active' (confirmed via the trigger definition, not assumed). So
+    // a second edit here must never try to delete/replace the previous
+    // version's lines — it supersedes the old active version (if any) and
+    // inserts a brand new one instead, mirroring renegotiate_payment_plan's
+    // own real behavior without its admin-only gate. Old lines are never
+    // touched, only ever superseded — real history, never lost.
+    const { data: versions } = await supabase.from('payment_plan_versions').select('id, version_number, status').eq('contract_id', contract.id).order('version_number', { ascending: false });
+    const nextVersionNumber = versions?.length ? versions[0].version_number + 1 : 1;
+    const currentActive = versions?.find((v) => v.status === 'active');
+    if (currentActive) {
+      const { error: supErr } = await supabase.from('payment_plan_versions').update({ status: 'superseded' }).eq('id', currentActive.id);
+      if (supErr) { toast(supErr.message, { tone: 'error' }); return; }
+    }
+    const { data: newVersion, error: vErr } = await supabase.from('payment_plan_versions')
+      .insert({ contract_id: contract.id, version_number: nextVersionNumber, status: 'active', effective_at: new Date().toISOString() })
+      .select().single();
+    if (vErr) { toast(vErr.message, { tone: 'error' }); return; }
+
     const { error: lErr } = await supabase.from('contract_payment_lines').insert(
-      lines.map((l, i) => ({ contract_id: contract.id, seq: i, ...l })),
+      lines.map((l, i) => ({ contract_id: contract.id, payment_plan_version_id: newVersion.id, seq: i, ...l })),
     );
     if (lErr) { toast(lErr.message, { tone: 'error' }); return; }
 

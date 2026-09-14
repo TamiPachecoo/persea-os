@@ -520,10 +520,41 @@ async function generateLink(e) {
   }
 }
 
-async function prepareContract(client) {
-  const { error } = await supabase.from('contracts').insert({ client_id: clientId, status: 'info_pending' });
-  if (error) { toast('Não foi possível preparar o contrato agora.', { tone: 'error' }); return; }
-  location.href = `contract.html?client_id=${clientId}`;
+// Real E2E test found: this had no double-click guard at all (unlike
+// generateLink()/the CRM "Criar Cliente" button, which got this exact fix
+// in an earlier batch) — contracts.client_id is UNIQUE, so a double-click
+// fires two concurrent inserts; one succeeds and navigates via
+// location.href, the other hits the unique-violation and shows "Não foi
+// possível criar o contrato" at almost the same moment — the confusing
+// "error, but it worked anyway" the live test reported. Fixed two ways:
+// (1) the usual disabled-button guard against a double-click in the same
+// session, and (2) check for an already-existing contract FIRST and just
+// navigate to it — so even a genuine retry (refresh, click again after a
+// slow network) can never attempt a second insert or show a false error
+// for a contract that already exists, per the "reuse an existing prepared
+// contract, don't create a duplicate on retry" requirement.
+let preparingContract = false;
+async function prepareContract(client, btn) {
+  if (preparingContract) return;
+  preparingContract = true;
+  if (btn) btn.disabled = true;
+  try {
+    const { data: existing } = await supabase.from('contracts').select('id').eq('client_id', clientId).maybeSingle();
+    if (existing) { location.href = `contract.html?client_id=${clientId}`; return; }
+    const { error } = await supabase.from('contracts').insert({ client_id: clientId, status: 'info_pending' });
+    if (error) {
+      // A unique-violation here means another request (a near-simultaneous
+      // click, or a retry) already created the row — that's a real success,
+      // not a failure, so route there instead of showing a false error.
+      if (error.code === '23505') { location.href = `contract.html?client_id=${clientId}`; return; }
+      toast('Não foi possível preparar o contrato agora.', { tone: 'error' });
+      return;
+    }
+    location.href = `contract.html?client_id=${clientId}`;
+  } finally {
+    preparingContract = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function sendInvite() {
@@ -703,7 +734,7 @@ async function render() {
 
   content.querySelector('#generate-link')?.addEventListener('click', generateLink);
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
-  content.querySelector('#prepare-contract')?.addEventListener('click', () => prepareContract(client));
+  content.querySelector('#prepare-contract')?.addEventListener('click', (e) => prepareContract(client, e.target));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
   content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
   content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);
