@@ -8,11 +8,76 @@ import {
   MockDB, ONBOARDING_STAGES, ONBOARDING_STAGE_LABEL, LEAD_ONBOARDING_STATUS_BADGE_CLASS, PROGRAM_LABEL_BY_SLUG,
   PAYMENT_METHOD_LABEL,
 } from '../shared/mock-db.js';
-import { renderShell, card, toast, formatDate, externalLinkAttrs, functionErrorMessage } from '../shared/ui.js';
+import { renderShell, card, toast, formatDate, externalLinkAttrs, functionErrorMessage, isProductionEnvironment } from '../shared/ui.js';
 import { ensureRealClientForLead } from '../shared/lead-bridge.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { loadHublaPendingClients, markHublaAccessGranted } from '../shared/hubla-model.js';
+import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
+
+// Real E2E test found: this whole page (below) is the old lead->bridge->
+// contract flow (MockDB leads, plus real clients.legacy_id ILIKE 'demo-%'
+// rows bridged from them) — it never queries for a real client created
+// directly via admin/crm.js's "Novo Cliente" (create-client-registration),
+// which has no legacy_id tying it to a MockDB lead at all. In production
+// that meant a genuinely real client (is_demo=false) never appeared here
+// regardless of her real state — the page only ever showed MockDB seed
+// leads ("Demo Um"/"Demo Dois") and demo-prefixed bridge rows, with no
+// environment branch at all. Fixed with a real production path, exactly
+// mirroring admin/crm.js's own loadRealClients/productionClientRow (same
+// deriveClientStatus, not a second status machine) — staging/demo below
+// this branch is completely unchanged, still the full lead->bridge queue.
+async function loadRealClients() {
+  const { data: clients } = await supabase.from('clients').select('*').eq('is_demo', false).order('created_at', { ascending: false });
+  const rows = clients || [];
+  const ids = rows.map((c) => c.id);
+  const [{ data: partyInfos }, { data: contracts }] = await Promise.all([
+    ids.length ? supabase.from('party_info').select('client_id, submitted').in('client_id', ids) : Promise.resolve({ data: [] }),
+    ids.length ? supabase.from('contracts').select('client_id, status, created_at').in('client_id', ids).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+  ]);
+  const partyByClient = new Map((partyInfos || []).map((p) => [p.client_id, p.submitted]));
+  const contractByClient = new Map(); // first write per client wins — contracts already ordered newest-first
+  (contracts || []).forEach((c) => { if (!contractByClient.has(c.client_id)) contractByClient.set(c.client_id, c.status); });
+  return rows.map((c) => ({
+    ...c,
+    _status: deriveClientStatus({ accessStatus: c.access_status, partyInfoSubmitted: !!partyByClient.get(c.id), contractStatus: contractByClient.get(c.id) }),
+  }));
+}
+
+function productionClientRow(c) {
+  const tierLabel = c.tier === 'premium' ? 'Premium' : 'Essential';
+  const nextActionLabel = c._status.nextAction ? NEXT_ACTION_LABEL[c._status.nextAction] : null;
+  return `
+    <a href="../admin/client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors">
+      <div>
+        <p class="font-medium">${c.full_name}</p>
+        <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        ${nextActionLabel ? `<span class="text-xs" style="color:var(--gold);">${nextActionLabel} →</span>` : ''}
+        <span class="badge ${c._status.badgeClass}">${c._status.label}</span>
+      </div>
+    </a>
+  `;
+}
+
+// Auth check + shell are shared by both the production and demo branches
+// below (same role requirement either way) — only which render function
+// runs at the very bottom differs. See isProductionEnvironment() branch
+// near the end of this file.
+async function renderProductionCadastros() {
+  const clients = await loadRealClients();
+  content.innerHTML = `
+    <div class="mb-8">
+      <p class="text-white/40 text-sm mb-1">Cadastros</p>
+      <h1 class="text-3xl font-serif">Contrato e Ativação</h1>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais em onboarding — cadastro, contrato e acesso. Clique em uma cliente para abrir o workspace real dela.</p>
+    </div>
+    ${clients.length
+      ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
+      : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro real no momento.</p>')}
+  `;
+}
 
 const REAL_STATUS_LABEL = {
   info_pending: 'Aguardando informações', info_received: 'Informações recebidas',
@@ -390,4 +455,8 @@ async function render() {
   });
 }
 
-render();
+if (isProductionEnvironment()) {
+  renderProductionCadastros();
+} else {
+  render();
+}
