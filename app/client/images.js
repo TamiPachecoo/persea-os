@@ -51,6 +51,24 @@ async function loadImages() {
 
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|heic|heif|webp|gif)$/i;
 
+// Real bug found (reproduced live): a real filename like "Tami Pacheco —
+// Feed Cosmopolita Editável (24 Post...) substituível.jpeg" — spaces, an
+// em dash, accented letters, parentheses — made the Storage upload fail
+// outright every time. Supabase Storage object keys are far stricter than
+// a normal filesystem filename; the ORIGINAL name is still what's shown
+// to her (images.file_name keeps it verbatim) — only the Storage path
+// itself uses this sanitized version.
+function safeStorageFileName(name) {
+  const dot = name.lastIndexOf('.');
+  const ext = dot > -1 ? name.slice(dot).toLowerCase().replace(/[^a-z0-9.]/g, '') : '';
+  const base = (dot > -1 ? name.slice(0, dot) : name)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents (á -> a)
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return `${base || 'imagem'}${ext}`;
+}
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList);
   for (const file of files) {
@@ -65,9 +83,10 @@ async function handleFiles(fileList) {
 
     uploadingCount++;
     render();
-    const path = `${clientId}/images/${Date.now()}-${file.name}`;
+    const path = `${clientId}/images/${Date.now()}-${safeStorageFileName(file.name)}`;
     const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(path, file);
     if (uploadErr) {
+      console.error('image upload failed', uploadErr);
       toast(`Não foi possível enviar "${file.name}".`, { tone: 'error' });
       uploadingCount--;
       render();
