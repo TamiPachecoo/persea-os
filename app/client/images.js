@@ -49,10 +49,18 @@ async function loadImages() {
   return rows.map((r, i) => ({ ...r, signedUrl: signed[i]?.data?.signedUrl || null }));
 }
 
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|heic|heif|webp|gif)$/i;
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList);
   for (const file of files) {
-    if (!file.type.startsWith('image/')) { toast(`"${file.name}" não é uma imagem.`, { tone: 'error' }); continue; }
+    // Real gap: some mobile camera-roll pickers (notably iOS HEIC photos
+    // in some browser/OS combinations) hand over a File with an empty
+    // `type` — the accept="image/*" on the input already limited what
+    // could be picked, so an empty type here is a real photo being
+    // wrongly rejected, not a real non-image file slipping through.
+    const looksLikeImage = file.type ? file.type.startsWith('image/') : IMAGE_EXTENSIONS.test(file.name);
+    if (!looksLikeImage) { toast(`"${file.name}" não é uma imagem.`, { tone: 'error' }); continue; }
     if (file.size > MAX_FILE_MB * 1024 * 1024) { toast(`"${file.name}" passa de ${MAX_FILE_MB}MB.`, { tone: 'error' }); continue; }
 
     uploadingCount++;
@@ -183,9 +191,15 @@ async function render() {
     `) : ''}
   `;
 
-  content.querySelector('#drop-zone').addEventListener('click', (e) => {
-    if (e.target.id !== 'file-input') content.querySelector('#file-input').click();
-  });
+  // Real bug found: #drop-zone is a <label> wrapping #file-input — native
+  // HTML label behavior already opens the file picker on any click inside
+  // it, no JS needed. The extra manual `.click()` here fired a SECOND,
+  // redundant click on the same input on top of that native one — on
+  // mobile (iOS Safari/Chrome) two near-simultaneous synthetic clicks on
+  // a file input can make the OS picker sheet flash and dismiss itself
+  // before a file is ever chosen, so `change` never fires and nothing
+  // ever reaches handleFiles() — matching "upload does nothing" exactly.
+  // Removed; the label's native behavior is sufficient on its own.
   content.querySelector('#file-input').addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
   content.querySelectorAll('[data-remove-image]').forEach((btn) => {
     btn.addEventListener('click', async () => {
