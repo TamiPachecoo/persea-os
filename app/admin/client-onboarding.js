@@ -19,6 +19,7 @@
 // one real boundary found: `profiles` is admin-only readable, which is why
 // activation state is derived from clients.access_status instead, already
 // readable by both roles).
+import { PROGRAM_LABEL_BY_SLUG } from '../shared/mock-db.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import {
@@ -631,14 +632,14 @@ function nextActionCard(nextAction) {
 // the new client_internal_notes table, staff-only RLS, no client policy
 // at all so "never visible to the cliente" is enforced at the database
 // level, not just by omitting it from her own pages).
-async function loadInternalNote() {
-  const { data } = await supabase.from('client_internal_notes').select('note').eq('client_id', clientId).maybeSingle();
-  return data?.note || '';
+async function loadInternalProfile() {
+  const { data } = await supabase.from('client_internal_notes').select('*').eq('client_id', clientId).maybeSingle();
+  return data || { note: '', who: '', what: '', why: '', how: '' };
 }
 
-async function saveInternalNote(note) {
+async function saveInternalProfile(fields) {
   const { error } = await supabase.from('client_internal_notes')
-    .upsert({ client_id: clientId, note, updated_at: new Date().toISOString(), updated_by: profile.id }, { onConflict: 'client_id' });
+    .upsert({ client_id: clientId, ...fields, updated_at: new Date().toISOString(), updated_by: profile.id }, { onConflict: 'client_id' });
   return error;
 }
 
@@ -647,32 +648,83 @@ async function saveInternalNote(note) {
 // honest minimal version) — falls back to the real shared initialsAvatar
 // (ui.js) exactly like every other avatar in this app when there's no URL
 // or it fails to load.
-function clientPhoto(c, size = 88) {
+function clientPhoto(c, size = 96) {
   if (isValidHttpUrl(c.photo_url)) {
-    return `<img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" onerror="this.remove();" />`;
+    return `<img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--line);" onerror="this.remove();" />`;
   }
   return initialsAvatar(c.full_name, size);
 }
 
-function profileCard(c, internalNote) {
+// Same layout as the demo's own Programa tab header — photo, name and a
+// one-line tagline sitting right next to it (not stacked below in a
+// separate column), the photo-URL editor directly under the name. Kept as
+// one card, exactly as it was there, rather than the earlier version's
+// separate photo/name blocks.
+function profileHeaderCard(c, status) {
   return card(`
-    <div class="flex items-start gap-5 flex-wrap mb-5">
+    <div class="flex items-start gap-5 flex-wrap">
       ${clientPhoto(c)}
-      <div class="flex-1" style="min-width:200px;">
-        <p class="text-sm text-white/50 mb-2">Foto de perfil</p>
-        <form id="photo-form" class="flex items-center gap-2 flex-wrap">
-          <input name="photo_url" class="field text-sm" style="max-width:320px;" placeholder="Link da foto (URL)" value="${c.photo_url || ''}" />
+      <div class="flex-1" style="min-width:220px;">
+        <div class="flex items-center gap-3 flex-wrap">
+          <p class="text-xl font-serif">${c.full_name}</p>
+          <span class="badge ${status.badgeClass}">${status.label}</span>
+        </div>
+        <p class="text-xs text-white/30 mt-0.5">${c.email || 'sem e-mail'} · ${TIER_LABEL[c.tier] || c.tier}${c.program_slug ? ` · ${PROGRAM_LABEL_BY_SLUG[c.program_slug] || c.program_slug}` : ''}</p>
+        <form id="photo-form" class="flex items-center gap-2 mt-3 flex-wrap">
+          <input name="photo_url" class="field text-sm" style="max-width:340px;" placeholder="Link da foto de perfil" value="${c.photo_url || ''}" />
           <button type="submit" class="btn-ghost">Salvar</button>
         </form>
+        <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar — precisa ser um link direto para a imagem, não uma página.</p>
       </div>
     </div>
-    <div class="pt-4" style="border-top:1px solid var(--line);">
-      <p class="text-sm text-white/50 mb-1">Notas Internas <span class="text-white/20 text-xs">(nunca visíveis para a cliente)</span></p>
-      <form id="internal-notes-form">
-        <textarea name="note" rows="4" class="field text-sm" placeholder="Contexto, preferências, combinados fora do sistema...">${internalNote}</textarea>
-        <div class="flex justify-end mt-2"><button type="submit" class="btn-ghost">Salvar Notas</button></div>
-      </form>
-    </div>
+  `, 'mb-6');
+}
+
+// "Quem é [Nome]" — the WHO/WHAT/WHY/HOW summary Nay fills in from E1/E2,
+// ported verbatim from the demo's own card (same fields, same caption).
+// This is the concrete answer to "extracting WHO she is and WHY she does
+// what she does": once filled in here, anyone on the team opening this
+// page gets it at a glance instead of re-deriving it from her raw
+// Extração de Marca / Arquétipos answers every time.
+function profileSummaryCard(c, p) {
+  const firstName = c.full_name.split(' ')[0];
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Quem é ${firstName}</p>
+    <p class="text-xs text-white/20 mb-4">Preenchido a partir do E1 e do E2 — o resumo que qualquer pessoa da equipe precisa para entender esta cliente rapidamente.</p>
+    <form id="summary-form" class="space-y-4">
+      <div>
+        <label class="text-xs text-white/40 block mb-1">QUEM ela é</label>
+        <textarea name="who" rows="2" class="field text-sm">${p.who}</textarea>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">O QUE ela vende</label>
+          <textarea name="what" rows="2" class="field text-sm">${p.what}</textarea>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">POR QUE ela vende</label>
+          <textarea name="why" rows="2" class="field text-sm">${p.why}</textarea>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-white/40 block mb-1">COMO ela vende</label>
+        <textarea name="how" rows="2" class="field text-sm">${p.how}</textarea>
+      </div>
+      <div class="flex justify-end">
+        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar Resumo</button>
+      </div>
+    </form>
+  `, 'mb-6');
+}
+
+function internalNotesCard(p) {
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Notas Internas</p>
+    <p class="text-xs text-white/20 mb-3">Visível para Nay e para a assistente — nunca para a cliente.</p>
+    <form id="internal-notes-form" class="space-y-3">
+      <textarea name="note" rows="4" class="field text-sm">${p.note}</textarea>
+      <div class="flex justify-end"><button type="submit" class="btn-ghost">Salvar Notas</button></div>
+    </form>
   `, 'mb-6');
 }
 
@@ -837,7 +889,7 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml, finState, internalNote, journey] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml, finState, internalProfile, journey] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
@@ -845,7 +897,7 @@ async function render() {
     loadPlaybookState(),
     programSummaryCard(client),
     loadFinanceiro(contract),
-    loadInternalNote(),
+    loadInternalProfile(),
     loadEncounterJourney(client, clientId),
   ]);
 
@@ -856,16 +908,9 @@ async function render() {
   });
 
   content.innerHTML = `
-    <div class="mb-8">
-      <p class="text-white/40 text-sm mb-1">Onboarding</p>
-      <div class="flex items-center gap-3 flex-wrap mb-1">
-        <h1 class="text-3xl font-serif">${client.full_name}</h1>
-        <span class="badge ${status.badgeClass}">${status.label}</span>
-      </div>
-      <p class="text-sm text-white/40">${client.email || 'sem e-mail'} · ${TIER_LABEL[client.tier] || client.tier}</p>
-    </div>
-
-    ${profileCard(client, internalNote)}
+    ${profileHeaderCard(client, status)}
+    ${profileSummaryCard(client, internalProfile)}
+    ${internalNotesCard(internalProfile)}
 
     ${nextActionCard(status.nextAction)}
 
@@ -926,9 +971,16 @@ async function render() {
   content.querySelector('#internal-notes-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const note = new FormData(e.target).get('note');
-    const error = await saveInternalNote(note);
+    const error = await saveInternalProfile({ note });
     if (error) { toast('Não foi possível salvar as notas.', { tone: 'error' }); return; }
     toast('Notas internas salvas.');
+  });
+  content.querySelector('#summary-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const error = await saveInternalProfile({ who: fd.get('who'), what: fd.get('what'), why: fd.get('why'), how: fd.get('how') });
+    if (error) { toast('Não foi possível salvar o resumo.', { tone: 'error' }); return; }
+    toast('Resumo salvo.');
   });
   content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
   content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);

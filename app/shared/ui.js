@@ -329,6 +329,18 @@ const ROLE_LABEL = { admin: 'Admin', assistant: 'Assistente', client: 'Cliente' 
 // Nay's admin agenda instead of her own.
 const ROLE_DIR = { admin: '/admin/', assistant: '/assistant/', client: '/client/' };
 
+// `title` is accepted but intentionally unused below — every page already
+// builds its own eyebrow+<h1> header inside its own content (confirmed by
+// checking every page's render(): all ~30 already do this), so the shell
+// used to also draw a second, bigger "pg-title" heading (with its own
+// divider) right above that — a real, literal duplicate header on every
+// single page ("Financeiro" / "Financeiro" / "Seu Contrato e Pagamentos",
+// "Onboarding" / "Onboarding" / "<nome da cliente>", etc.). Removed rather
+// than fixed page-by-page, since the redundancy was structural (the shell
+// itself), not a per-page mistake — kept the parameter so none of the ~40
+// renderShell({..., title: '...'}) call sites need editing; it's just
+// inert now. The browser tab title is unaffected — that's each page's own
+// <title> tag in its .html file's <head>, unrelated to this.
 export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
   const dir = ROLE_DIR[role] || '';
@@ -356,12 +368,6 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
       </header>
       <main class="max-w-6xl mx-auto px-6 py-12 ${role === 'client' ? 'has-mobile-tab-bar' : ''}">
         ${role === 'client' ? onboardingGateBanner(active) : ''}
-        ${title ? `
-          <div class="mb-10">
-            <div class="divider mb-4"></div>
-            <h1 class="pg-title">${title}</h1>
-          </div>
-        ` : ''}
         <div id="app-content"></div>
       </main>
       ${role === 'client' ? mobileClientNav(active, dir) : ''}
