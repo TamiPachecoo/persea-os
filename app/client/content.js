@@ -10,7 +10,7 @@ import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
 import {
   renderShell, card, initClientSwitcher, externalLinkAttrs,
-  contentCardInner, hublaHref, isValidHttpUrl,
+  contentCardInner, hublaHref,
 } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content' });
@@ -60,18 +60,20 @@ async function recommendedSection() {
 // Biblioteca de Aulas, real now — the same `resources` row, just
 // general_audience=true instead of assigned to one client) actually looks
 // like once a real client opens Conteúdos.
+//
+// Big, image-forward poster cards per explicit feedback ("feel like
+// Netflix") — reuses the EXACT same real component the gateway cards
+// above already use (contentCardInner + .content-card/.content-grid,
+// shared/ui.js/theme.css) instead of a smaller, inconsistent card of its
+// own: same 3:4 poster aspect ratio, gradient title overlay, hover lift,
+// mobile horizontal-scroll-snap — one visual language for "premium card
+// that opens something," not two. contentCardInner's shape
+// (title/description/hublaUrl/coverImage) is mapped from the real columns
+// exactly like categoryCard already does above.
 function recordedClassCard(r) {
-  const hasImage = isValidHttpUrl(r.cover_image_url);
-  return `
-    <a ${externalLinkAttrs(hublaHref(r.hubla_url))} class="block">
-      ${card(`
-        ${hasImage ? `<img src="${r.cover_image_url}" alt="" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:4px; margin-bottom:12px;" />` : ''}
-        <p class="font-medium text-sm mb-1">${r.title}</p>
-        ${r.description ? `<p class="text-xs text-white/40 mb-2">${r.description}</p>` : ''}
-        <p class="text-xs" style="color:var(--gold);">Assistir ↗${r.duration ? ` · ${r.duration}` : ''}</p>
-      `)}
-    </a>
-  `;
+  const label = `Assistir "${r.title}"`;
+  const shaped = { title: r.title, description: r.description, hublaUrl: r.hubla_url, coverImage: r.cover_image_url, coverTone: r.cover_tone };
+  return `<a ${externalLinkAttrs(hublaHref(r.hubla_url))} class="content-card" aria-label="${label}">${contentCardInner(shaped, 'Assistir')}</a>`;
 }
 
 async function recordedClassesSection() {
@@ -80,7 +82,7 @@ async function recordedClassesSection() {
   return `
     <div class="mb-10">
       <p class="text-sm text-white/50 mb-4">Aulas Gravadas</p>
-      <div class="grid md:grid-cols-2 gap-4">${resources.map(recordedClassCard).join('')}</div>
+      <div class="content-grid">${resources.map(recordedClassCard).join('')}</div>
     </div>
   `;
 }

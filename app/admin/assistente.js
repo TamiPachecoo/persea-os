@@ -4,15 +4,18 @@
 // waiting on Nay to approve before it reaches a client. Same before/after
 // of the assistant's actual work, now in one place instead of two.
 import { MockDB, TEMPLATE_CATEGORIES, CONTENT_REVIEW_STATUS_LABEL, IMAGE_GUIDE_LABEL } from '../shared/mock-db.js';
-import { renderShell, card, toast, isValidHttpUrl, externalLinkAttrs, formatDateTime, openModal, isValidAssetSrc, assetLinkAttrs } from '../shared/ui.js';
+import {
+  renderShell, card, toast, isValidHttpUrl, externalLinkAttrs, formatDateTime, formatDate, brl, openModal, isValidAssetSrc, assetLinkAttrs,
+} from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
 import { loadHublaPendingClients, markHublaAccessGranted } from '../shared/hubla-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'assistente.html', title: 'Assistente' });
 const content = document.getElementById('app-content');
 
-const SECTIONS = ['revisoes', 'templates', 'hubla'];
+const SECTIONS = ['revisoes', 'templates', 'hubla', 'financeiro'];
 let section = SECTIONS.includes(new URLSearchParams(location.search).get('section')) ? new URLSearchParams(location.search).get('section') : 'revisoes';
 
 // --- Templates ---------------------------------------------------------
@@ -158,6 +161,95 @@ function hublaPendingRow(c) {
     </div>
   `;
 }
+// --- Financeiro (pagamentos à assistente) -------------------------------
+// Real, admin-only feature: track what Nay pays her assistant. Same real
+// wage_payments table also surfaces as a card in admin/financial.js —
+// one source, not a second ledger.
+async function loadWagePayments() {
+  const { data } = await supabase.from('assistant_wage_payments').select('*').order('due_date', { ascending: false, nullsFirst: false });
+  return data || [];
+}
+
+function wagePaymentRow(w) {
+  const paid = !!w.paid_at;
+  return `
+    <div class="py-3 border-b border-white/5 last:border-0">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p class="text-sm font-medium">${w.period_label} · ${brl(w.amount_cents / 100)}</p>
+          <p class="text-xs text-white/30 mt-0.5">${w.due_date ? `Vencimento ${formatDate(w.due_date)}` : 'Sem vencimento definido'}${paid ? ` · Pago em ${formatDate(w.paid_at)}` : ''}</p>
+          ${w.note ? `<p class="text-xs text-white/20 mt-1">${w.note}</p>` : ''}
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="badge ${paid ? 'badge-completed' : 'badge-progress'}">${paid ? 'Pago' : 'Pendente'}</span>
+          ${!paid ? `<button type="button" data-mark-wage-paid="${w.id}" class="btn-text">Marcar como pago</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderFinanceiroSection(payments) {
+  const pendingCents = payments.filter((w) => !w.paid_at).reduce((s, w) => s + w.amount_cents, 0);
+  const paidCents = payments.filter((w) => w.paid_at).reduce((s, w) => s + w.amount_cents, 0);
+  return `
+    <div class="grid sm:grid-cols-2 gap-6 mb-6">
+      ${card(`<p class="text-sm text-white/50 mb-2">Pendente</p><p class="text-2xl font-serif" style="color:var(--terracotta);">${brl(pendingCents / 100)}</p>`)}
+      ${card(`<p class="text-sm text-white/50 mb-2">Pago</p><p class="text-2xl font-serif">${brl(paidCents / 100)}</p>`)}
+    </div>
+    ${card(`
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-sm text-white/50">Pagamentos à Assistente</p>
+        <button type="button" id="new-wage-payment" class="btn-ghost">+ Novo Pagamento</button>
+      </div>
+      ${payments.length ? payments.map(wagePaymentRow).join('') : '<p class="text-sm" style="color:var(--muted);">Nenhum pagamento registrado ainda.</p>'}
+    `)}
+  `;
+}
+
+function openWagePaymentModal() {
+  const { el, close } = openModal({
+    title: 'Novo Pagamento à Assistente',
+    bodyHtml: `
+      <form id="wage-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Período</label>
+          <input name="period_label" class="field" placeholder="Ex.: Setembro 2026" required />
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Valor (R$)</label>
+            <input name="amount" type="number" min="0" step="0.01" class="field" required />
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Vencimento <span class="text-white/20">(opcional)</span></label>
+            <input name="due_date" type="date" class="field" />
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Nota <span class="text-white/20">(opcional)</span></label>
+          <textarea name="note" rows="2" class="field"></textarea>
+        </div>
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Adicionar</button>
+        </div>
+      </form>
+    `,
+  });
+  el.querySelector('#wage-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const { error } = await supabase.from('assistant_wage_payments').insert({
+      period_label: fd.get('period_label'), amount_cents: Math.round(Number(fd.get('amount')) * 100),
+      due_date: fd.get('due_date') || null, note: fd.get('note') || null,
+    });
+    if (error) { toast('Não foi possível adicionar agora.', { tone: 'error' }); return; }
+    close();
+    toast('Pagamento adicionado.');
+    render();
+  });
+}
+
 const HUBLA_DASHBOARD_URL = 'https://app.hub.la/dashboard';
 
 function renderHublaSection({ clients, error }) {
@@ -180,6 +272,7 @@ function renderHublaSection({ clients, error }) {
 
 async function render() {
   const hublaPending = section === 'hubla' ? await loadHublaPendingClients() : null;
+  const wagePayments = section === 'financeiro' ? await loadWagePayments() : null;
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Assistente</p>
@@ -189,8 +282,12 @@ async function render() {
       <button data-section="revisoes" class="tab-btn ${section === 'revisoes' ? 'active' : ''}">Revisões</button>
       <button data-section="templates" class="tab-btn ${section === 'templates' ? 'active' : ''}">Templates</button>
       <button data-section="hubla" class="tab-btn ${section === 'hubla' ? 'active' : ''}">Hubla</button>
+      <button data-section="financeiro" class="tab-btn ${section === 'financeiro' ? 'active' : ''}">Financeiro</button>
     </div>
-    ${section === 'templates' ? renderTemplatesSection() : section === 'hubla' ? renderHublaSection(hublaPending) : renderReviewsSection()}
+    ${section === 'templates' ? renderTemplatesSection()
+      : section === 'hubla' ? renderHublaSection(hublaPending)
+      : section === 'financeiro' ? renderFinanceiroSection(wagePayments)
+      : renderReviewsSection()}
   `;
 
   content.querySelectorAll('[data-section]').forEach((btn) => {
@@ -227,6 +324,16 @@ async function render() {
         const { error } = await markHublaAccessGranted(btn.dataset.markHublaGranted);
         if (error) { toast('Erro ao atualizar o status.', { tone: 'error' }); return; }
         toast('Acesso Hubla marcado como concedido.');
+        render();
+      });
+    });
+  } else if (section === 'financeiro') {
+    content.querySelector('#new-wage-payment')?.addEventListener('click', openWagePaymentModal);
+    content.querySelectorAll('[data-mark-wage-paid]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const { error } = await supabase.from('assistant_wage_payments').update({ paid_at: new Date().toISOString() }).eq('id', btn.dataset.markWagePaid);
+        if (error) { toast('Não foi possível marcar agora.', { tone: 'error' }); return; }
+        toast('Pagamento marcado como pago.');
         render();
       });
     });

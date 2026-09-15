@@ -96,6 +96,33 @@ function renderRealKPIs({ recebido, aReceber, emAtraso, error }) {
   `, 'mb-8');
 }
 
+// Pagamentos à Assistente — real, admin-only wages tracking (same
+// assistant_wage_payments table admin/assistente.js's own Financeiro
+// section manages; that's the one place to add/mark-paid a payment, this
+// is the read-only overview the request asked to also show up here — no
+// second wages ledger).
+async function loadWageSummary() {
+  const { data } = await supabase.from('assistant_wage_payments').select('*').order('due_date', { ascending: false, nullsFirst: false }).limit(5);
+  return data || [];
+}
+
+function renderWageSummaryCard(payments) {
+  const pendingCents = payments.filter((w) => !w.paid_at).reduce((s, w) => s + w.amount_cents, 0);
+  return card(`
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Pagamentos à Assistente</p>
+      <a href="assistente.html?section=financeiro" class="btn-text">Gerenciar ↗</a>
+    </div>
+    <p class="text-2xl font-serif mb-4" style="color:${pendingCents > 0 ? 'var(--terracotta)' : 'inherit'};">${brl(pendingCents / 100)} <span class="text-sm text-white/30">pendente</span></p>
+    ${payments.length ? `<div class="divide-y" style="border-color:var(--line);">${payments.map((w) => `
+      <div class="flex items-center justify-between py-2">
+        <p class="text-sm">${w.period_label} · ${brl(w.amount_cents / 100)}</p>
+        <span class="badge ${w.paid_at ? 'badge-completed' : 'badge-progress'}">${w.paid_at ? 'Pago' : 'Pendente'}</span>
+      </div>
+    `).join('')}</div>` : '<p class="text-sm" style="color:var(--muted);">Nenhum pagamento registrado ainda.</p>'}
+  `, 'mb-8');
+}
+
 function renderKPIs(summary) {
   return `
     <div class="grid md:grid-cols-3 gap-6 mb-6">
@@ -242,7 +269,7 @@ function openExpenseModal() {
 }
 
 async function render() {
-  const realKPIs = await loadRealKPIs();
+  const [realKPIs, wagePayments] = await Promise.all([loadRealKPIs(), loadWageSummary()]);
   // Production Migration Batch 6: the MockDB demo pipeline (KPIs, forecast,
   // by-program, client billing, expenses) is now hard-gated to
   // isNonProduction() — "clearly labeled" wasn't enough per the explicit
@@ -252,6 +279,7 @@ async function render() {
   // `lines` already fetched for the KPIs above — no second query/formula.
   content.innerHTML = `
     ${renderRealKPIs(realKPIs)}
+    ${renderWageSummaryCard(wagePayments)}
     ${renderRealClientBilling(realKPIs.lines || [])}
     ${isNonProduction() ? (() => {
       const summary = MockDB.getFinancialSummary();

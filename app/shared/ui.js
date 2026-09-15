@@ -801,7 +801,7 @@ export function contentCardCoverStyle(cat) {
 // Inner visual only (cover + title + description + CTA) — callers supply the
 // clickable/interactive wrapper (an <a> for clients, a management div for
 // admin) so this stays a single source of truth for the card's look.
-export function contentCardInner(cat) {
+export function contentCardInner(cat, ctaLabel = 'Acessar na Hubla') {
   const hasImage = isValidAssetSrc(cat.coverImage);
   return `
     <div class="content-card-cover" style="${contentCardCoverStyle(cat)}">
@@ -809,7 +809,7 @@ export function contentCardInner(cat) {
       <div class="content-card-overlay">
         <p class="content-card-title">${cat.title || 'Sem título'}</p>
         ${cat.description ? `<p class="content-card-desc">${cat.description}</p>` : ''}
-        <span class="content-card-cta">Acessar na Hubla<span class="content-card-ext" aria-hidden="true">↗</span></span>
+        <span class="content-card-cta">${ctaLabel}<span class="content-card-ext" aria-hidden="true">↗</span></span>
       </div>
     </div>
   `;
