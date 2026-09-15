@@ -134,15 +134,18 @@ body{
 .nav-link:hover{ color:var(--cream); background:rgba(242,236,224,.04); }
 .nav-link.active{ color:var(--cream); background:rgba(184,134,58,.16); }
 
-/* Mobile client tab bar — real E2E test found the desktop nav (above)
-   simply disappears below md (768px, matches the Tailwind CDN breakpoint
-   already loaded on every page) with no replacement at all: `hidden
-   md:flex` hides it, and nothing else was ever added underneath. Client-
-   role only (see renderShell in ui.js) — admin/assistant desktop chrome is
-   completely untouched, this block never applies there. Sits below
-   .modal-backdrop's z-index:90 on purpose — an open modal already covers
-   the full viewport, so it visually (and correctly, per keyboard/focus
-   order) sits above this bar with no extra JS needed to "hide" it. */
+/* Mobile tab bar — real E2E test found the desktop nav (above) simply
+   disappears below md (768px, matches the Tailwind CDN breakpoint already
+   loaded on every page) with no replacement at all: `hidden md:flex`
+   hides it, and nothing else was ever added underneath. Originally client
+   role only; feedback found admin/assistant had the exact same gap on
+   their own pages, so this now renders for all three roles (see
+   mobileRoleNav in ui.js) — desktop chrome for every role is completely
+   untouched either way, this block only ever applies below the same
+   breakpoint. Sits below .modal-backdrop's z-index:90 on purpose — an
+   open modal already covers the full viewport, so it visually (and
+   correctly, per keyboard/focus order) sits above this bar with no extra
+   JS needed to "hide" it. */
 .mobile-tab-bar{
   position:fixed; left:0; right:0; bottom:0; z-index:40;
   display:flex; align-items:stretch; justify-content:space-around;
@@ -162,9 +165,9 @@ body{
 
 /* Content needs enough bottom clearance that the fixed bar above never
    covers the last card/button/form field. .has-mobile-tab-bar is added to
-   <main> by renderShell only for role:'client' (see ui.js) — the padding
+   <main> by renderShell for every role now (see ui.js) — the padding
    itself only actually applies below the same breakpoint the tab bar
-   appears at, so desktop/tablet layout for those same pages is untouched. */
+   appears at, so desktop/tablet layout for every page is untouched. */
 @media (max-width:767px){
   main.has-mobile-tab-bar{ padding-bottom:calc(84px + env(safe-area-inset-bottom, 0px)); }
 }

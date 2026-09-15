@@ -166,31 +166,73 @@ const MOBILE_TAB_ICON = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4.5l8 7"/><path d="M6 10.5V19a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1v-8.5"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.75" y="5.25" width="16.5" height="15" rx="2.25"/><path d="M8 3.5v3.5M16 3.5v3.5M3.75 9.75h16.5"/></svg>',
   wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.5" width="18" height="12" rx="2.25"/><path d="M3 10.25h18"/><path d="M6.75 14.5h3.5"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M15.5 5.5c1.4.4 2.4 1.6 2.4 3s-1 2.6-2.4 3"/><path d="M16 14.6c2 .5 3.5 2.1 3.5 4.4"/></svg>',
+  clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="17" rx="2"/><rect x="9" y="3" width="6" height="3" rx="1"/><path d="M8.5 12h7M8.5 15.5h7"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
 };
-const MOBILE_TAB_ITEMS = [
-  ['program.html', 'Início', MOBILE_TAB_ICON.home],
-  ['encontros.html', 'Encontros', MOBILE_TAB_ICON.calendar],
-  ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
-];
-const MOBILE_MAIS_ROUTES = [
-  ['content.html', 'Conteúdos'],
-  ['questionnaire.html', 'Extração de Marca'],
-  ['arquetipos.html', 'Arquétipos'],
-  ['business-survey.html', 'Negócios'],
-  ['playbook.html', 'Playbook'],
-  ['activity-guide.html', 'Guia de Atividades'],
-];
 
-function mobileClientNav(active, dir) {
-  const maisActive = MOBILE_MAIS_ROUTES.some(([href]) => href === active);
-  const tabsHtml = MOBILE_TAB_ITEMS.map(([href, label, icon]) => `
+// Real feedback: the fixed bottom nav was scoped to client only when
+// first built ("for CLIENT ROLE ONLY" was the explicit brief at the
+// time) — admin and assistant got the exact same "no nav at all below
+// 768px" problem the client had, since they go through this same
+// renderShell(). Generalized below instead of writing two more
+// near-duplicate nav builders: one config per role (primary tabs +
+// secondary "Mais" routes), one shared render function. Primary tabs
+// picked from each role's own existing top-nav priority order — never a
+// second, conflicting IA — capped at 3 (+ Mais) so the bar never gets
+// cramped; everything else already in that role's ADMIN_NAV/
+// ASSISTANT_NAV/client nav lands in "Mais" instead of being invented here.
+const MOBILE_NAV_CONFIG = {
+  client: {
+    tabs: [
+      ['program.html', 'Início', MOBILE_TAB_ICON.home],
+      ['encontros.html', 'Encontros', MOBILE_TAB_ICON.calendar],
+      ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
+    ],
+    mais: [
+      ['content.html', 'Conteúdos'],
+      ['questionnaire.html', 'Extração de Marca'],
+      ['arquetipos.html', 'Arquétipos'],
+      ['business-survey.html', 'Negócios'],
+      ['playbook.html', 'Playbook'],
+      ['activity-guide.html', 'Guia de Atividades'],
+    ],
+  },
+  admin: {
+    tabs: [
+      ['agenda.html', 'Agenda', MOBILE_TAB_ICON.calendar],
+      ['crm.html', 'CRM', MOBILE_TAB_ICON.people],
+      ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
+    ],
+    mais: [
+      ['content.html', 'Conteúdos'],
+      ['assistente.html', 'Assistente'],
+      ['reports.html', 'Relatórios'],
+    ],
+  },
+  assistant: {
+    tabs: [
+      ['agenda.html', 'Agenda', MOBILE_TAB_ICON.calendar],
+      ['clients.html', 'Clientes', MOBILE_TAB_ICON.people],
+      ['leads.html', 'Cadastros', MOBILE_TAB_ICON.clipboard],
+    ],
+    mais: [
+      ['templates.html', 'Templates'],
+      ['financial.html', 'Financeiro'],
+    ],
+  },
+};
+
+function mobileRoleNav(role, active, dir) {
+  const { tabs, mais } = MOBILE_NAV_CONFIG[role];
+  const maisActive = mais.some(([href]) => href === active);
+  const tabsHtml = tabs.map(([href, label, icon]) => `
     <a href="${dir}${href}" class="mobile-tab-link ${active === href ? 'active' : ''}">
       <span class="mobile-tab-icon" aria-hidden="true">${icon}</span>
       <span>${label}</span>
     </a>
   `).join('');
-  const sheetLinksHtml = MOBILE_MAIS_ROUTES.map(([href, label]) => `
+  const sheetLinksHtml = mais.map(([href, label]) => `
     <a href="${dir}${href}" class="mobile-nav-panel-link ${active === href ? 'active' : ''}">${label}</a>
   `).join('');
   return `
@@ -366,11 +408,11 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
           </div>
         </div>
       </header>
-      <main class="max-w-6xl mx-auto px-6 py-12 ${role === 'client' ? 'has-mobile-tab-bar' : ''}">
+      <main class="max-w-6xl mx-auto px-6 py-12 has-mobile-tab-bar">
         ${role === 'client' ? onboardingGateBanner(active) : ''}
         <div id="app-content"></div>
       </main>
-      ${role === 'client' ? mobileClientNav(active, dir) : ''}
+      ${mobileRoleNav(role, active, dir)}
     </div>
   `;
 }
@@ -396,9 +438,9 @@ document.addEventListener('click', (e) => {
 });
 
 // Same delegated-on-`document` reasoning as #logout-link above: the
-// mobile "Mais" sheet's markup (mobileClientNav) doesn't exist in the DOM
-// until renderShell's returned string is inserted, so every client page
-// gets this open/close wiring for free just by importing ui.js — no
+// mobile "Mais" sheet's markup (mobileRoleNav) doesn't exist in the DOM
+// until renderShell's returned string is inserted, so every page (any
+// role) gets this open/close wiring for free just by importing ui.js — no
 // per-page init call needed (unlike initClientSwitcher, which stays
 // opt-in since it's demo-only). Toggling `.open` (not display) is what
 // lets the CSS slide-up transition in theme.css actually animate.
