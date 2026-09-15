@@ -1035,6 +1035,7 @@ async function render() {
   };
 
   content.innerHTML = `
+    <a href="${isAssistant ? 'clients.html' : 'crm.html'}" class="btn-text mb-4 inline-block">&larr; ${isAssistant ? 'Clientes' : 'Todos os clientes'}</a>
     ${profileHeaderCard(client, status)}
     ${profileSummaryCard(client, internalProfile)}
     ${internalNotesCard(internalProfile)}
