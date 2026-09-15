@@ -10,7 +10,7 @@ import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
 import {
   renderShell, card, initClientSwitcher, externalLinkAttrs,
-  contentCardInner, hublaHref,
+  contentCardInner, hublaHref, isValidHttpUrl,
 } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content' });
@@ -52,11 +52,45 @@ async function recommendedSection() {
   `;
 }
 
+// Aulas Gravadas — real gap found: resources_client_read RLS already
+// grants any client SELECT the moment general_audience=true (confirmed
+// via pg_policies), but nothing here ever queried for that — only
+// per-client resource_assignments (above) was ever shown. This is what a
+// class Nay records on Google Meet and links (via admin/content.js's
+// Biblioteca de Aulas, real now — the same `resources` row, just
+// general_audience=true instead of assigned to one client) actually looks
+// like once a real client opens Conteúdos.
+function recordedClassCard(r) {
+  const hasImage = isValidHttpUrl(r.cover_image_url);
+  return `
+    <a ${externalLinkAttrs(hublaHref(r.hubla_url))} class="block">
+      ${card(`
+        ${hasImage ? `<img src="${r.cover_image_url}" alt="" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:4px; margin-bottom:12px;" />` : ''}
+        <p class="font-medium text-sm mb-1">${r.title}</p>
+        ${r.description ? `<p class="text-xs text-white/40 mb-2">${r.description}</p>` : ''}
+        <p class="text-xs" style="color:var(--gold);">Assistir ↗${r.duration ? ` · ${r.duration}` : ''}</p>
+      `)}
+    </a>
+  `;
+}
+
+async function recordedClassesSection() {
+  const { data: resources } = await supabase.from('resources').select('*').eq('general_audience', true).order('created_at', { ascending: false });
+  if (!resources || !resources.length) return '';
+  return `
+    <div class="mb-10">
+      <p class="text-sm text-white/50 mb-4">Aulas Gravadas</p>
+      <div class="grid md:grid-cols-2 gap-4">${resources.map(recordedClassCard).join('')}</div>
+    </div>
+  `;
+}
+
 async function render() {
-  const [{ data: categories }, { data: tenant }, recommendedHtml] = await Promise.all([
+  const [{ data: categories }, { data: tenant }, recommendedHtml, recordedClassesHtml] = await Promise.all([
     supabase.from('content_categories').select('*').eq('is_visible', true).order('display_order'),
     supabase.from('tenant_settings').select('hubla_all_content_url').limit(1).maybeSingle(),
     recommendedSection(),
+    recordedClassesSection(),
   ]);
 
   content.innerHTML = `
@@ -68,6 +102,7 @@ async function render() {
     </div>
 
     ${recommendedHtml}
+    ${recordedClassesHtml}
 
     ${categories && categories.length ? `
       <div class="content-grid">${categories.map(categoryCard).join('')}</div>

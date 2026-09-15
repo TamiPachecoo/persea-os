@@ -265,12 +265,70 @@ function wireGatewayEvents() {
   });
 }
 
+// Real bug/gap found: the whole Content Center Library + Assignments
+// below (renderLibrary/renderAssignments/openResourceModal/
+// openAssignmentModal) was 100% MockDB too — same situation as the
+// gateway section above, and for "recommend content to a specific
+// client" specifically, the real receiving end (client/content.js's
+// recommendedSection — resource_assignments joined with resources) has
+// existed and worked for real this whole time with nothing on the admin
+// side able to actually write to it. resources_client_read RLS already
+// grants a client SELECT the moment general_audience=true, with no admin
+// UI ever built to use that either — exactly the shape needed for
+// "recorded classes visible to everyone," not just per-client
+// recommendations. Real Supabase now, same isProductionEnvironment()
+// branch pattern as the gateway section (MockDB unchanged in
+// staging/demo).
+let currentResources = [];
+let currentAssignments = [];
+
+function shapeResource(row) {
+  return {
+    id: row.id, title: row.title, description: row.description, track: row.track, phaseKey: row.phase_key,
+    duration: row.duration, hublaUrl: row.hubla_url, recommendation: row.recommendation,
+    generalAudience: row.general_audience, coverImage: row.cover_image_url,
+  };
+}
+
+async function loadRealResourcesByTrack() {
+  const { data } = await supabase.from('resources').select('*').order('created_at', { ascending: true });
+  currentResources = (data || []).map(shapeResource);
+  const byTrack = Object.fromEntries(CONTENT_TRACKS.map((t) => [t, []]));
+  currentResources.forEach((r) => { (byTrack[r.track] || (byTrack[r.track] = [])).push(r); });
+  return byTrack;
+}
+
+async function loadRealAssignments() {
+  // resources(title) — a resource can be deleted after being assigned
+  // (real FK has no cascade rule forcing otherwise); left join surfaces
+  // that as null, same "(conteúdo removido)" fallback the demo already
+  // shows for exactly this case.
+  const { data } = await supabase.from('resource_assignments')
+    .select('*, resources(title), clients(full_name)').order('assigned_at', { ascending: false });
+  currentAssignments = data || [];
+  return currentAssignments.map((a) => ({
+    id: a.id, resourceId: a.resource_id, resource: a.resources ? { title: a.resources.title } : null,
+    clientName: a.clients?.full_name || '—', deadline: a.deadline, reason: a.reason, completed: a.completed,
+  }));
+}
+
+async function saveRealResource({ id, title, description, track, phaseKey, duration, generalAudience, hublaUrl, recommendation, coverImage }) {
+  const payload = {
+    title, description, track, phase_key: phaseKey, duration, general_audience: generalAudience,
+    hubla_url: hublaUrl, recommendation, cover_image_url: coverImage, updated_at: new Date().toISOString(),
+  };
+  if (id) return (await supabase.from('resources').update(payload).eq('id', id)).error;
+  return (await supabase.from('resources').insert(payload)).error;
+}
+
 function resourceRow(r, assignedCount = 0) {
   const linkOk = isValidHttpUrl(r.hublaUrl);
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
       <div class="flex items-start justify-between gap-4">
-        <div class="min-w-0">
+        <div class="flex items-start gap-3 min-w-0">
+          ${isValidHttpUrl(r.coverImage) ? `<img src="${r.coverImage}" alt="" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--line);" />` : ''}
+          <div class="min-w-0">
           <p class="font-medium text-sm">${r.title}</p>
           ${r.description ? `<p class="text-xs text-white/40 mt-1">${r.description}</p>` : ''}
           <div class="flex items-center gap-2 mt-2 flex-wrap">
@@ -278,7 +336,8 @@ function resourceRow(r, assignedCount = 0) {
             ${r.duration ? `<span class="text-xs text-white/30">${r.duration}</span>` : ''}
             ${r.phaseKey ? `<span class="text-xs text-white/30">· Fase ${r.phaseKey}</span>` : ''}
             ${assignedCount ? `<span class="text-xs text-white/30">· Recomendado a ${assignedCount} cliente${assignedCount === 1 ? '' : 's'}</span>` : ''}
-            ${!linkOk ? '<span class="text-xs" style="color:var(--error);">Link da Hubla pendente</span>' : ''}
+            ${!linkOk ? '<span class="text-xs" style="color:var(--error);">Link pendente</span>' : ''}
+          </div>
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -290,10 +349,11 @@ function resourceRow(r, assignedCount = 0) {
   `;
 }
 
-function renderLibrary() {
-  const byTrack = MockDB.getResourcesByTrack();
+async function renderLibrary() {
+  const byTrack = isProductionEnvironment() ? await loadRealResourcesByTrack() : MockDB.getResourcesByTrack();
+  const assignments = isProductionEnvironment() ? await loadRealAssignments() : MockDB.getAllAssignments();
   const assignedCountByResource = {};
-  MockDB.getAllAssignments().forEach((a) => {
+  assignments.forEach((a) => {
     assignedCountByResource[a.resourceId] = (assignedCountByResource[a.resourceId] || 0) + 1;
   });
   return CONTENT_TRACKS.map((t) => card(`
@@ -301,12 +361,12 @@ function renderLibrary() {
       <p class="text-sm text-white/50">${CONTENT_TRACK_LABEL[t]}</p>
       <button type="button" data-new-resource="${t}" class="btn-ghost">+ Novo Conteúdo</button>
     </div>
-    ${byTrack[t].length ? byTrack[t].map((r) => resourceRow(r, assignedCountByResource[r.id] || 0)).join('') : '<p class="text-xs text-white/20">Nenhum conteúdo nesta trilha ainda.</p>'}
+    ${(byTrack[t] || []).length ? byTrack[t].map((r) => resourceRow(r, assignedCountByResource[r.id] || 0)).join('') : '<p class="text-xs text-white/20">Nenhum conteúdo nesta trilha ainda.</p>'}
   `, 'mb-6')).join('');
 }
 
-function renderAssignments() {
-  const assignments = MockDB.getAllAssignments();
+async function renderAssignments() {
+  const assignments = isProductionEnvironment() ? await loadRealAssignments() : MockDB.getAllAssignments();
   return card(`
     <div class="flex items-center justify-between mb-4">
       <p class="text-sm text-white/50">Atribuições a Clientes</p>
@@ -331,7 +391,7 @@ function openResourceModal(resource, defaultTrack) {
   const isNew = !resource;
   const data = resource || {
     title: '', description: '', track: defaultTrack || CONTENT_TRACKS[0], phaseKey: '',
-    duration: '', hublaUrl: '', recommendation: '', generalAudience: true,
+    duration: '', hublaUrl: '', recommendation: '', generalAudience: true, coverImage: '',
   };
   const { el, close } = openModal({
     title: isNew ? 'Novo Conteúdo' : 'Editar Conteúdo',
@@ -371,9 +431,13 @@ function openResourceModal(resource, defaultTrack) {
           </div>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">URL da Aula na Hubla</label>
-          <input name="hublaUrl" class="field" value="${data.hublaUrl || ''}" placeholder="https://pay.hubla.com.br/..." />
-          <p class="text-xs text-white/20 mt-1">Cole aqui a URL real da aula/ambiente na Hubla — o botão "Assistir na Hubla" abre exatamente este link.</p>
+          <label class="text-xs text-white/40 block mb-1">URL da Imagem de Capa <span class="text-white/20">(opcional)</span></label>
+          <input name="coverImage" class="field" value="${data.coverImage || ''}" placeholder="https://... ou deixe em branco" />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link da Aula <span class="text-white/20">(Hubla ou gravação no Google Drive)</span></label>
+          <input name="hublaUrl" class="field" value="${data.hublaUrl || ''}" placeholder="https://pay.hubla.com.br/... ou https://drive.google.com/..." />
+          <p class="text-xs text-white/20 mt-1">Para uma aula gravada no Google Meet: abra a gravação na Hubla ou no Google Drive, copie o link de compartilhamento e cole aqui — é exatamente esse link que abre quando a cliente clica em "Assistir".</p>
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Recomendação da Nay <span class="text-white/20">(opcional)</span></label>
@@ -385,25 +449,30 @@ function openResourceModal(resource, defaultTrack) {
       </form>
     `,
   });
-  el.querySelector('#resource-form').addEventListener('submit', (e) => {
+  el.querySelector('#resource-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    MockDB.saveResource({
+    const payload = {
       id: resource ? resource.id : undefined,
       title: fd.get('title'), description: fd.get('description'), track: fd.get('track'),
       phaseKey: fd.get('phaseKey') || null, duration: fd.get('duration') || null,
       generalAudience: fd.get('generalAudience') === 'true',
       hublaUrl: fd.get('hublaUrl'), recommendation: fd.get('recommendation') || null,
-    });
+      coverImage: fd.get('coverImage') || null,
+    };
+    const error = isProductionEnvironment() ? await saveRealResource(payload) : (MockDB.saveResource(payload), null);
+    if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return; }
     close();
     toast(isNew ? 'Conteúdo adicionado.' : 'Conteúdo atualizado.');
     render();
   });
 }
 
-function openAssignmentModal(preselectedResourceId) {
-  const resources = MockDB.getResources();
-  const clients = MockDB.listClients();
+async function openAssignmentModal(preselectedResourceId) {
+  const resources = isProductionEnvironment() ? currentResources : MockDB.getResources();
+  const clients = isProductionEnvironment()
+    ? (await supabase.from('clients').select('id, full_name').eq('is_demo', false).order('full_name')).data?.map((c) => ({ id: c.id, fullName: c.full_name })) || []
+    : MockDB.listClients();
   const { el, close } = openModal({
     title: 'Nova Atribuição',
     bodyHtml: `
@@ -440,12 +509,22 @@ function openAssignmentModal(preselectedResourceId) {
       </form>
     `,
   });
-  el.querySelector('#assignment-form').addEventListener('submit', (e) => {
+  el.querySelector('#assignment-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    MockDB.assignResourceToClient(fd.get('resourceId'), fd.get('studentId'), {
-      reason: fd.get('reason'), deadline: fd.get('deadline') || null, relatedPhaseOrMeeting: fd.get('relatedPhaseOrMeeting') || null,
-    });
+    const reason = fd.get('reason'), deadline = fd.get('deadline') || null, relatedPhaseOrMeeting = fd.get('relatedPhaseOrMeeting') || null;
+    let error = null;
+    if (isProductionEnvironment()) {
+      // assigned_at is NOT NULL with no default (same real trap fixed in
+      // client/images.js's upload insert) — set explicitly here too.
+      ({ error } = await supabase.from('resource_assignments').insert({
+        resource_id: fd.get('resourceId'), client_id: fd.get('studentId'), reason,
+        deadline, related_phase_or_meeting: relatedPhaseOrMeeting, assigned_at: new Date().toISOString(),
+      }));
+    } else {
+      MockDB.assignResourceToClient(fd.get('resourceId'), fd.get('studentId'), { reason, deadline, relatedPhaseOrMeeting });
+    }
+    if (error) { toast('Não foi possível atribuir agora.', { tone: 'error' }); return; }
     close();
     toast('Conteúdo atribuído.');
     render();
@@ -457,7 +536,10 @@ function wireEvents() {
     btn.addEventListener('click', () => openResourceModal(null, btn.dataset.newResource));
   });
   content.querySelectorAll('[data-edit-resource]').forEach((btn) => {
-    btn.addEventListener('click', () => openResourceModal(MockDB.getResource(btn.dataset.editResource)));
+    btn.addEventListener('click', () => {
+      const r = isProductionEnvironment() ? currentResources.find((x) => x.id === btn.dataset.editResource) : MockDB.getResource(btn.dataset.editResource);
+      openResourceModal(r);
+    });
   });
   content.querySelector('#new-assignment')?.addEventListener('click', () => openAssignmentModal());
   content.querySelectorAll('[data-attribute-resource]').forEach((btn) => {
@@ -470,9 +552,9 @@ async function render() {
     ${await renderGatewaySection()}
     <div class="divider mb-6" style="margin-top:8px;"></div>
     <p class="text-xs text-white/30 mb-1 uppercase tracking-[.15em]">Biblioteca de Aulas</p>
-    <p class="text-sm text-white/40 mb-8 max-w-2xl">As aulas continuam hospedadas na Hubla — aqui você organiza como elas aparecem para as clientes e pode recomendar conteúdos específicos. Isso é diferente dos cards acima: aqui você gerencia aulas individuais, não as categorias em destaque.</p>
-    ${renderLibrary()}
-    ${renderAssignments()}
+    <p class="text-sm text-white/40 mb-8 max-w-2xl">Cada aula fica hospedada na Hubla ou como gravação no Google Drive — aqui você organiza como elas aparecem para as clientes e pode recomendar conteúdos específicos. Isso é diferente dos cards acima: aqui você gerencia aulas individuais, não as categorias em destaque.</p>
+    ${await renderLibrary()}
+    ${await renderAssignments()}
   `;
   wireGatewayEvents();
   wireEvents();
