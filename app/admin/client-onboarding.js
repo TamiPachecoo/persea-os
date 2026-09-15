@@ -33,6 +33,7 @@ import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArche
 import { getVersions, getSections, createDraft, saveSectionContent, publishVersion, SECTION_DEFS } from '../shared/playbook-model.js';
 import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action-model.js';
+import { markHublaAccessGranted } from '../shared/hubla-model.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -78,6 +79,7 @@ document.body.innerHTML = renderShell({ role: profile.role, active: profile.role
 const content = document.getElementById('app-content');
 const isAssistant = profile.role === 'assistant';
 let activeTab = 'jornada';
+const ASSISTANT_HIDDEN_TABS = new Set(['pesquisa', 'playbook']);
 
 if (!clientId) {
   content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Falta o parâmetro ?id= na URL.</p>');
@@ -101,14 +103,22 @@ const CONTRACT_STATUS_LABEL = {
 // activity Nay actually reviews/edits gets its own tab, same as the demo's
 // "Direção da Marca" example. Value Analysis is admin-only (no assistant
 // RLS policy exists for it at all — see this file's own header comment).
-const TABS = [
+const ALL_TABS = [
   ['jornada', 'Jornada'],
   ['financeiro', 'Financeiro'],
   ['direcao-marca', 'Direção de Marca'],
   ['pesquisa', 'Precificação & Valor'],
   ['arquetipos', 'Arquétipos'],
   ['playbook', 'Playbook'],
+  ['projeto-imagem', 'Projeto de Imagem'],
 ];
+// Explicit per feedback: the assistant's CRM should show Jornada,
+// Financeiro, Direção de Marca, Arquétipos, and Projeto de Imagem (the
+// part of the program she's actually responsible for) — not Precificação
+// & Valor (Valor is already RLS-blocked for her — see this file's own
+// header comment; Precificação/business survey is bundled with it) or
+// Playbook.
+const TABS = isAssistant ? ALL_TABS.filter(([key]) => !ASSISTANT_HIDDEN_TABS.has(key)) : ALL_TABS;
 
 async function loadAll() {
   const [{ data: client }, { data: partyInfo }, { data: contract }, { data: tokens }] = await Promise.all([
@@ -758,13 +768,23 @@ const ENCOUNTER_STATUS_CLASS = {
   waiting_on_client: 'badge-locked', locked: 'badge-locked',
 };
 
+// E3 (Imagem e Estratégia) is the one encounter the assistant directly
+// prepares for — its own real purpose text (encounter_defs) names exactly
+// the materials the new Projeto de Imagem tab manages. Same [data-tab]
+// jump mechanism phaseActivityRow's "Ver material →" already uses below.
+const ENCOUNTER_TAB_LINK = { 3: 'projeto-imagem' };
+
 function encounterRow(e) {
   const detail = e.status === 'scheduled' ? `${formatDateTime(e.scheduledAt)} — ${e.purpose}` : e.purpose;
+  const tabKey = ENCOUNTER_TAB_LINK[e.number];
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
         <p class="text-sm font-medium">E${e.number} — ${e.name}</p>
-        <span class="badge ${ENCOUNTER_STATUS_CLASS[e.status]}">${ENCOUNTER_STATUS_LABEL[e.status]}</span>
+        <div class="flex items-center gap-3">
+          ${tabKey ? `<button type="button" data-tab="${tabKey}" class="btn-text">Editar material →</button>` : ''}
+          <span class="badge ${ENCOUNTER_STATUS_CLASS[e.status]}">${ENCOUNTER_STATUS_LABEL[e.status]}</span>
+        </div>
       </div>
       <p class="text-xs text-white/30 max-w-2xl">${detail}</p>
     </div>
@@ -904,6 +924,147 @@ function financeiroCard(finState) {
   `, 'mb-6');
 }
 
+// Real gap found: markHublaAccessGranted (shared/hubla-model.js) has
+// worked correctly this whole time from the assistant's Cadastros queue —
+// but the moment a client activates and moves out of Cadastros into
+// Clientes, there was nowhere left to grant it from at all. Same real
+// function, no second implementation — just also reachable from her real
+// workspace now, since a client can need this granted well after she's
+// already active.
+function hublaAccessCard(c) {
+  const granted = c.hubla_access_status === 'granted';
+  return card(`
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <p class="text-sm text-white/50 mb-1">Acesso Hubla</p>
+        <p class="text-xs" style="color:var(--muted);">${granted ? `Concedido${c.hubla_access_granted_at ? ` em ${formatDate(c.hubla_access_granted_at)}` : ''}.` : 'Ainda não concedido — Hubla não tem API de convite, então isso é feito manualmente pelo painel da Hubla.'}</p>
+      </div>
+      ${granted
+        ? '<span class="badge badge-completed">Concedido</span>'
+        : '<button type="button" id="mark-hubla-granted" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Marcar como concedido</button>'}
+    </div>
+  `, 'mb-6');
+}
+
+// Projeto de Imagem — the part of the program the assistant is actually
+// responsible for (E3's own real purpose text names exactly these:
+// Cartela de Cores, Guia de Produções, Ferramentas para Nova Imagem —
+// encounter_defs, unchanged), plus Kit Digital and Ensaio Fotográfico.
+// Real tables (image_guides free-form-by-slug + digital_kits, one row per
+// client) already existed and already worked on the client's own side
+// (client/images.js's renderDeliveredMaterials) — nothing here ever wrote
+// to them in production. delivered_at is the exact same "client can see
+// it" gate that page already reads; a DB trigger (not just this UI) now
+// enforces that only admin can set/clear it — see the
+// admin_only_notes_and_deliverable_approval migration — so "assistant
+// prepares, admin approves" is a real boundary, not a hidden button.
+const IMAGE_GUIDE_DEFS = [
+  { slug: 'paleta_cores', label: 'Cartela de Cores' },
+  { slug: 'guia_producoes_completo', label: 'Guia de Produções (Completo)' },
+  { slug: 'guia_looks_mensal', label: 'Guia de Produções (Mensal)' },
+  { slug: 'ferramentas_nova_imagem', label: 'Ferramentas para Nova Imagem' },
+  { slug: 'moodboard_ensaio', label: 'Ensaio Fotográfico' },
+];
+
+async function loadImageProject() {
+  const [{ data: guides }, { data: kit }] = await Promise.all([
+    supabase.from('image_guides').select('*').eq('client_id', clientId),
+    supabase.from('digital_kits').select('*').eq('client_id', clientId).maybeSingle(),
+  ]);
+  return { guideBySlug: Object.fromEntries((guides || []).map((g) => [g.slug, g])), kit: kit || null };
+}
+
+function deliverableStatus(row) {
+  if (row?.delivered_at) return { label: 'Entregue', cls: 'badge-completed' };
+  if (row?.file_url || row?.canva_url) return { label: 'Aguardando aprovação', cls: 'badge-progress' };
+  return { label: 'Não iniciado', cls: 'badge-locked' };
+}
+
+function imageDeliverableRow({ key, label, row, isKit }) {
+  const status = deliverableStatus(row);
+  const hasContent = !!(row?.file_url || row?.canva_url);
+  return `
+    <div class="py-3 border-b border-white/5 last:border-0">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <p class="text-sm font-medium">${label}</p>
+        <span class="badge ${status.cls}">${status.label}</span>
+      </div>
+      ${row?.summary ? `<p class="text-xs text-white/30 mb-2">${row.summary}</p>` : ''}
+      <div class="flex items-center gap-2 flex-wrap">
+        <button type="button" data-edit-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-ghost">Editar</button>
+        ${isValidHttpUrl(row?.file_url) ? `<a ${externalLinkAttrs(row.file_url)} class="btn-text">Ver arquivo ↗</a>` : ''}
+        ${isValidHttpUrl(row?.canva_url) ? `<a ${externalLinkAttrs(row.canva_url)} class="btn-text">Abrir no Canva ↗</a>` : ''}
+        ${!isAssistant && hasContent && !row?.delivered_at ? `<button type="button" data-approve-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-primary" style="padding:6px 14px;font-size:12px;">Aprovar e Entregar</button>` : ''}
+        ${!isAssistant && row?.delivered_at ? `<button type="button" data-revert-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-text" style="color:var(--terracotta);">Reverter entrega</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function imageProjectCard({ guideBySlug, kit }) {
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Projeto de Imagem</p>
+    <p class="text-xs text-white/20 mb-4">${isAssistant ? 'Prepare cada material abaixo — a Nay revisa e aprova antes de a cliente ver.' : 'Revise e aprove cada material preparado pela assistente antes que a cliente veja.'}</p>
+    ${IMAGE_GUIDE_DEFS.map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: guideBySlug[d.slug], isKit: false })).join('')}
+    ${imageDeliverableRow({ key: 'kit_digital', label: 'Kit Digital', row: kit, isKit: true })}
+  `, 'mb-6');
+}
+
+function openDeliverableModal({ key, label, row, isKit }) {
+  const data = row || {};
+  const { el, close } = openModal({
+    title: `Editar — ${label}`,
+    bodyHtml: `
+      <form id="deliverable-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Resumo <span class="text-white/20">(opcional)</span></label>
+          <textarea name="summary" rows="2" class="field text-sm">${data.summary || ''}</textarea>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link do Arquivo</label>
+          <input name="file_url" class="field text-sm" value="${data.file_url || ''}" placeholder="https://..." />
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link do Canva <span class="text-white/20">(opcional)</span></label>
+          <input name="canva_url" class="field text-sm" value="${data.canva_url || ''}" placeholder="https://canva.com/..." />
+        </div>
+        ${!isKit ? `
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Nota <span class="text-white/20">(opcional)</span></label>
+          <textarea name="note" rows="2" class="field text-sm">${data.note || ''}</textarea>
+        </div>
+        ` : ''}
+        <div class="flex justify-end pt-2">
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar</button>
+        </div>
+      </form>
+    `,
+  });
+  el.querySelector('#deliverable-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = { summary: fd.get('summary') || null, file_url: fd.get('file_url') || null, canva_url: fd.get('canva_url') || null };
+    let error;
+    if (isKit) {
+      ({ error } = await supabase.from('digital_kits').upsert({ client_id: clientId, ...payload }, { onConflict: 'client_id' }));
+    } else {
+      payload.note = fd.get('note') || null;
+      ({ error } = await supabase.from('image_guides').upsert({ client_id: clientId, slug: key, ...payload }, { onConflict: 'client_id,slug' }));
+    }
+    if (error) { toast('Não foi possível salvar agora — se você é assistente, lembre-se que só a Nay pode aprovar/entregar.', { tone: 'error' }); return; }
+    close();
+    toast('Material atualizado.');
+    render();
+  });
+}
+
+async function setDeliveryStatus({ key, isKit, delivered }) {
+  const table = isKit ? 'digital_kits' : 'image_guides';
+  let q = supabase.from(table).update({ delivered_at: delivered ? new Date().toISOString() : null }).eq('client_id', clientId);
+  if (!isKit) q = q.eq('slug', key);
+  return (await q).error;
+}
+
 // Admin-only, matching delete-client's own role check — this is more
 // destructive than anything else on this page (real login, contrato,
 // pagamentos, cadastro, tudo) so it gets a tighter bar than the
@@ -968,7 +1129,7 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, state, finState, internalProfile, journey] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, state, finState, internalProfile, journey, imageProject] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
@@ -976,8 +1137,9 @@ async function render() {
     loadPlaybookState(),
     loadProgramState(clientId, client),
     loadFinanceiro(contract),
-    loadInternalProfile(),
+    !isAssistant ? loadInternalProfile() : Promise.resolve(null),
     loadEncounterJourney(client, clientId),
+    loadImageProject(),
   ]);
   const programSummaryHtml = await programSummaryCard(client, state);
 
@@ -1021,8 +1183,10 @@ async function render() {
         </div>
       `, 'mb-6') : ''}
       ${financeiroCard(finState)}
+      ${hublaAccessCard(client)}
     `,
     'direcao-marca': brandDirectionCard(brandState),
+    'projeto-imagem': imageProjectCard(imageProject),
     // Merged per explicit feedback — Precificação (business survey) and
     // Valor (admin-only) are the same commercial-context conversation with
     // the client, so they live together instead of competing for a tab
@@ -1037,8 +1201,8 @@ async function render() {
   content.innerHTML = `
     <a href="${isAssistant ? 'clients.html' : 'crm.html'}" class="btn-text mb-4 inline-block">&larr; ${isAssistant ? 'Clientes' : 'Todos os clientes'}</a>
     ${profileHeaderCard(client, status)}
-    ${profileSummaryCard(client, internalProfile)}
-    ${internalNotesCard(internalProfile)}
+    ${!isAssistant ? profileSummaryCard(client, internalProfile) : ''}
+    ${!isAssistant ? internalNotesCard(internalProfile) : ''}
 
     ${tabBarHtml()}
     <div id="tab-content">${TAB_CONTENT[activeTab] || ''}</div>
@@ -1054,6 +1218,37 @@ async function render() {
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
   content.querySelector('#prepare-contract')?.addEventListener('click', (e) => prepareContract(client, e.target));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
+  content.querySelector('#mark-hubla-granted')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    const { error } = await markHublaAccessGranted(clientId);
+    if (error) { toast('Não foi possível marcar agora.', { tone: 'error' }); e.target.disabled = false; return; }
+    toast('Acesso Hubla marcado como concedido.');
+    render();
+  });
+  content.querySelectorAll('[data-edit-deliverable]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.editDeliverable;
+      const isKit = btn.dataset.isKit === '1';
+      const def = IMAGE_GUIDE_DEFS.find((d) => d.slug === key);
+      openDeliverableModal({ key, label: isKit ? 'Kit Digital' : def.label, row: isKit ? imageProject.kit : imageProject.guideBySlug[key], isKit });
+    });
+  });
+  content.querySelectorAll('[data-approve-deliverable]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const error = await setDeliveryStatus({ key: btn.dataset.approveDeliverable, isKit: btn.dataset.isKit === '1', delivered: true });
+      if (error) { toast('Não foi possível aprovar agora.', { tone: 'error' }); return; }
+      toast('Material aprovado e entregue.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-revert-deliverable]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const error = await setDeliveryStatus({ key: btn.dataset.revertDeliverable, isKit: btn.dataset.isKit === '1', delivered: false });
+      if (error) { toast('Não foi possível reverter agora.', { tone: 'error' }); return; }
+      toast('Entrega revertida.');
+      render();
+    });
+  });
   content.querySelector('#photo-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = new FormData(e.target).get('photo_url').trim();

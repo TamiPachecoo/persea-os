@@ -73,18 +73,39 @@ function productionClientRow(c) {
 // below (same role requirement either way) — only which render function
 // runs at the very bottom differs. See isProductionEnvironment() branch
 // near the end of this file.
+// Real gap found: the Hubla pending queue (loadHublaPendingClients/
+// renderHublaPendingCard — already fully real, confirmed working) only
+// ever rendered in the demo render() path below, never here — so a real
+// client who'd just activated and needed her Hubla access granted never
+// showed up anywhere in production Cadastros at all. Same real functions,
+// no second implementation.
 async function renderProductionCadastros() {
-  const clients = await loadRealClients();
+  const [clients, hublaPending] = await Promise.all([loadRealClients(), loadHublaPendingClients()]);
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Cadastros</p>
       <h1 class="text-3xl font-serif">Contrato e Ativação</h1>
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais em onboarding — cadastro, contrato e acesso. Clique em uma cliente para abrir o workspace real dela.</p>
     </div>
+    ${renderHublaPendingCard(hublaPending)}
     ${clients.length
       ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
       : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro real no momento.</p>')}
   `;
+  content.querySelectorAll('[data-copy-hubla-email]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copyHublaEmail); toast('E-mail copiado.'); }
+      catch { toast('Não foi possível copiar automaticamente. Selecione o e-mail manualmente.', { tone: 'error' }); }
+    });
+  });
+  content.querySelectorAll('[data-mark-hubla-granted]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await markHublaAccessGranted(btn.dataset.markHublaGranted);
+      if (error) { toast('Erro ao atualizar o status.', { tone: 'error' }); return; }
+      toast('Acesso Hubla marcado como concedido.');
+      renderProductionCadastros();
+    });
+  });
 }
 
 const REAL_STATUS_LABEL = {

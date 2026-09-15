@@ -72,6 +72,7 @@ async function renderProductionClientes() {
       <h1 class="text-3xl font-serif">Suas Clientes</h1>
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais com acesso ativo ao Persea OS. Clique em uma cliente para abrir o workspace real dela.</p>
     </div>
+    ${card(`<p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'} ativa${clients.length === 1 ? '' : 's'}</p>`, 'mb-6')}
     ${clients.length
       ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
       : card('<p class="text-sm" style="color:var(--muted);">Nenhuma cliente ativa no momento — assim que o acesso de uma cliente for criado em Cadastros, ela aparece aqui.</p>')}
