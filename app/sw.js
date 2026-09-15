@@ -29,7 +29,7 @@
 //    to close first — combined with network-first everywhere else, this
 //    means there is no realistic path to a stuck old JS/CSS bundle.
 
-const CACHE_VERSION = 'persea-static-v1';
+const CACHE_VERSION = 'persea-static-v2';
 const IMMUTABLE_CACHE = `${CACHE_VERSION}-immutable`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`; // offline-fallback only, never served stale-first
 
@@ -103,8 +103,22 @@ self.addEventListener('fetch', (event) => {
   // network-first, never served stale-first. A cache is kept purely as an
   // offline fallback, not as a performance layer, so a fresh deploy is
   // visible on the very next successful load.
+  //
+  // Real bug found: "network-first" via a plain fetch(req) only means
+  // "prefer the network response over this worker's own cache" — the
+  // fetch() call itself can still be silently satisfied by the BROWSER's
+  // own HTTP disk cache without a real round-trip, if the resource is
+  // still "fresh" per Cache-Control. Safari and Chrome-on-iOS keep
+  // completely separate HTTP caches (different apps/sandboxes) — a device
+  // that had visited in Safari before a deploy kept serving its
+  // already-cached, pre-deploy shared/ui.js and shared/theme.css (the
+  // fixed mobile nav bar simply never existed in that copy), while
+  // Chrome-iOS, never having cached that URL, always fetched fresh. A
+  // "network-first" strategy that can still resolve from HTTP cache isn't
+  // actually network-first for this. Forcing cache:'no-store' makes every
+  // same-origin request behind this worker a genuine round-trip.
   event.respondWith(
-    fetch(req)
+    fetch(new Request(req, { cache: 'no-store' }))
       .then((res) => {
         if (res && res.ok) {
           const clone = res.clone();

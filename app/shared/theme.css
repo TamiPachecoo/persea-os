@@ -659,6 +659,14 @@ a.bg-white, button.bg-white, .bg-white { background: var(--cream) !important; co
 }
 .cal-more:hover{ color:var(--cream); }
 @media (max-width:640px){
+  /* Real feedback: 7 equal (1fr) columns crammed into a ~330px viewport
+     (minus the page's own side padding) made every cell too narrow to
+     read — weekday labels clipped, day numbers and chips squeezed. Same
+     fix .content-grid already uses for its own mobile case: give each
+     column a real minimum width and let the grid itself scroll
+     horizontally, instead of forcing 7 columns to fit no matter how
+     narrow that makes each one. */
+  .cal-grid{ grid-template-columns:repeat(7, minmax(88px, 1fr)); overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .cal-cell{ height:112px; padding:4px 3px 6px; }
   .cal-weekday{ font-size:9px; padding:6px 2px 5px; }
   .cal-chip{ font-size:9px; padding:2px 4px; }

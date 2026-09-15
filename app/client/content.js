@@ -104,11 +104,12 @@ async function render() {
     </div>
 
     ${recommendedHtml}
-    ${recordedClassesHtml}
 
     ${categories && categories.length ? `
       <div class="content-grid">${categories.map(categoryCard).join('')}</div>
     ` : card('<p class="text-sm text-white/30">Ainda não há conteúdos disponíveis — volte em breve.</p>')}
+
+    ${recordedClassesHtml}
   `;
 }
 

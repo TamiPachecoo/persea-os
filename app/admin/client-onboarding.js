@@ -24,6 +24,7 @@ import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import {
   renderShell, card, toast, openModal, formatDateTime, formatDate, brl, isValidHttpUrl, externalLinkAttrs, functionErrorMessage, initialsAvatar,
+  boardEmptyState, mountPinterestBoard,
 } from '../shared/ui.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { loadActiveObligations } from '../shared/financial-model.js';
@@ -186,8 +187,17 @@ function brandDirectionCard({ bdRow, keywords, references, styleNotes }) {
     if (!hasContent) {
       return card(`<p class="text-sm text-white/50 mb-1">Direção de Marca</p><p class="text-xs" style="color:var(--muted);">Direção de Marca ainda não criada.</p>`, 'mb-6');
     }
+    // The board itself — real gap found: neither role ever actually
+    // mounted the embed here (only the raw pinterest_url text field
+    // existed, on admin's own edit form below) — reused verbatim from
+    // client/brand-direction.js's own board-area + mountPinterestBoard
+    // pattern (see render()'s wiring below for the mount call), so this is
+    // the exact same real board Nay sees on the client's own page.
+    const boardUrlOk = isValidHttpUrl(bdRow?.pinterest_url);
     return card(`
       <p class="text-sm text-white/50 mb-3">Direção de Marca <span class="text-xs text-white/30">(somente leitura)</span></p>
+      ${bdRow?.mood_board_intro ? `<p class="text-sm text-white/50 mb-3">${bdRow.mood_board_intro}</p>` : ''}
+      <div class="board-area mb-5" id="bd-board-area">${boardUrlOk ? '' : boardEmptyState()}</div>
       <div class="space-y-3 text-sm">
         ${bdRow?.positioning_summary ? `<div><p class="text-xs text-white/30 mb-1">Posicionamento</p><p>${bdRow.positioning_summary}</p></div>` : ''}
         ${bdRow?.tone ? `<div><p class="text-xs text-white/30 mb-1">Tom de Comunicação</p><p>${bdRow.tone}</p></div>` : ''}
@@ -663,14 +673,31 @@ function nextActionCard(nextAction) {
 // the new client_internal_notes table, staff-only RLS, no client policy
 // at all so "never visible to the cliente" is enforced at the database
 // level, not just by omitting it from her own pages).
+// Split across two real tables per explicit feedback: the "Quem é"
+// WHO/WHAT/WHY/HOW summary should be visible to the assistant too (shown
+// inside Direção de Marca — see TAB_CONTENT below), but the free-form
+// private note stays Nay-only. One RLS policy can't grant that split on a
+// single table's columns, so client_profile_summary (staff-all) and
+// client_internal_notes (admin-only, note only now) are genuinely
+// separate tables — see the split_profile_summary_from_private_notes
+// migration.
 async function loadInternalProfile() {
-  const { data } = await supabase.from('client_internal_notes').select('*').eq('client_id', clientId).maybeSingle();
-  return data || { note: '', who: '', what: '', why: '', how: '' };
+  const [{ data: summary }, note] = await Promise.all([
+    supabase.from('client_profile_summary').select('*').eq('client_id', clientId).maybeSingle(),
+    isAssistant ? Promise.resolve('') : supabase.from('client_internal_notes').select('note').eq('client_id', clientId).maybeSingle().then((r) => r.data?.note || ''),
+  ]);
+  return { who: summary?.who || '', what: summary?.what || '', why: summary?.why || '', how: summary?.how || '', note };
 }
 
-async function saveInternalProfile(fields) {
-  const { error } = await supabase.from('client_internal_notes')
+async function saveProfileSummary(fields) {
+  const { error } = await supabase.from('client_profile_summary')
     .upsert({ client_id: clientId, ...fields, updated_at: new Date().toISOString(), updated_by: profile.id }, { onConflict: 'client_id' });
+  return error;
+}
+
+async function saveInternalNote(note) {
+  const { error } = await supabase.from('client_internal_notes')
+    .upsert({ client_id: clientId, note, updated_at: new Date().toISOString(), updated_by: profile.id }, { onConflict: 'client_id' });
   return error;
 }
 
@@ -937,7 +964,7 @@ function hublaAccessCard(c) {
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div>
         <p class="text-sm text-white/50 mb-1">Acesso Hubla</p>
-        <p class="text-xs" style="color:var(--muted);">${granted ? `Concedido${c.hubla_access_granted_at ? ` em ${formatDate(c.hubla_access_granted_at)}` : ''}.` : 'Ainda não concedido — Hubla não tem API de convite, então isso é feito manualmente pelo painel da Hubla.'}</p>
+        <p class="text-xs" style="color:var(--muted);">${granted ? `Concedido${c.hubla_access_granted_at ? ` em ${formatDate(c.hubla_access_granted_at)}` : ''}.` : 'Ainda não concedido. Faça isso manualmente e confirme aqui.'}</p>
       </div>
       ${granted
         ? '<span class="badge badge-completed">Concedido</span>'
@@ -1137,7 +1164,7 @@ async function render() {
     loadPlaybookState(),
     loadProgramState(clientId, client),
     loadFinanceiro(contract),
-    !isAssistant ? loadInternalProfile() : Promise.resolve(null),
+    loadInternalProfile(),
     loadEncounterJourney(client, clientId),
     loadImageProject(),
   ]);
@@ -1185,7 +1212,11 @@ async function render() {
       ${financeiroCard(finState)}
       ${hublaAccessCard(client)}
     `,
-    'direcao-marca': brandDirectionCard(brandState),
+    // "Quem é" moved here (both roles — client_profile_summary is
+    // staff-all) per explicit feedback: it belongs with the rest of the
+    // brand-direction context she's building, not gated to admin-only at
+    // the top of the page anymore.
+    'direcao-marca': `${profileSummaryCard(client, internalProfile)}${brandDirectionCard(brandState)}`,
     'projeto-imagem': imageProjectCard(imageProject),
     // Merged per explicit feedback — Precificação (business survey) and
     // Valor (admin-only) are the same commercial-context conversation with
@@ -1201,7 +1232,6 @@ async function render() {
   content.innerHTML = `
     <a href="${isAssistant ? 'clients.html' : 'crm.html'}" class="btn-text mb-4 inline-block">&larr; ${isAssistant ? 'Clientes' : 'Todos os clientes'}</a>
     ${profileHeaderCard(client, status)}
-    ${!isAssistant ? profileSummaryCard(client, internalProfile) : ''}
     ${!isAssistant ? internalNotesCard(internalProfile) : ''}
 
     ${tabBarHtml()}
@@ -1213,6 +1243,9 @@ async function render() {
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });
+  if (activeTab === 'direcao-marca' && isAssistant && isValidHttpUrl(brandState.bdRow?.pinterest_url)) {
+    mountPinterestBoard(document.getElementById('bd-board-area'), brandState.bdRow.pinterest_url);
+  }
 
   content.querySelector('#generate-link')?.addEventListener('click', generateLink);
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
@@ -1260,16 +1293,17 @@ async function render() {
   content.querySelector('#internal-notes-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const note = new FormData(e.target).get('note');
-    const error = await saveInternalProfile({ note });
+    const error = await saveInternalNote(note);
     if (error) { toast('Não foi possível salvar as notas.', { tone: 'error' }); return; }
     toast('Notas internas salvas.');
   });
   content.querySelector('#summary-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const error = await saveInternalProfile({ who: fd.get('who'), what: fd.get('what'), why: fd.get('why'), how: fd.get('how') });
+    const error = await saveProfileSummary({ who: fd.get('who'), what: fd.get('what'), why: fd.get('why'), how: fd.get('how') });
     if (error) { toast('Não foi possível salvar o resumo.', { tone: 'error' }); return; }
     toast('Resumo salvo.');
+    render();
   });
   content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
   content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);
