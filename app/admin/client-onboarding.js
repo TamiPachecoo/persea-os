@@ -22,7 +22,7 @@
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import {
-  renderShell, card, toast, openModal, formatDateTime, formatDate, brl, isValidHttpUrl, externalLinkAttrs, functionErrorMessage,
+  renderShell, card, toast, openModal, formatDateTime, formatDate, brl, isValidHttpUrl, externalLinkAttrs, functionErrorMessage, initialsAvatar,
 } from '../shared/ui.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { loadActiveObligations } from '../shared/financial-model.js';
@@ -31,7 +31,7 @@ import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_
 import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArchetypeResults } from '../shared/archetype-model.js';
 import { getVersions, getSections, createDraft, saveSectionContent, publishVersion, SECTION_DEFS } from '../shared/playbook-model.js';
 import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
-import { computeTeamNextStep } from '../shared/team-action-model.js';
+import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action-model.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -621,6 +621,91 @@ function nextActionCard(nextAction) {
   `, 'mb-6');
 }
 
+// Client profile — ported from the MockDB/demo prototype's
+// admin/client-detail.js "Programa" tab (photo, staff-only private notes,
+// full E1-E8 journey), the thing this whole request was about: one real
+// place either role opens to see who this client is and what phase she's
+// actually in, instead of it living only in a mock preview no real client
+// could ever be attached to. Real Supabase now — see the
+// client_profile_photo_and_internal_notes migration (clients.photo_url +
+// the new client_internal_notes table, staff-only RLS, no client policy
+// at all so "never visible to the cliente" is enforced at the database
+// level, not just by omitting it from her own pages).
+async function loadInternalNote() {
+  const { data } = await supabase.from('client_internal_notes').select('note').eq('client_id', clientId).maybeSingle();
+  return data?.note || '';
+}
+
+async function saveInternalNote(note) {
+  const { error } = await supabase.from('client_internal_notes')
+    .upsert({ client_id: clientId, note, updated_at: new Date().toISOString(), updated_by: profile.id }, { onConflict: 'client_id' });
+  return error;
+}
+
+// Same URL-based approach the old demo used ("no real photo upload exists"
+// — still true here; a URL field, not a Storage upload widget, is the
+// honest minimal version) — falls back to the real shared initialsAvatar
+// (ui.js) exactly like every other avatar in this app when there's no URL
+// or it fails to load.
+function clientPhoto(c, size = 88) {
+  if (isValidHttpUrl(c.photo_url)) {
+    return `<img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" onerror="this.remove();" />`;
+  }
+  return initialsAvatar(c.full_name, size);
+}
+
+function profileCard(c, internalNote) {
+  return card(`
+    <div class="flex items-start gap-5 flex-wrap mb-5">
+      ${clientPhoto(c)}
+      <div class="flex-1" style="min-width:200px;">
+        <p class="text-sm text-white/50 mb-2">Foto de perfil</p>
+        <form id="photo-form" class="flex items-center gap-2 flex-wrap">
+          <input name="photo_url" class="field text-sm" style="max-width:320px;" placeholder="Link da foto (URL)" value="${c.photo_url || ''}" />
+          <button type="submit" class="btn-ghost">Salvar</button>
+        </form>
+      </div>
+    </div>
+    <div class="pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-sm text-white/50 mb-1">Notas Internas <span class="text-white/20 text-xs">(nunca visíveis para a cliente)</span></p>
+      <form id="internal-notes-form">
+        <textarea name="note" rows="4" class="field text-sm" placeholder="Contexto, preferências, combinados fora do sistema...">${internalNote}</textarea>
+        <div class="flex justify-end mt-2"><button type="submit" class="btn-ghost">Salvar Notas</button></div>
+      </form>
+    </div>
+  `, 'mb-6');
+}
+
+const ENCOUNTER_STATUS_LABEL = {
+  completed: 'Concluído', scheduled: 'Agendado', pending: 'Pronto para agendar',
+  waiting_on_client: 'Aguardando cliente', locked: 'Ainda não chegou a vez',
+};
+const ENCOUNTER_STATUS_CLASS = {
+  completed: 'badge-completed', scheduled: 'badge-progress', pending: 'badge-progress',
+  waiting_on_client: 'badge-locked', locked: 'badge-locked',
+};
+
+function encounterRow(e) {
+  const detail = e.status === 'scheduled' ? `${formatDateTime(e.scheduledAt)} — ${e.purpose}` : e.purpose;
+  return `
+    <div class="py-3 border-b border-white/5 last:border-0">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <p class="text-sm font-medium">E${e.number} — ${e.name}</p>
+        <span class="badge ${ENCOUNTER_STATUS_CLASS[e.status]}">${ENCOUNTER_STATUS_LABEL[e.status]}</span>
+      </div>
+      <p class="text-xs text-white/30 max-w-2xl">${detail}</p>
+    </div>
+  `;
+}
+
+function encounterJourneyCard(journey) {
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Jornada de Encontros</p>
+    <p class="text-xs text-white/20 mb-3">O que já aconteceu, o que está agendado e o que vem a seguir — mesma numeração E1-E8 usada na agenda e nos encontros da cliente.</p>
+    <div>${journey.map(encounterRow).join('')}</div>
+  `, 'mb-6');
+}
+
 // Financeiro — real E2E test found: a signed contract's payment obligations
 // (contract_payment_lines, via the same loadActiveObligations already used
 // by admin/financial.js and client/financial.js — never a second formula)
@@ -752,7 +837,7 @@ async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml, finState] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml, finState, internalNote, journey] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
@@ -760,6 +845,8 @@ async function render() {
     loadPlaybookState(),
     programSummaryCard(client),
     loadFinanceiro(contract),
+    loadInternalNote(),
+    loadEncounterJourney(client, clientId),
   ]);
 
   const status = deriveClientStatus({
@@ -777,6 +864,8 @@ async function render() {
       </div>
       <p class="text-sm text-white/40">${client.email || 'sem e-mail'} · ${TIER_LABEL[client.tier] || client.tier}</p>
     </div>
+
+    ${profileCard(client, internalNote)}
 
     ${nextActionCard(status.nextAction)}
 
@@ -812,6 +901,7 @@ async function render() {
       <p class="eyebrow">Trabalho da Cliente</p>
     </div>
     ${programSummaryHtml}
+    ${encounterJourneyCard(journey)}
     ${playbookCard(playbookState)}
     ${businessSurveyCard(surveyState)}
     ${brandDirectionCard(brandState)}
@@ -825,6 +915,21 @@ async function render() {
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
   content.querySelector('#prepare-contract')?.addEventListener('click', (e) => prepareContract(client, e.target));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
+  content.querySelector('#photo-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = new FormData(e.target).get('photo_url').trim();
+    const { error } = await supabase.from('clients').update({ photo_url: url || null }).eq('id', clientId);
+    if (error) { toast('Não foi possível salvar a foto.', { tone: 'error' }); return; }
+    toast('Foto atualizada.');
+    render();
+  });
+  content.querySelector('#internal-notes-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const note = new FormData(e.target).get('note');
+    const error = await saveInternalNote(note);
+    if (error) { toast('Não foi possível salvar as notas.', { tone: 'error' }); return; }
+    toast('Notas internas salvas.');
+  });
   content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
   content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);
   content.querySelector('#value-publish-form')?.addEventListener('submit', (e) => publishValueDeliverable(e, valueAssessment.id));

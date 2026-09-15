@@ -71,3 +71,37 @@ export async function computeTeamNextStep(client, clientId) {
     kind: 'ready',
   };
 }
+
+// The full E1-E8 journey (all encounters, not just the next one) — for the
+// client profile brought over from the MockDB/demo prototype's
+// admin/client-detail.js (its own TABS: E1..E8, always all 8 "for
+// familiarity", tier-gated the same way TIER_MAX_PHASE_INDEX did there).
+// Same signals as computeTeamNextStep above, generalized across every
+// number instead of just the next one: completed-individual-meeting count
+// -> everything at or below that number is 'completed'; the one right
+// after is 'scheduled' (if an upcoming meeting exists) or 'pending';
+// everything further out is 'locked' (not reachable yet). E1's real
+// questionnaire/archetype gate is surfaced the same way it is above.
+export async function loadEncounterJourney(client, clientId) {
+  const [{ data: defs }, { data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype] = await Promise.all([
+    supabase.from('encounter_defs').select('*').order('number', { ascending: true }),
+    supabase.from('agenda_items').select('id').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'completed'),
+    supabase.from('agenda_items').select('item_date').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'upcoming').order('item_date', { ascending: true }).limit(1).maybeSingle(),
+    supabase.from('questionnaires').select('status').eq('client_id', clientId).maybeSingle(),
+    getLatestAttempt(clientId),
+  ]);
+  const completedCount = (completedMeetings || []).length;
+  const intakeReady = questionnaire?.status === 'submitted' && archetype?.status === 'completed';
+
+  return (defs || [])
+    .filter((def) => client.tier === 'premium' || !def.premium_only)
+    .map((def) => {
+      if (def.number <= completedCount) return { ...def, status: 'completed' };
+      if (def.number === completedCount + 1) {
+        if (upcoming) return { ...def, status: 'scheduled', scheduledAt: upcoming.item_date };
+        if (def.number === 1 && !intakeReady) return { ...def, status: 'waiting_on_client' };
+        return { ...def, status: 'pending' };
+      }
+      return { ...def, status: 'locked' };
+    });
+}
