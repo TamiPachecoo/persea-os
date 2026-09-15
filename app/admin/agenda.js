@@ -997,7 +997,7 @@ async function openAgendaModalReal(itemId) {
   const { el, close } = openModal({
     title: 'Editar Encontro',
     bodyHtml: `
-      ${item.google_event_id ? `<p class="text-xs mb-4" style="color:var(--muted);">Este encontro tem um evento vinculado no Google Calendar. Alterações aqui (data, título, cancelamento) não são sincronizadas automaticamente de volta ao Google — ajuste lá manualmente se necessário.</p>` : ''}
+      ${item.google_event_id ? `<p class="text-xs mb-4" style="color:var(--muted);">Este encontro tem um evento vinculado no Google Calendar. Título, data e cancelamento são sincronizados de volta para lá automaticamente ao salvar.</p>` : ''}
       <form id="agenda-form-real" class="space-y-4">
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
@@ -1059,14 +1059,37 @@ async function openAgendaModalReal(itemId) {
     btn.disabled = true;
     btn.textContent = 'Salvando…';
     const fd = new FormData(e.target);
+    const newStartIso = new Date(fd.get('date')).toISOString();
+    const newStatus = fd.get('status');
     const payload = {
-      title: fd.get('title'), type: fd.get('type'), item_date: new Date(fd.get('date')).toISOString(), status: fd.get('status'),
+      title: fd.get('title'), type: fd.get('type'), item_date: newStartIso, status: newStatus,
       related_student_id: fd.get('relatedStudentId') || null, topic: fd.get('topic') || null,
       online_link: (fd.get('onlineLink') || '').trim() || null,
       prep_notes: fd.get('prepNotes') || null, general_notes: fd.get('generalNotes') || null,
     };
     const { error } = await supabase.from('agenda_items').update(payload).eq('id', itemId);
     if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar Alterações'; return; }
+
+    // Real gap found: editing a synced item only ever updated the PERSEA
+    // row — no google-calendar-update-event function existed at all, so
+    // the real Google event (and anyone looking at it) kept showing the
+    // old title/time. Now a real PATCH (or a DELETE on cancel) against the
+    // exact same event_id, never a second event. Best-effort: the PERSEA
+    // side is already saved above regardless of whether this succeeds.
+    if (item.google_event_id && realCalendarStatus.connected) {
+      const durationMinutes = item.duration_minutes || 60;
+      const newEndIso = new Date(new Date(newStartIso).getTime() + durationMinutes * 60 * 1000).toISOString();
+      const { data: gData, error: gErr } = await supabase.functions.invoke('google-calendar-update-event', {
+        body: {
+          event_id: item.google_event_id, summary: fd.get('title'),
+          start: newStartIso, end: newEndIso, status: newStatus,
+        },
+      });
+      if (gErr || gData?.error) {
+        toast(`Alterações salvas no PERSEA, mas não sincronizadas ao Google: ${gData?.error || gErr.message}`, { tone: 'error' });
+        close(); renderProductionAgenda(); return;
+      }
+    }
     close();
     toast('Alterações salvas.');
     renderProductionAgenda();
