@@ -2,13 +2,19 @@
 // `activity_guide_versions` (tenant-level, is_current flags the published
 // one) + `activity_guide_pages` (page_number/image_url — the flipbook
 // source). Both readable by any authenticated user (shared reference
-// content, not per-client). Acknowledgement (clients.guide_acknowledged)
-// has no client-self-write policy in this schema — same situation as
-// images.js's note field — shown read-only rather than granting a new
-// broad write to `clients` for one boolean.
+// content, not per-client).
+//
+// Real bug found: the "Já consultei o guia" checkbox (clients.
+// guide_acknowledged — the exact column program-model.js's
+// computeActivityStatus reads for this activity's completion) was
+// hardcoded `disabled` with no click handler at all — a stale leftover
+// from when this table had no client-self-write policy yet (confirmed via
+// pg_policies before fixing this: clients_client_self_update — row-scoped
+// to her own client_id, both USING and WITH CHECK — now covers this,
+// column-level GRANT confirmed too). Wired for real below.
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
-import { renderShell, card, initClientSwitcher, isValidAssetSrc, assetLinkAttrs, formatDate } from '../shared/ui.js';
+import { renderShell, card, toast, initClientSwitcher, isValidAssetSrc, assetLinkAttrs, formatDate } from '../shared/ui.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'activity-guide' });
 if (!__clientCtx) throw new Error('not authorized');
@@ -157,13 +163,31 @@ async function render() {
       ` : ''}
     `, 'mb-6')}
 
-    <label class="flex items-center gap-3 text-sm" style="color:${acknowledged ? 'var(--gold)' : 'var(--cream)'};">
-      <input type="checkbox" id="ack-guide" ${acknowledged ? 'checked' : ''} disabled style="accent-color:var(--terracotta);" />
+    <label class="flex items-center gap-3 text-sm" style="color:${acknowledged ? 'var(--gold)' : 'var(--cream)'}; cursor:pointer;">
+      <input type="checkbox" id="ack-guide" ${acknowledged ? 'checked' : ''} style="accent-color:var(--terracotta);" />
       Já consultei o guia
     </label>
   `;
 
   if (hasPages) initFlipbook(pages);
+
+  // Real bug found: this checkbox was hardcoded `disabled` with no click
+  // handler anywhere — the only way a client could ever mark this
+  // activity done (program-model.js's computeActivityStatus reads exactly
+  // this column for the 'activity-guide' slug), and it did nothing.
+  content.querySelector('#ack-guide').addEventListener('change', async (e) => {
+    const checked = e.target.checked;
+    e.target.disabled = true;
+    const { error } = await supabase.from('clients').update({ guide_acknowledged: checked }).eq('id', clientId);
+    if (error) {
+      toast('Não foi possível salvar agora.', { tone: 'error' });
+      e.target.checked = !checked;
+      e.target.disabled = false;
+      return;
+    }
+    client.guide_acknowledged = checked;
+    render();
+  });
 }
 
 render();

@@ -65,7 +65,12 @@ async function handleFiles(fileList) {
       render();
       continue;
     }
-    const { error: insertErr } = await supabase.from('images').insert({ client_id: clientId, file_name: file.name, file_url: path });
+    // Real bug found: images.uploaded_at is NOT NULL with no default (no
+    // trigger sets it either, confirmed via pg_trigger) — every insert
+    // here was failing outright, so the file landed in Storage but the row
+    // that makes it show up anywhere never got created. "Uploaded, but
+    // never saved" was the literal, 100%-reproducible symptom.
+    const { error: insertErr } = await supabase.from('images').insert({ client_id: clientId, file_name: file.name, file_url: path, uploaded_at: new Date().toISOString() });
     if (insertErr) toast(`"${file.name}" foi enviada, mas houve um erro ao registrá-la.`, { tone: 'error' });
     uploadingCount--;
     render();
