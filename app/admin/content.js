@@ -6,20 +6,82 @@
 //  2. The Content Center library (renderLibrary/renderAssignments, below) —
 //     the existing per-lesson metadata + link library and per-student
 //     recommendations. Untouched: still Hubla-hosted, metadata/link only.
+//
+// Real bug found: this whole file was 100% MockDB — no environment branch,
+// no supabase import at all — while client/content.js (what a real client
+// actually sees) already reads real content_categories/tenant_settings.
+// So "Gerenciar conteúdos" looked fully functional here (edit modal, move,
+// hide, the Hubla URL field, all present) but only ever wrote to local
+// MockDB state — never the real table a real client's "Abrir na Hubla"
+// button reads. Every real content_categories.hubla_url and
+// tenant_settings.hubla_all_content_url was still its original seed
+// placeholder (literally "PLACEHOLDER-marca-pessoal" etc.) with no way for
+// Nay to ever have fixed it — the actual root cause of the broken link a
+// real client hit on mobile. Gateway section (only — the Content Center
+// library below stays MockDB/out of scope for this fix) now branches on
+// isProductionEnvironment(): real reads/writes against content_categories/
+// tenant_settings in production (admin-only RLS, confirmed via
+// pg_policies — matches this page's own requireProfile('admin') gate
+// exactly), MockDB unchanged in staging/demo.
 import {
   MockDB, CONTENT_TRACKS, CONTENT_TRACK_LABEL,
 } from '../shared/mock-db.js';
 import {
   renderShell, card, toast, formatDate, openModal, isValidHttpUrl,
-  externalLinkAttrs, contentCardInner, hublaHref,
+  externalLinkAttrs, contentCardInner, hublaHref, isProductionEnvironment,
 } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
+import { supabase } from '../shared/supabase-client.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'content.html', title: 'Conteúdos' });
 const content = document.getElementById('app-content');
 
 let manageMode = false;
+// Populated by loadGatewayData() each render — the handlers below read
+// from these rather than re-querying per action (delete/move/toggle all
+// need the current list; the URL-form save needs the settings row's real
+// id) — same simple module-level-state style this file already uses for
+// manageMode.
+let currentCategories = [];
+let currentTenantId = null;
+
+function shapeCategory(row) {
+  return {
+    id: row.id, title: row.title, description: row.description, hublaUrl: row.hubla_url,
+    coverImage: row.cover_image_url, coverTone: row.cover_tone, isVisible: row.is_visible, displayOrder: row.display_order,
+  };
+}
+
+// Mirrors MockDB.getContentCategories({includeHidden})/getTenant() exactly
+// in shape (camelCase, same field names) so gatewayCardManage/
+// gatewayCardPreview/contentCardInner below need zero changes — only the
+// data source differs.
+async function loadGatewayData() {
+  if (!isProductionEnvironment()) {
+    return { categories: MockDB.getContentCategories({ includeHidden: manageMode }), hublaAllContentUrl: MockDB.getTenant().hublaAllContentUrl };
+  }
+  const [{ data: catRows }, { data: tenantRow }] = await Promise.all([
+    supabase.from('content_categories').select('*').order('display_order', { ascending: true }),
+    supabase.from('tenant_settings').select('id, hubla_all_content_url').limit(1).maybeSingle(),
+  ]);
+  const all = (catRows || []).map(shapeCategory);
+  currentCategories = all;
+  currentTenantId = tenantRow?.id ?? null;
+  return { categories: manageMode ? all : all.filter((c) => c.isVisible), hublaAllContentUrl: tenantRow?.hubla_all_content_url || null };
+}
+
+async function saveRealCategory({ id, title, description, coverImage, hublaUrl }) {
+  if (id) {
+    const { error } = await supabase.from('content_categories')
+      .update({ title, description, cover_image_url: coverImage, hubla_url: hublaUrl, updated_at: new Date().toISOString() }).eq('id', id);
+    return error;
+  }
+  const nextOrder = currentCategories.length ? Math.max(...currentCategories.map((c) => c.displayOrder ?? 0)) + 1 : 0;
+  const { error } = await supabase.from('content_categories')
+    .insert({ title, description, cover_image_url: coverImage, hubla_url: hublaUrl, display_order: nextOrder, is_visible: true });
+  return error;
+}
 
 function isValidUrlOrEmpty(v) { return !v || isValidHttpUrl(v); }
 
@@ -73,7 +135,7 @@ function openCategoryModal(category) {
       </form>
     `,
   });
-  el.querySelector('#category-form').addEventListener('submit', (e) => {
+  el.querySelector('#category-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const hublaUrl = fd.get('hublaUrl');
@@ -81,27 +143,28 @@ function openCategoryModal(category) {
       el.querySelector('#cat-url-error').style.display = 'block';
       return;
     }
-    MockDB.saveContentCategory({
-      id: category ? category.id : undefined,
-      title: fd.get('title'), description: fd.get('description') || '',
-      coverImage: fd.get('coverImage') || null, hublaUrl,
-    });
+    const payload = { id: category ? category.id : undefined, title: fd.get('title'), description: fd.get('description') || '', coverImage: fd.get('coverImage') || null, hublaUrl };
+    const error = isProductionEnvironment() ? await saveRealCategory(payload) : (MockDB.saveContentCategory(payload), null);
+    if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return; }
     close();
     toast(isNew ? 'Card adicionado.' : 'Card atualizado.');
     render();
   });
-  el.querySelector('#delete-category')?.addEventListener('click', () => {
+  el.querySelector('#delete-category')?.addEventListener('click', async () => {
     if (!confirm(`Excluir o card "${data.title}"? Essa ação não pode ser desfeita.`)) return;
-    MockDB.deleteContentCategory(category.id);
+    const error = isProductionEnvironment()
+      ? (await supabase.from('content_categories').delete().eq('id', category.id)).error
+      : (MockDB.deleteContentCategory(category.id), null);
+    if (error) { toast('Não foi possível excluir agora.', { tone: 'error' }); return; }
     close();
     toast('Card excluído.');
     render();
   });
 }
 
-function renderGatewaySection() {
-  const categories = MockDB.getContentCategories({ includeHidden: manageMode });
-  const tenant = MockDB.getTenant();
+async function renderGatewaySection() {
+  const { categories, hublaAllContentUrl } = await loadGatewayData();
+  const tenant = { hublaAllContentUrl };
 
   return `
     <div class="mb-6">
@@ -146,19 +209,57 @@ function wireGatewayEvents() {
   });
   content.querySelector('#new-category')?.addEventListener('click', () => openCategoryModal(null));
   content.querySelectorAll('[data-edit-cat]').forEach((btn) => {
-    btn.addEventListener('click', () => openCategoryModal(MockDB.getContentCategory(btn.dataset.editCat)));
+    btn.addEventListener('click', () => {
+      const cat = isProductionEnvironment()
+        ? currentCategories.find((c) => c.id === btn.dataset.editCat)
+        : MockDB.getContentCategory(btn.dataset.editCat);
+      openCategoryModal(cat);
+    });
   });
   content.querySelectorAll('[data-toggle-cat]').forEach((btn) => {
-    btn.addEventListener('click', () => { MockDB.toggleContentCategoryVisibility(btn.dataset.toggleCat); render(); });
+    btn.addEventListener('click', async () => {
+      if (isProductionEnvironment()) {
+        const cat = currentCategories.find((c) => c.id === btn.dataset.toggleCat);
+        await supabase.from('content_categories').update({ is_visible: !cat?.isVisible }).eq('id', btn.dataset.toggleCat);
+      } else {
+        MockDB.toggleContentCategoryVisibility(btn.dataset.toggleCat);
+      }
+      render();
+    });
   });
   content.querySelectorAll('[data-move-cat]').forEach((btn) => {
-    btn.addEventListener('click', () => { MockDB.moveContentCategory(btn.dataset.moveCat, Number(btn.dataset.dir)); render(); });
+    btn.addEventListener('click', async () => {
+      if (isProductionEnvironment()) {
+        // Swap display_order with the adjacent card in the current
+        // (already display_order-sorted) list — same "move up/down by one"
+        // semantics MockDB.moveContentCategory has, just as two real
+        // UPDATEs instead of a local array splice.
+        const dir = Number(btn.dataset.dir);
+        const idx = currentCategories.findIndex((c) => c.id === btn.dataset.moveCat);
+        const swapIdx = idx + dir;
+        if (idx === -1 || swapIdx < 0 || swapIdx >= currentCategories.length) return;
+        const a = currentCategories[idx];
+        const b = currentCategories[swapIdx];
+        await Promise.all([
+          supabase.from('content_categories').update({ display_order: b.displayOrder }).eq('id', a.id),
+          supabase.from('content_categories').update({ display_order: a.displayOrder }).eq('id', b.id),
+        ]);
+      } else {
+        MockDB.moveContentCategory(btn.dataset.moveCat, Number(btn.dataset.dir));
+      }
+      render();
+    });
   });
-  content.querySelector('#all-content-url-form')?.addEventListener('submit', (e) => {
+  content.querySelector('#all-content-url-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = new FormData(e.target).get('hublaAllContentUrl');
     if (!isValidUrlOrEmpty(url)) { toast('Insira uma URL válida.', { tone: 'error' }); return; }
-    MockDB.setTenantHublaAllContentUrl(url);
+    if (isProductionEnvironment()) {
+      const { error } = await supabase.from('tenant_settings').update({ hubla_all_content_url: url || null }).eq('id', currentTenantId);
+      if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return; }
+    } else {
+      MockDB.setTenantHublaAllContentUrl(url);
+    }
     toast('Link atualizado.');
     render();
   });
@@ -364,9 +465,9 @@ function wireEvents() {
   });
 }
 
-function render() {
+async function render() {
   content.innerHTML = `
-    ${renderGatewaySection()}
+    ${await renderGatewaySection()}
     <div class="divider mb-6" style="margin-top:8px;"></div>
     <p class="text-xs text-white/30 mb-1 uppercase tracking-[.15em]">Biblioteca de Aulas</p>
     <p class="text-sm text-white/40 mb-8 max-w-2xl">As aulas continuam hospedadas na Hubla — aqui você organiza como elas aparecem para as clientes e pode recomendar conteúdos específicos. Isso é diferente dos cards acima: aqui você gerencia aulas individuais, não as categorias em destaque.</p>
