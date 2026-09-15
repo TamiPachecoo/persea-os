@@ -77,6 +77,7 @@ if (!profile || !['admin', 'assistant'].includes(profile.role)) {
 document.body.innerHTML = renderShell({ role: profile.role, active: profile.role === 'assistant' ? 'leads.html' : 'crm.html', title: 'Onboarding' });
 const content = document.getElementById('app-content');
 const isAssistant = profile.role === 'assistant';
+let activeTab = 'jornada';
 
 if (!clientId) {
   content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Falta o parâmetro ?id= na URL.</p>');
@@ -89,6 +90,25 @@ const CONTRACT_STATUS_LABEL = {
   contract_prepared: 'Contrato preparado', sent_for_signature: 'Enviado para assinatura externa',
   awaiting_signature: 'Aguardando assinatura', signed: 'Assinado', completed: 'Concluído',
 };
+
+// Sub-tabs — same real component (.tab-btn) and click pattern
+// (`[data-tab]` -> activeTab = ... -> render()) as the MockDB/demo
+// prototype's own admin/client-detail.js, so this reads like the same
+// product, not a bespoke one. Jornada groups the phase/encounter/activity
+// breakdown (see phaseBreakdownCard); Financeiro consolidates registration
+// info, the contract, and the payment plan into one place instead of them
+// being scattered at the top of the page; each real content-producing
+// activity Nay actually reviews/edits gets its own tab, same as the demo's
+// "Direção da Marca" example. Value Analysis is admin-only (no assistant
+// RLS policy exists for it at all — see this file's own header comment).
+const TABS = [
+  ['jornada', 'Jornada'],
+  ['financeiro', 'Financeiro'],
+  ['direcao-marca', 'Direção de Marca'],
+  ['pesquisa', 'Pesquisa de Precificação'],
+  ['arquetipos', 'Arquétipos'],
+  ['playbook', 'Playbook'],
+];
 
 async function loadAll() {
   const [{ data: client }, { data: partyInfo }, { data: contract }, { data: tokens }] = await Promise.all([
@@ -467,10 +487,11 @@ const TIER_NAME = { premium: 'Persea Premium', essential: 'Persea Essencial' };
 // by design (per "do not recreate the entire client Program page for
 // staff") — status/phase/next-action/next-meeting only, no per-activity
 // card wall.
-async function programSummaryCard(client) {
-  const [state, nextMeeting, teamNextStep] = await Promise.all([
-    loadProgramState(clientId, client), loadNextMeeting(clientId), computeTeamNextStep(client, clientId),
-  ]);
+// state is fetched once in render() and shared with phaseBreakdownCard —
+// this used to fetch its own copy of loadProgramState, duplicating the
+// exact same 5-table query render() also needed for the phase breakdown.
+async function programSummaryCard(client, state) {
+  const [nextMeeting, teamNextStep] = await Promise.all([loadNextMeeting(clientId), computeTeamNextStep(client, clientId)]);
   const { programDef, progress } = state;
   if (!programDef) {
     return card(`<p class="text-sm text-white/50 mb-1">Programa</p><p class="text-xs" style="color:var(--muted);">Programa ainda não configurado.</p>`, 'mb-6');
@@ -750,11 +771,61 @@ function encounterRow(e) {
   `;
 }
 
-function encounterJourneyCard(journey) {
+// Clicking a material's slug jumps straight to that tab (see the [data-tab]
+// delegation in render()) — the same navigation any other tab button uses,
+// not a second mechanism. Slugs without a dedicated staff-editable tab
+// today (brand-extraction, activity-guide, initial-images, pitch, content,
+// business) just show their status, no link — an honest gap, not hidden.
+const ACTIVITY_TAB_LINK = { 'brand-direction': 'direcao-marca', 'business-survey': 'pesquisa', 'archetype-test': 'arquetipos' };
+
+function phaseActivityRow(a) {
+  const tabKey = ACTIVITY_TAB_LINK[a.slug];
+  return `
+    <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0 flex-wrap gap-2">
+      <p class="text-sm">${a.title}</p>
+      <div class="flex items-center gap-3">
+        <span class="badge ${a.badgeClass}">${a.statusLabel}</span>
+        ${tabKey ? `<button type="button" data-tab="${tabKey}" class="btn-text">Ver material →</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+const PHASE_STATUS_LABEL = { completed: 'Concluída', current: 'Fase atual', upcoming: 'Próxima' };
+const PHASE_STATUS_CLASS = { completed: 'badge-completed', current: 'badge-progress', upcoming: 'badge-locked' };
+
+// The core of "focus on each client's journey": one collapsible block per
+// phase (open by default only for her current one — click any other to
+// see it), each showing that phase's real encounters (encounter_defs.phase
+// — the exact same real column powering computeTeamNextStep/
+// loadEncounterJourney) alongside its real activities/materials (the same
+// state.phases loadProgramState already computes for the client's own
+// Program Hub — never a second, admin-only grouping that could drift from
+// what she sees).
+function phaseBreakdownCard(state, journey) {
+  if (!state.programDef) return '';
   return card(`
-    <p class="text-sm text-white/50 mb-1">Jornada de Encontros</p>
-    <p class="text-xs text-white/20 mb-3">O que já aconteceu, o que está agendado e o que vem a seguir — mesma numeração E1-E8 usada na agenda e nos encontros da cliente.</p>
-    <div>${journey.map(encounterRow).join('')}</div>
+    <p class="text-sm text-white/50 mb-1">Fases do Programa</p>
+    <p class="text-xs text-white/20 mb-4">Clique em uma fase para ver os encontros, atividades e materiais dela.</p>
+    ${state.phases.map((phase) => `
+      <details class="mb-1" ${phase.status === 'current' ? 'open' : ''}>
+        <summary class="text-sm cursor-pointer py-2 flex items-center gap-3 flex-wrap" style="list-style:none;">
+          <span class="font-medium">Fase ${phase.id + 1}</span>
+          ${phase.description ? `<span class="text-xs text-white/30">${phase.description}</span>` : ''}
+          <span class="badge ${PHASE_STATUS_CLASS[phase.status]}">${PHASE_STATUS_LABEL[phase.status]}</span>
+        </summary>
+        <div class="pl-1 pb-3">
+          ${journey.filter((e) => e.phase === phase.id).length ? `
+            <p class="text-xs uppercase mt-2 mb-1" style="color:var(--muted); letter-spacing:.08em;">Encontros</p>
+            ${journey.filter((e) => e.phase === phase.id).map(encounterRow).join('')}
+          ` : ''}
+          ${phase.includedActivities.length ? `
+            <p class="text-xs uppercase mt-3 mb-1" style="color:var(--muted); letter-spacing:.08em;">Atividades e Materiais</p>
+            ${phase.includedActivities.map(phaseActivityRow).join('')}
+          ` : '<p class="text-xs text-white/20 mt-2">Nenhuma atividade nesta fase.</p>'}
+        </div>
+      </details>
+    `).join('')}
   `, 'mb-6');
 }
 
@@ -885,21 +956,31 @@ function openDeleteClientModal(client) {
   });
 }
 
+function tabBarHtml() {
+  const tabs = isAssistant ? TABS : [...TABS, ['valor', 'Valor']];
+  return `
+    <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
+      ${tabs.map(([key, label]) => `<button type="button" data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
+  `;
+}
+
 async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, programSummaryHtml, finState, internalProfile, journey] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, state, finState, internalProfile, journey] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
     loadArchetypeState(),
     loadPlaybookState(),
-    programSummaryCard(client),
+    loadProgramState(clientId, client),
     loadFinanceiro(contract),
     loadInternalProfile(),
     loadEncounterJourney(client, clientId),
   ]);
+  const programSummaryHtml = await programSummaryCard(client, state);
 
   const status = deriveClientStatus({
     accessStatus: client.access_status,
@@ -907,54 +988,62 @@ async function render() {
     contractStatus: contract?.status || null,
   });
 
+  // Only the profile (photo + WHO/WHAT/WHY/HOW + private notes) stays
+  // permanently visible — everything else moved into the sub-tabs below,
+  // per explicit feedback: the top of this page should show just the
+  // client, not a long scroll of every pipeline/program card at once.
+  const TAB_CONTENT = {
+    jornada: `
+      ${nextActionCard(status.nextAction)}
+      ${programSummaryHtml}
+      ${phaseBreakdownCard(state, journey)}
+    `,
+    financeiro: `
+      ${!partyInfo?.submitted ? registrationLinkCard({ tokenActive, latestToken }) : ''}
+      ${partyInfo?.submitted ? partyInfoSummary(partyInfo) : ''}
+      ${partyInfo?.submitted ? card(`
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="text-sm text-white/50 mb-1">Contrato</p>
+            <p class="text-xs" style="color:var(--muted);">${contract ? (CONTRACT_STATUS_LABEL[contract.status] || contract.status) : 'Nenhum contrato preparado ainda.'}</p>
+          </div>
+          ${!contract
+            ? `<button id="prepare-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Preparar contrato</button>`
+            : `<a href="contract.html?client_id=${clientId}" class="btn-ghost">${['signed', 'completed'].includes(contract.status) ? 'Ver contrato' : 'Acompanhar contrato'}</a>`}
+        </div>
+      `, 'mb-6') : ''}
+      ${status.nextAction === 'send_invite' ? card(`
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="text-sm text-white/50 mb-1">Acesso</p>
+            <p class="text-xs" style="color:var(--muted);">Contrato assinado — envie o convite de acesso real para a cliente entrar em app.naymurta.com.</p>
+          </div>
+          <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite de acesso</button>
+        </div>
+      `, 'mb-6') : ''}
+      ${financeiroCard(finState)}
+    `,
+    'direcao-marca': brandDirectionCard(brandState),
+    pesquisa: businessSurveyCard(surveyState),
+    arquetipos: archetypeCard(archetypeState),
+    playbook: playbookCard(playbookState),
+    valor: !isAssistant ? valueAnalysisCard(valueAssessment) : '',
+  };
+
   content.innerHTML = `
     ${profileHeaderCard(client, status)}
     ${profileSummaryCard(client, internalProfile)}
     ${internalNotesCard(internalProfile)}
 
-    ${nextActionCard(status.nextAction)}
-
-    ${!partyInfo?.submitted ? registrationLinkCard({ tokenActive, latestToken }) : ''}
-
-    ${partyInfo?.submitted ? partyInfoSummary(partyInfo) : ''}
-
-    ${partyInfo?.submitted ? card(`
-      <div class="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p class="text-sm text-white/50 mb-1">Contrato</p>
-          <p class="text-xs" style="color:var(--muted);">${contract ? (CONTRACT_STATUS_LABEL[contract.status] || contract.status) : 'Nenhum contrato preparado ainda.'}</p>
-        </div>
-        ${!contract
-          ? `<button id="prepare-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Preparar contrato</button>`
-          : `<a href="contract.html?client_id=${clientId}" class="btn-ghost">${['signed', 'completed'].includes(contract.status) ? 'Ver contrato' : 'Acompanhar contrato'}</a>`}
-      </div>
-    `, 'mb-6') : ''}
-
-    ${status.nextAction === 'send_invite' ? card(`
-      <div class="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p class="text-sm text-white/50 mb-1">Acesso</p>
-          <p class="text-xs" style="color:var(--muted);">Contrato assinado — envie o convite de acesso real para a cliente entrar em app.naymurta.com.</p>
-        </div>
-        <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite de acesso</button>
-      </div>
-    `, 'mb-6') : ''}
-
-    ${financeiroCard(finState)}
-
-    <div class="mb-4 mt-2">
-      <p class="eyebrow">Trabalho da Cliente</p>
-    </div>
-    ${programSummaryHtml}
-    ${encounterJourneyCard(journey)}
-    ${playbookCard(playbookState)}
-    ${businessSurveyCard(surveyState)}
-    ${brandDirectionCard(brandState)}
-    ${archetypeCard(archetypeState)}
-    ${!isAssistant ? valueAnalysisCard(valueAssessment) : ''}
+    ${tabBarHtml()}
+    <div id="tab-content">${TAB_CONTENT[activeTab] || ''}</div>
 
     ${dangerZoneCard()}
   `;
+
+  content.querySelectorAll('[data-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
+  });
 
   content.querySelector('#generate-link')?.addEventListener('click', generateLink);
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
