@@ -105,7 +105,7 @@ const TABS = [
   ['jornada', 'Jornada'],
   ['financeiro', 'Financeiro'],
   ['direcao-marca', 'Direção de Marca'],
-  ['pesquisa', 'Pesquisa de Precificação'],
+  ['pesquisa', 'Precificação & Valor'],
   ['arquetipos', 'Arquétipos'],
   ['playbook', 'Playbook'],
 ];
@@ -957,10 +957,9 @@ function openDeleteClientModal(client) {
 }
 
 function tabBarHtml() {
-  const tabs = isAssistant ? TABS : [...TABS, ['valor', 'Valor']];
   return `
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
-      ${tabs.map(([key, label]) => `<button type="button" data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>`).join('')}
+      ${TABS.map(([key, label]) => `<button type="button" data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>`).join('')}
     </div>
   `;
 }
@@ -1024,10 +1023,15 @@ async function render() {
       ${financeiroCard(finState)}
     `,
     'direcao-marca': brandDirectionCard(brandState),
-    pesquisa: businessSurveyCard(surveyState),
+    // Merged per explicit feedback — Precificação (business survey) and
+    // Valor (admin-only) are the same commercial-context conversation with
+    // the client, so they live together instead of competing for a tab
+    // each. valueAnalysisCard is '' for assistant (no RLS policy grants
+    // her that data at all — see this file's own header comment) rather
+    // than hidden by omission.
+    pesquisa: `${businessSurveyCard(surveyState)}${!isAssistant ? valueAnalysisCard(valueAssessment) : ''}`,
     arquetipos: archetypeCard(archetypeState),
     playbook: playbookCard(playbookState),
-    valor: !isAssistant ? valueAnalysisCard(valueAssessment) : '',
   };
 
   content.innerHTML = `
