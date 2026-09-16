@@ -17,14 +17,16 @@ export async function signOut() {
 }
 
 // Sends Supabase's "Reset Password" email (the branded template in
-// email-templates/reset-password.html) with a recovery link that lands on
-// reset-password.html and opens a real session there — same
-// detectSessionInUrl mechanism the invite link already relies on in
-// client/set-password.js. redirectTo must be on Supabase's allow-list
-// (Authentication → URL Configuration → Redirect URLs) or the link 400s.
+// email-templates/reset-password.html) with a recovery link. Points at the
+// same client/set-password.html page the invite link already uses — it
+// already does exactly what a recovery link needs (wait for the session the
+// link creates via detectSessionInUrl, let her type a new password, save
+// it) so no separate landing page is needed. redirectTo must be on
+// Supabase's allow-list (Authentication → URL Configuration → Redirect
+// URLs) or the link 400s.
 export async function resetPasswordForEmail(email) {
   return supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${location.origin}/reset-password.html`,
+    redirectTo: `${location.origin}/client/set-password.html`,
   });
 }
 
