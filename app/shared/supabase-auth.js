@@ -16,6 +16,18 @@ export async function signOut() {
   await supabase.auth.signOut();
 }
 
+// Sends Supabase's "Reset Password" email (the branded template in
+// email-templates/reset-password.html) with a recovery link that lands on
+// reset-password.html and opens a real session there — same
+// detectSessionInUrl mechanism the invite link already relies on in
+// client/set-password.js. redirectTo must be on Supabase's allow-list
+// (Authentication → URL Configuration → Redirect URLs) or the link 400s.
+export async function resetPasswordForEmail(email) {
+  return supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${location.origin}/reset-password.html`,
+  });
+}
+
 export async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session;

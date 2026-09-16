@@ -5,7 +5,7 @@
 // gated by this yet — this page exists so the client flow can be tested
 // end-to-end without touching the rest of the app.
 import { supabase } from './shared/supabase-client.js';
-import { signInWithPassword, signUpWithPassword, getCurrentProfile } from './shared/supabase-auth.js';
+import { signInWithPassword, signUpWithPassword, getCurrentProfile, resetPasswordForEmail } from './shared/supabase-auth.js';
 import { card, toast } from './shared/ui.js';
 
 const content = document.getElementById('app-content');
@@ -29,7 +29,7 @@ if (existingSession) {
   if (profile) goHome(profile.role);
 }
 
-let mode = 'signin'; // 'signin' | 'signup'
+let mode = 'signin'; // 'signin' | 'signup' | 'forgot'
 
 function render() {
   content.innerHTML = mode === 'signin' ? `
@@ -46,7 +46,20 @@ function render() {
         <button type="submit" class="btn-primary block w-full text-center" style="padding-top:11px;padding-bottom:11px;">Entrar</button>
       </form>
     `)}
-    <button id="to-signup" class="btn-text mt-6 underline block mx-auto">Primeiro acesso? Criar sua senha</button>
+    <button id="to-forgot" class="btn-text mt-4 underline block mx-auto">Esqueci minha senha</button>
+    <button id="to-signup" class="btn-text mt-3 underline block mx-auto">Primeiro acesso? Criar sua senha</button>
+  ` : mode === 'forgot' ? `
+    ${card(`
+      <p class="text-xs mb-4" style="color:var(--muted); line-height:1.6;">Digite o e-mail da sua conta. Vamos enviar um link para você criar uma nova senha.</p>
+      <form id="forgot-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">E-mail</label>
+          <input type="email" name="email" required class="field" autocomplete="email" />
+        </div>
+        <button type="submit" class="btn-primary block w-full text-center" style="padding-top:11px;padding-bottom:11px;">Enviar link</button>
+      </form>
+    `)}
+    <button id="to-signin-2" class="btn-text mt-6 underline block mx-auto">Voltar para entrar</button>
   ` : `
     ${card(`
       <p class="text-xs mb-4" style="color:var(--muted); line-height:1.6;">Use o e-mail que a Nay já tem cadastrado para você. Vamos enviar uma confirmação antes de liberar o acesso.</p>
@@ -67,6 +80,21 @@ function render() {
 
   document.getElementById('to-signup')?.addEventListener('click', () => { mode = 'signup'; render(); });
   document.getElementById('to-signin')?.addEventListener('click', () => { mode = 'signin'; render(); });
+  document.getElementById('to-forgot')?.addEventListener('click', () => { mode = 'forgot'; render(); });
+  document.getElementById('to-signin-2')?.addEventListener('click', () => { mode = 'signin'; render(); });
+
+  document.getElementById('forgot-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = new FormData(e.target).get('email');
+    const { error } = await resetPasswordForEmail(email);
+    // Always show the same success message regardless of whether the email
+    // exists — Supabase's own API behaves this way too, and matching it
+    // here avoids leaking which addresses have accounts.
+    if (error) { toast(error.message, { tone: 'error' }); return; }
+    content.innerHTML = card(`
+      <p class="text-sm" style="color:var(--gold);">Se esse e-mail tiver uma conta, enviamos um link para redefinir a senha. Confira sua caixa de entrada (${email}).</p>
+    `);
+  });
 
   document.getElementById('signin-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
