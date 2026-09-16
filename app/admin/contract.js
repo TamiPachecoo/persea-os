@@ -28,6 +28,19 @@ const params = new URLSearchParams(location.search);
 let clientId = params.get('client_id');
 const legacyId = params.get('legacy_id');
 
+// Real bug found via live E2E test: Condições Comerciais (program/duration/
+// value_cents + payment lines) could only ever be filled in ONCE — the
+// instant that first save succeeded, render()'s own termsIncomplete gate
+// (below) made the editing form permanently unreachable again, even though
+// the write side (wireCommercialTermsForm) already fully supports a second
+// edit (superseding the payment_plan_version, never touching frozen lines).
+// Reported live: Nay recorded a card down payment first, then the client
+// separately arranged 12 Pix installments — with no way back into this
+// form, the contract kept the card-only terms from the first save forever.
+// This flag is the missing "go back and revise" entry point; see the
+// "Editar Condições Comerciais" button in render()'s header.
+let editingTerms = false;
+
 const STATUS_LABEL = {
   info_pending: 'Aguardando informações', info_received: 'Informações recebidas',
   contract_prepared: 'Contrato preparado — pronto para baixar e assinar externamente',
@@ -126,7 +139,7 @@ function paymentLineRowHtml(line = {}) {
   `;
 }
 
-function renderCommercialTermsForm(contract) {
+function renderCommercialTermsForm(contract, isRevision) {
   const lines = contract.payment_lines?.length ? contract.payment_lines : [{}];
   return card(`
     <p class="text-sm text-white/50 mb-1">Condições Comerciais</p>
@@ -156,15 +169,17 @@ function renderCommercialTermsForm(contract) {
         <div id="payment-lines">${lines.map((l) => paymentLineRowHtml(l)).join('')}</div>
         <button type="button" id="add-line" class="btn-text mt-1">+ Adicionar Pagamento</button>
       </div>
-      <div class="flex justify-end pt-2">
+      <div class="flex justify-end gap-3 pt-2">
+        ${isRevision ? `<button type="button" id="cancel-terms-edit" class="btn-ghost">Cancelar</button>` : ''}
         <button type="submit" class="btn-primary">Salvar Condições Comerciais</button>
       </div>
     </form>
   `);
 }
 
-function wireCommercialTermsForm(contract) {
+function wireCommercialTermsForm(contract, { partyInfo, client, isRevision } = {}) {
   const form = document.getElementById('terms-form');
+  document.getElementById('cancel-terms-edit')?.addEventListener('click', () => { editingTerms = false; render(); });
   const linesEl = form.querySelector('#payment-lines');
   const totalEl = form.querySelector('#lines-total');
 
@@ -259,7 +274,46 @@ function wireCommercialTermsForm(contract) {
     );
     if (lErr) { toast(lErr.message, { tone: 'error' }); return; }
 
+    // This is a revision (not the first-ever fill) and a contract document
+    // was already generated from these terms — regenerate it now so the
+    // payment clause reflects what was just saved, instead of leaving the
+    // stale first-draft wording in place until someone remembers to
+    // hand-edit it (the exact gap reported live). Never touches a contract
+    // already sent for signature — that text is locked for a reason (see
+    // the review screen's own note) — the new terms are still saved for the
+    // record, but body_text is left alone and she's told to handle it
+    // manually if it truly needs to change post-send.
+    if (isRevision && contract.body_text && contract.template_id) {
+      if (contract.autentique_document_id || contract.sent_for_signature_at) {
+        toast('Condições comerciais salvas — mas o contrato já foi enviado para assinatura, então o texto enviado não foi alterado.', { tone: 'error' });
+        editingTerms = false;
+        render();
+        return;
+      }
+      const { data: template } = await supabase.from('contract_templates').select('*').eq('id', contract.template_id).maybeSingle();
+      if (template) {
+        try {
+          const body = mergeContractTemplate(template, {
+            contract: { ...contract, program, duration: isPersea ? fd.get('duration') : null, value_cents: valueCents, payment_lines: lines },
+            partyInfo, clientFullName: client.full_name,
+          });
+          const { error: bErr } = await supabase.from('contracts').update({ body_text: body }).eq('id', contract.id);
+          if (bErr) { toast(bErr.message, { tone: 'error' }); return; }
+          toast('Condições comerciais salvas — contrato atualizado automaticamente com o novo texto de pagamento.');
+          editingTerms = false;
+          render();
+          return;
+        } catch (e) {
+          toast(`Condições salvas, mas não foi possível regenerar o texto automaticamente: ${e.message}`, { tone: 'error' });
+          editingTerms = false;
+          render();
+          return;
+        }
+      }
+    }
+
     toast('Condições comerciais salvas.');
+    editingTerms = false;
     render();
   });
 }
@@ -278,12 +332,21 @@ async function render() {
   // rate limit) or creates a real charge (SumUp, see sumup-create-checkout).
   const isDemo = !!client.is_demo;
 
+  const termsIncomplete = !contract.program || (contract.program === 'persea' && !contract.duration) || contract.value_cents == null;
+  // Reachable any time the deal isn't finalized yet — see editingTerms'
+  // own comment for why this button needs to exist at all: without it,
+  // revising payment terms after the first save (a real Pix installment
+  // plan added on top of an initial card down payment, say) had no way
+  // back into the editing form.
+  const canEditTerms = !termsIncomplete && !['signed', 'completed'].includes(contract.status);
+
   const header = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Contrato</p>
       <div class="flex items-center gap-3 mb-2 flex-wrap">
         <h1 class="text-3xl font-serif">${client.full_name}</h1>
         <span class="badge badge-progress">${STATUS_LABEL[contract.status] || contract.status}</span>
+        ${canEditTerms ? `<button id="edit-commercial-terms" class="btn-text underline">Editar Condições Comerciais</button>` : ''}
       </div>
       <label class="flex items-center gap-2 text-xs" style="color:${isDemo ? 'var(--terracotta)' : 'var(--muted)'};">
         <input type="checkbox" id="toggle-is-demo" ${isDemo ? 'checked' : ''} />
@@ -292,10 +355,9 @@ async function render() {
     </div>
   `;
 
-  const termsIncomplete = !contract.program || (contract.program === 'persea' && !contract.duration) || contract.value_cents == null;
-  if (termsIncomplete) {
-    content.innerHTML = header + renderCommercialTermsForm(contract);
-    wireCommercialTermsForm(contract);
+  if (termsIncomplete || editingTerms) {
+    content.innerHTML = header + renderCommercialTermsForm(contract, editingTerms);
+    wireCommercialTermsForm(contract, { partyInfo, client, isRevision: editingTerms });
     return;
   }
 
@@ -508,6 +570,14 @@ content.addEventListener('change', async (e) => {
   const { error } = await supabase.from('clients').update({ is_demo: checked }).eq('id', clientId);
   if (error) { toast(error.message, { tone: 'error' }); e.target.checked = !checked; return; }
   toast(checked ? 'Marcada como cliente de demonstração.' : 'Marcada como cliente real.');
+  render();
+});
+
+// Same delegation reasoning as #toggle-is-demo above — #edit-commercial-terms
+// lives inside `header`, present on every branch once terms are complete.
+content.addEventListener('click', (e) => {
+  if (e.target.id !== 'edit-commercial-terms') return;
+  editingTerms = true;
   render();
 });
 

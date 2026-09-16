@@ -86,11 +86,27 @@ export async function ensureRealClientForLead(lead) {
     complement: reg.complement || null, neighborhood: reg.neighborhood || null, city: reg.city || null, state: reg.state || null,
   });
 
+  // Real bug found via live E2E test: this used to insert
+  // contract_payment_lines with no payment_plan_versions row at all, same
+  // class of bug already fixed on the admin/contract.js write path (see its
+  // own comment) — every line's payment_plan_version_id stayed permanently
+  // NULL. admin/contract.js's load() only ever reads lines through the
+  // contract's active version, so any deal bridged in from the lead
+  // pipeline looked like it had NO payment lines at all — its own
+  // termsIncomplete check saw program/duration/value_cents already filled
+  // in (by this same bridge, a few lines up) and never showed the terms
+  // form again, so there was no way to notice or fix the empty lines before
+  // generating: the contract fell straight to assembleCondicoesPagamento's
+  // legacy fallback fields, which nothing here ever populates.
   const lines = (ct.paymentLines || []).filter((l) => l.amount > 0);
   if (lines.length) {
+    const { data: version, error: versionErr } = await supabase.from('payment_plan_versions')
+      .insert({ contract_id: contract.id, version_number: 1, status: 'active', effective_at: new Date().toISOString() })
+      .select('id').single();
+    if (versionErr) return { error: versionErr.message };
     await supabase.from('contract_payment_lines').insert(
       lines.map((l, i) => ({
-        contract_id: contract.id, seq: i, amount_cents: Math.round(l.amount * 100),
+        contract_id: contract.id, payment_plan_version_id: version.id, seq: i, amount_cents: Math.round(l.amount * 100),
         method: l.method || null, due_date: l.dueDate || null, label: l.label || null,
       })),
     );
