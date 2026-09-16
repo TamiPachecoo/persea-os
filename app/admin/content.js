@@ -325,12 +325,11 @@ function resourceRow(r, assignedCount = 0) {
   const linkOk = isValidHttpUrl(r.hublaUrl);
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex items-start gap-3 min-w-0">
-          ${isValidHttpUrl(r.coverImage) ? `<img src="${r.coverImage}" alt="" style="width:64px;aspect-ratio:3/4;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--line);" />` : ''}
-          <div class="min-w-0">
-          <p class="font-medium text-sm">${r.title}</p>
-          ${r.description ? `<p class="text-xs text-white/40 mt-1">${r.description}</p>` : ''}
+      <div class="flex items-start gap-3 flex-wrap">
+        ${isValidHttpUrl(r.coverImage) ? `<img src="${r.coverImage}" alt="" style="width:64px;height:85px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--line);" />` : ''}
+        <div class="min-w-0" style="flex:1 1 200px;">
+          <p class="font-medium text-sm break-words">${r.title}</p>
+          ${r.description ? `<p class="text-xs text-white/40 mt-1 break-words">${r.description}</p>` : ''}
           <div class="flex items-center gap-2 mt-2 flex-wrap">
             <span class="badge ${r.generalAudience ? 'badge-completed' : 'badge-locked'}">${r.generalAudience ? 'Geral' : 'Somente por indicação'}</span>
             ${r.duration ? `<span class="text-xs text-white/30">${r.duration}</span>` : ''}
@@ -338,11 +337,10 @@ function resourceRow(r, assignedCount = 0) {
             ${assignedCount ? `<span class="text-xs text-white/30">· Recomendado a ${assignedCount} cliente${assignedCount === 1 ? '' : 's'}</span>` : ''}
             ${!linkOk ? '<span class="text-xs" style="color:var(--error);">Link pendente</span>' : ''}
           </div>
+          <div class="flex items-center gap-2 flex-wrap mt-3">
+            <button type="button" data-attribute-resource="${r.id}" class="btn-ghost">Recomendar a Cliente</button>
+            <button type="button" data-edit-resource="${r.id}" class="btn-ghost">Editar</button>
           </div>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button type="button" data-attribute-resource="${r.id}" class="btn-ghost">Recomendar a Cliente</button>
-          <button type="button" data-edit-resource="${r.id}" class="btn-ghost">Editar</button>
         </div>
       </div>
     </div>
