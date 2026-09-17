@@ -87,16 +87,28 @@ function openRegistrationLinkModal(url) {
 }
 
 // fromLead: the real `leads` row this client is being created from, when
-// reached via "Converter em Cliente" on the Leads tab — pre-fills her
-// name/email (already on file, no re-typing) and, once the client is
+// reached via "Converter em Cliente" (or picking "Convertido" straight
+// from the stage dropdown — see the leads-tab wiring below) — pre-fills
+// her name/email (already on file, no re-typing) and, once the client is
 // created for real, marks the lead itself as converted (stage +
 // converted_to_client_id/converted_at, both real columns on `leads`
 // already there for exactly this) so it drops out of the working pipeline
 // instead of sitting there looking unconverted forever. undefined for the
 // plain "+ Novo Cliente" button, which has no lead to link back to.
-function openCreateClientModal(fromLead) {
+//
+// onCancel: real gap found live — picking "Convertido" in the stage
+// dropdown used to just save that word on the lead and stop there, with
+// no client ever created; a lead marked "Convertido" but not actually in
+// Clientes read as a bug (which it effectively was). Now that pick opens
+// this same modal instead of silently saving the stage, and onCancel
+// reverts the dropdown back to her real stage if the modal is dismissed
+// without actually creating the client, so the dropdown never shows
+// "Convertido" for a lead that isn't.
+function openCreateClientModal(fromLead, { onCancel } = {}) {
+  let converted = false;
   const { el, close } = openModal({
     title: 'Novo Cliente',
+    onClose: () => { if (!converted) onCancel?.(); },
     bodyHtml: `
       <form id="create-client-form" class="space-y-4">
         <div>
@@ -146,6 +158,7 @@ function openCreateClientModal(fromLead) {
           stage: 'convertido', converted_to_client_id: data.client_id || null, converted_at: new Date().toISOString(),
         }).eq('id', fromLead.id);
       }
+      converted = true;
       close();
       openRegistrationLinkModal(data.registration_url);
       renderProductionCRM();
@@ -266,6 +279,17 @@ async function renderProductionCRM() {
     content.querySelector('#stage-filter').addEventListener('change', (e) => { stageFilter = e.target.value; renderProductionCRM(); });
     content.querySelectorAll('[data-lead-stage]').forEach((sel) => {
       sel.addEventListener('change', async (e) => {
+        const lead = lastLoadedLeads.find((l) => l.id === sel.dataset.leadStage);
+        // Picking "Convertido" here means the same thing as clicking
+        // "Converter em Cliente" — she's becoming a real client — so it
+        // opens that same flow instead of just saving the word "Convertido"
+        // on the lead with no client ever created behind it (the exact gap
+        // reported live: the stage changed but nothing showed up in
+        // Clientes). Reverts the dropdown if the modal is cancelled.
+        if (e.target.value === 'convertido' && lead && !lead.converted_to_client_id) {
+          openCreateClientModal(lead, { onCancel: () => { sel.value = lead.stage; } });
+          return;
+        }
         const { error } = await supabase.from('leads').update({ stage: e.target.value }).eq('id', sel.dataset.leadStage);
         if (error) { toast(error.message, { tone: 'error' }); return; }
         toast('Estágio atualizado.');
