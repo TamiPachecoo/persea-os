@@ -143,23 +143,120 @@ function openCreateClientModal() {
   });
 }
 
+// Real gap found live: naymurta.com's homepage form (landing-lead-capture
+// Edge Function) writes real rows into `leads`, but this production path
+// only ever rendered Clientes — Leads had no tab at all here (the mock
+// `render()`/`renderLeadsSection()` further down, MockDB-based, is what
+// non-production sees; app.naymurta.com never ran it). A real website
+// contact had nowhere to show up. This is a first real-data pass at that
+// tab, not a full migration of the Nova Persea lead pipeline (Condições
+// Comerciais → Cadastro → Contrato still lives on MockDB leads in
+// lead-detail.js/lead-bridge.js) — deliberately scoped to what's needed
+// so a real lead is actually visible and actionable: see it, reach her
+// on WhatsApp/e-mail, move her stage forward.
+async function loadRealLeads() {
+  const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+  return data || [];
+}
+
+function realLeadRow(l) {
+  const waHref = l.phone ? `https://wa.me/55${l.phone.replace(/\D/g, '')}` : null;
+  return `
+    <div class="flex items-start justify-between py-3 gap-3 flex-wrap">
+      <div class="min-w-0" style="flex:1 1 220px;">
+        <p class="font-medium break-words">${l.full_name || '(sem nome)'}</p>
+        <p class="text-xs text-white/30 break-words">${l.email || 'sem e-mail'} · ${l.phone || 'sem telefone'}</p>
+        <p class="text-xs text-white/20 mt-1">${LEAD_SOURCE_LABEL[l.source] || l.source} · recebido ${formatDate(l.created_at)}</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap shrink-0">
+        ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
+        ${l.email ? `<a href="mailto:${l.email}" class="btn-ghost" style="padding:6px 12px;font-size:11px;">E-mail</a>` : ''}
+        <select data-lead-stage="${l.id}" class="field text-xs" style="width:auto;padding:6px 10px;">
+          ${LEAD_STAGES.map((s) => `<option value="${s}" ${l.stage === s ? 'selected' : ''}>${LEAD_STAGE_LABEL[s]}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function renderRealLeadsSection(leads) {
+  const filtered = leads.filter((l) => {
+    const matchesSearch = !leadSearch || (l.full_name || '').toLowerCase().includes(leadSearch.toLowerCase()) || (l.email || '').toLowerCase().includes(leadSearch.toLowerCase());
+    const matchesStage = !stageFilter || l.stage === stageFilter;
+    return matchesSearch && matchesStage;
+  });
+  return card(`
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm text-white/50">Leads</p>
+      <span class="text-xs text-white/30">${filtered.length} de ${leads.length}</span>
+    </div>
+    <p class="text-xs text-white/20 mb-4">Contatos recebidos pelo formulário do site (naymurta.com) aparecem aqui automaticamente.</p>
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <input id="lead-search" class="field text-sm" style="max-width:260px;" placeholder="Buscar por nome ou email..." value="${leadSearch}" />
+      <select id="stage-filter" class="field text-sm" style="max-width:220px;">
+        <option value="">Todos os estágios</option>
+        ${LEAD_STAGES.map((s) => `<option value="${s}" ${stageFilter === s ? 'selected' : ''}>${LEAD_STAGE_LABEL[s]}</option>`).join('')}
+      </select>
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">
+      ${filtered.length ? filtered.map(realLeadRow).join('') : '<p class="text-sm text-white/20 py-6">Nenhum lead encontrado.</p>'}
+    </div>
+  `, 'mb-8');
+}
+
 async function renderProductionCRM() {
-  const clients = await loadRealClients();
-  content.innerHTML = `
+  const header = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">CRM</p>
-      <h1 class="text-3xl font-serif">Clientes</h1>
+      <h1 class="text-3xl font-serif">Clientes &amp; Leads</h1>
     </div>
-    ${card(`
-      <div class="flex items-center justify-between">
-        <p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'}</p>
-        <button id="new-client" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Cliente</button>
-      </div>
-    `, 'mb-6')}
-    ${clients.length ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
-      : card('<p class="text-sm" style="color:var(--muted);">Nenhum cliente ainda. Clique em "Novo Cliente" para começar o cadastro da primeira cliente real.</p>')}
+    <div class="flex gap-1 mb-8 border-b border-white/10">
+      <button data-section="clients" class="tab-btn ${section === 'clients' ? 'active' : ''}">Clientes</button>
+      <button data-section="leads" class="tab-btn ${section === 'leads' ? 'active' : ''}">Leads</button>
+    </div>
   `;
-  content.querySelector('#new-client').addEventListener('click', openCreateClientModal);
+
+  if (section === 'leads') {
+    const leads = await loadRealLeads();
+    content.innerHTML = header + renderRealLeadsSection(leads);
+  } else {
+    const clients = await loadRealClients();
+    content.innerHTML = header + `
+      ${card(`
+        <div class="flex items-center justify-between">
+          <p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'}</p>
+          <button id="new-client" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Cliente</button>
+        </div>
+      `, 'mb-6')}
+      ${clients.length ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
+        : card('<p class="text-sm" style="color:var(--muted);">Nenhum cliente ainda. Clique em "Novo Cliente" para começar o cadastro da primeira cliente real.</p>')}
+    `;
+  }
+
+  content.querySelectorAll('[data-section]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      section = btn.dataset.section;
+      history.replaceState(null, '', `crm.html?section=${section}`);
+      renderProductionCRM();
+    });
+  });
+
+  if (section === 'leads') {
+    const searchEl = content.querySelector('#lead-search');
+    searchEl.addEventListener('input', (e) => { leadSearch = e.target.value; renderProductionCRM(); });
+    searchEl.focus();
+    searchEl.setSelectionRange(leadSearch.length, leadSearch.length);
+    content.querySelector('#stage-filter').addEventListener('change', (e) => { stageFilter = e.target.value; renderProductionCRM(); });
+    content.querySelectorAll('[data-lead-stage]').forEach((sel) => {
+      sel.addEventListener('change', async (e) => {
+        const { error } = await supabase.from('leads').update({ stage: e.target.value }).eq('id', sel.dataset.leadStage);
+        if (error) { toast(error.message, { tone: 'error' }); return; }
+        toast('Estágio atualizado.');
+      });
+    });
+  } else {
+    content.querySelector('#new-client').addEventListener('click', openCreateClientModal);
+  }
 }
 
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
