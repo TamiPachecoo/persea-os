@@ -209,15 +209,26 @@ function realLeadRow(l) {
 }
 
 function renderRealLeadsSection(leads) {
+  // Real gap found live: converting a lead marked it converted and pointed
+  // it at the new client, but the row itself never left this list — from
+  // the working pipeline's point of view she read as "still a lead" even
+  // though Clientes now had her for real too. A converted lead stays out
+  // of the default view (she's moved on, tracked in Clientes now), but
+  // stays findable — searching by name/email still surfaces her, and so
+  // does explicitly picking "Convertido" in the stage filter to review
+  // past conversions.
+  const showConverted = !!leadSearch || stageFilter === 'convertido';
+  const openCount = leads.filter((l) => !l.converted_to_client_id).length;
   const filtered = leads.filter((l) => {
     const matchesSearch = !leadSearch || (l.full_name || '').toLowerCase().includes(leadSearch.toLowerCase()) || (l.email || '').toLowerCase().includes(leadSearch.toLowerCase());
     const matchesStage = !stageFilter || l.stage === stageFilter;
-    return matchesSearch && matchesStage;
+    const notArchived = showConverted || !l.converted_to_client_id;
+    return matchesSearch && matchesStage && notArchived;
   });
   return card(`
     <div class="flex items-center justify-between mb-1">
       <p class="text-sm text-white/50">Leads</p>
-      <span class="text-xs text-white/30">${filtered.length} de ${leads.length}</span>
+      <span class="text-xs text-white/30">${filtered.length} de ${showConverted ? leads.length : openCount}</span>
     </div>
     <p class="text-xs text-white/20 mb-4">Contatos recebidos pelo formulário do site (naymurta.com) aparecem aqui automaticamente.</p>
     <div class="flex flex-wrap items-center gap-3 mb-4">
