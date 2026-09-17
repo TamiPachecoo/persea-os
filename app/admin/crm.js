@@ -86,19 +86,27 @@ function openRegistrationLinkModal(url) {
   });
 }
 
-function openCreateClientModal() {
+// fromLead: the real `leads` row this client is being created from, when
+// reached via "Converter em Cliente" on the Leads tab — pre-fills her
+// name/email (already on file, no re-typing) and, once the client is
+// created for real, marks the lead itself as converted (stage +
+// converted_to_client_id/converted_at, both real columns on `leads`
+// already there for exactly this) so it drops out of the working pipeline
+// instead of sitting there looking unconverted forever. undefined for the
+// plain "+ Novo Cliente" button, which has no lead to link back to.
+function openCreateClientModal(fromLead) {
   const { el, close } = openModal({
     title: 'Novo Cliente',
     bodyHtml: `
       <form id="create-client-form" class="space-y-4">
         <div>
           <label class="text-xs text-white/40 block mb-1">Nome Completo</label>
-          <input name="full_name" class="field" required />
+          <input name="full_name" class="field" required value="${fromLead?.full_name || ''}" />
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
             <label class="text-xs text-white/40 block mb-1">Email (opcional)</label>
-            <input name="email" type="email" class="field" />
+            <input name="email" type="email" class="field" value="${fromLead?.email || ''}" />
           </div>
           <div>
             <label class="text-xs text-white/40 block mb-1">Programa</label>
@@ -133,6 +141,11 @@ function openCreateClientModal() {
         body: { full_name: fd.get('full_name'), email: fd.get('email') || null, tier: fd.get('tier') },
       });
       if (error || data?.error) { toast(data?.error || 'Não foi possível criar a cliente agora.', { tone: 'error' }); return; }
+      if (fromLead) {
+        await supabase.from('leads').update({
+          stage: 'convertido', converted_to_client_id: data.client_id || null, converted_at: new Date().toISOString(),
+        }).eq('id', fromLead.id);
+      }
       close();
       openRegistrationLinkModal(data.registration_url);
       renderProductionCRM();
@@ -174,6 +187,9 @@ function realLeadRow(l) {
         <select data-lead-stage="${l.id}" class="field text-xs" style="width:auto;padding:6px 10px;">
           ${LEAD_STAGES.map((s) => `<option value="${s}" ${l.stage === s ? 'selected' : ''}>${LEAD_STAGE_LABEL[s]}</option>`).join('')}
         </select>
+        ${l.converted_to_client_id
+          ? `<a href="client-onboarding.html?id=${l.converted_to_client_id}" class="text-xs" style="color:var(--gold);padding:6px 4px;">✓ Já é cliente</a>`
+          : `<button type="button" data-convert-lead="${l.id}" class="btn-primary" style="padding:6px 12px;font-size:11px;">Converter em Cliente</button>`}
       </div>
     </div>
   `;
@@ -218,6 +234,7 @@ async function renderProductionCRM() {
 
   if (section === 'leads') {
     const leads = await loadRealLeads();
+    lastLoadedLeads = leads;
     content.innerHTML = header + renderRealLeadsSection(leads);
   } else {
     const clients = await loadRealClients();
@@ -254,6 +271,12 @@ async function renderProductionCRM() {
         toast('Estágio atualizado.');
       });
     });
+    content.querySelectorAll('[data-convert-lead]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const lead = lastLoadedLeads.find((l) => l.id === btn.dataset.convertLead);
+        if (lead) openCreateClientModal(lead);
+      });
+    });
   } else {
     content.querySelector('#new-client').addEventListener('click', openCreateClientModal);
   }
@@ -274,6 +297,7 @@ let section = new URLSearchParams(location.search).get('section') === 'leads' ? 
 let clientSearch = '';
 let leadSearch = '';
 let stageFilter = '';
+let lastLoadedLeads = []; // set by renderProductionCRM whenever it loads real leads — lets the "Converter em Cliente" click handler look up the full row by id without re-fetching
 
 // --- Clientes, grouped by program -----------------------------------------
 function clientRow(c) {
