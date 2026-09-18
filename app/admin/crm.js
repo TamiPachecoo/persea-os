@@ -326,7 +326,13 @@ async function renderProductionCRM() {
       });
     });
   } else {
-    content.querySelector('#new-client').addEventListener('click', openCreateClientModal);
+    // Real gap found live: this used to pass openCreateClientModal
+    // straight to addEventListener, which hands it the click Event as its
+    // first argument — openCreateClientModal(fromLead) then treated that
+    // Event as a truthy "fromLead" and tried to update a lead row with
+    // id=undefined on every single client created this way (harmless to
+    // the client creation itself, but a real failed request every time).
+    content.querySelector('#new-client').addEventListener('click', () => openCreateClientModal());
   }
 }
 
