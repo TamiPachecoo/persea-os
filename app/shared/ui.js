@@ -207,6 +207,7 @@ const MOBILE_NAV_CONFIG = {
     mais: [
       ['content.html', 'Conteúdos'],
       ['assistente.html', 'Assistente'],
+      ['events.html', 'Eventos'],
       ['reports.html', 'Relatórios'],
     ],
   },
@@ -304,6 +305,7 @@ const ADMIN_NAV = [
   ['crm.html', 'CRM'],
   ['content.html', 'Conteúdos'],
   ['assistente.html', 'Assistente'],
+  ['events.html', 'Eventos'],
   ['financial.html', 'Financeiro'],
   ['reports.html', 'Relatórios'],
 ];
