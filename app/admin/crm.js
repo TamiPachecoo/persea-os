@@ -122,9 +122,10 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
           </div>
           <div>
             <label class="text-xs text-white/40 block mb-1">Programa</label>
-            <select name="tier" class="field">
+            <select name="program_choice" class="field">
               <option value="essential">Persea Essential</option>
               <option value="premium">Persea Premium</option>
+              <option value="ascensao_marca">Ascensão da Marca</option>
             </select>
           </div>
         </div>
@@ -148,9 +149,21 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
     const originalLabel = submitBtn.textContent;
     submitBtn.textContent = 'Criando…';
     const fd = new FormData(e.target);
+    // Ascensão da Marca is a genuinely separate program, not a Persea
+    // tier — 'tier' stays a required, essential/premium-only column
+    // technicality (see clients_tier_check), but program_slug is what
+    // actually drives her real experience (Program Hub, Conteúdos —
+    // see program-model.js/content.js), so it's sent explicitly here
+    // rather than left to create-client-registration's persea-only default.
+    const programChoice = fd.get('program_choice');
+    const isAscensao = programChoice === 'ascensao_marca';
     try {
       const { data, error } = await supabase.functions.invoke('create-client-registration', {
-        body: { full_name: fd.get('full_name'), email: fd.get('email') || null, tier: fd.get('tier') },
+        body: {
+          full_name: fd.get('full_name'), email: fd.get('email') || null,
+          tier: isAscensao ? 'essential' : programChoice,
+          program_slug: isAscensao ? 'ascensao-marca' : undefined,
+        },
       });
       if (error || data?.error) { toast(data?.error || 'Não foi possível criar a cliente agora.', { tone: 'error' }); return; }
       if (fromLead) {

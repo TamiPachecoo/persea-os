@@ -16,6 +16,12 @@ import {
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
+// Ascensão da Marca (and any future non-Persea program): she gets the
+// Hubla categories + whatever Nay/team specifically recommends to her
+// (resource_assignments) — same as everyone — but never the Drive-hosted
+// recorded classes (resources.general_audience), which are a Persea-only
+// benefit per spec.
+const isPersea = __clientCtx.client?.program_slug?.startsWith('persea') ?? true;
 document.body.innerHTML = renderShell({ role: 'client', active: 'content.html', title: 'Conteúdos' });
 initClientSwitcher();
 
@@ -92,13 +98,13 @@ async function render() {
     supabase.from('content_categories').select('*').eq('is_visible', true).order('display_order'),
     supabase.from('tenant_settings').select('hubla_all_content_url').limit(1).maybeSingle(),
     recommendedSection(),
-    recordedClassesSection(),
+    isPersea ? recordedClassesSection() : Promise.resolve(''),
   ]);
 
   content.innerHTML = `
     <div class="mb-10">
       <p class="text-white/40 text-sm mb-1">Central de Conteúdos</p>
-      <h1 class="text-3xl font-serif">Conteúdos da Metodologia PERSEA</h1>
+      <h1 class="text-3xl font-serif">${isPersea ? 'Conteúdos da Metodologia PERSEA' : 'Seus Conteúdos'}</h1>
       <p class="text-sm text-white/40 mt-2 mb-5 max-w-xl">Acesse suas aulas e materiais disponíveis na Hubla.</p>
       ${heroCta(tenant?.hubla_all_content_url)}
     </div>

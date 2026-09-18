@@ -513,11 +513,12 @@ export const CONTRACT_DURATIONS = ['semestral', 'anual'];
 export const CONTRACT_DURATION_LABEL = { semestral: 'Semestral', anual: 'Anual' };
 export const CONTRACT_DURATION_VALUE = { semestral: 18000, anual: 32000 };
 
-// One real product line (Persea) — Ascensão de Imagem removed (Production
-// Audit Remediation Pass, High 8; business decision — no longer part of
-// the system). Fixed list, not tenant-configurable, per this pass's scope.
-export const PROGRAMS = ['persea'];
-export const PROGRAM_LABEL = { persea: 'Persea' };
+// Ascensão de Imagem removed (Production Audit Remediation Pass, High 8;
+// business decision — no longer part of the system). Ascensão da Marca
+// added as a genuinely separate, independent program — not a Persea tier
+// — see contracts_program_check and program_defs('ascensao-marca').
+export const PROGRAMS = ['persea', 'ascensao_marca'];
+export const PROGRAM_LABEL = { persea: 'Persea', ascensao_marca: 'Ascensão da Marca' };
 
 export const PAYMENT_STATUSES = ['paid', 'pending', 'overdue'];
 export const PAYMENT_STATUS_LABEL = { paid: 'Pago', pending: 'Pendente', overdue: 'Em Atraso' };

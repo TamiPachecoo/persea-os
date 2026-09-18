@@ -177,7 +177,7 @@ async function render() {
       <p class="text-xs text-white/30">${programDef.duration_months ? `Duração: ${programDef.duration_months} meses` : 'Duração a confirmar com a Nay'}</p>
     </div>
 
-    ${renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}`), currentIndex: client.phase_index || 0, tier: client.tier })}
+    ${renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
 
     ${card(`
       <div class="grid sm:grid-cols-3 gap-6 mb-5">

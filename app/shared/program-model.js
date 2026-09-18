@@ -126,26 +126,45 @@ export async function loadProgramState(clientId, client) {
     await Promise.all(includedSlugs.map(async (slug) => [slug, await computeActivityStatus(slug, clientId)])),
   );
 
+  // Real gap found adding a second program (Ascensão da Marca, single-phase,
+  // no Persea-Premium upsell concept at all): this used to treat "no access
+  // row for this program" identically to the explicit 'premium_preview'
+  // value — both fell into the same `!== 'included'` branch, rendering the
+  // exact same "✦ Premium — Esta etapa faz parte do acompanhamento
+  // aprofundado do Persea Premium" card. That's correct for an activity a
+  // Persea Essential client hasn't unlocked yet, but wrong for an activity
+  // that isn't part of a completely different program at all — she'd see
+  // Persea-Premium upsell language for a product she was never sold.
+  // access is now read with no fallback string, and only an *explicit*
+  // 'premium_preview' row renders the tease; anything else (no row, or any
+  // other value) is treated as "not part of this program" and omitted
+  // entirely. Zero behavior change for every existing program/activity
+  // combination today — every one of them already has an explicit row (see
+  // this migration's own comment) — this only takes effect for the new,
+  // deliberately sparse ascensao-marca rows.
   function buildActivity(slug) {
     const def = activityDefBySlug[slug];
     if (!def) return null;
-    const access = accessBySlug[slug] || 'unavailable';
-    if (access !== 'included') {
+    const access = accessBySlug[slug];
+    if (access === 'included') {
+      const status = statusBySlug[slug] || 'not_started';
+      return {
+        slug, title: def.title, description: def.description, route: def.route, access,
+        status, statusLabel: STATUS_LABEL[status] || status, badgeClass: STATUS_BADGE[status] || 'badge-locked',
+        completed: status === 'completed' || status === 'feedback_available',
+      };
+    }
+    if (access === 'premium_preview') {
       return { slug, title: def.title, description: def.description, premiumDescription: def.premium_description, route: def.route, access, status: 'premium_preview', statusLabel: STATUS_LABEL.premium_preview, badgeClass: STATUS_BADGE.premium_preview, completed: false };
     }
-    const status = statusBySlug[slug] || 'not_started';
-    return {
-      slug, title: def.title, description: def.description, route: def.route, access,
-      status, statusLabel: STATUS_LABEL[status] || status, badgeClass: STATUS_BADGE[status] || 'badge-locked',
-      completed: status === 'completed' || status === 'feedback_available',
-    };
+    return null; // no row (or any other value) — not part of this program
   }
 
   const phasesOut = (phases || []).map((phase) => {
     const slugsInPhase = (phaseActivities || []).filter((pa) => pa.phase_id === phase.id).map((pa) => pa.activity_slug);
     const activities = slugsInPhase.map(buildActivity).filter(Boolean);
     const includedActivities = activities.filter((a) => a.access === 'included');
-    const premiumLocked = slugsInPhase.length > 0 && slugsInPhase.every((slug) => accessBySlug[slug] !== 'included');
+    const premiumLocked = activities.length > 0 && includedActivities.length === 0;
     const completedCount = includedActivities.filter((a) => a.completed).length;
     let phaseStatus = 'upcoming';
     if (phase.id < (client.phase_index || 0)) phaseStatus = 'completed';
@@ -154,7 +173,12 @@ export async function loadProgramState(clientId, client) {
       id: phase.id, description: phase.description, premiumLocked, activities, includedActivities,
       status: phaseStatus, progress: { completed: completedCount, total: includedActivities.length },
     };
-  });
+  // A phase with nothing relevant to this program at all (no included AND
+  // no premium-preview activity) never existed for any current program —
+  // every phase today has at least one of the two for every program — so
+  // this only ever removes phases from a program that genuinely has none
+  // of that phase's activities, exactly ascensao-marca's phases 1-3.
+  }).filter((phase) => phase.activities.length > 0);
 
   const allIncluded = phasesOut.flatMap((p) => p.includedActivities);
   const completedCount = allIncluded.filter((a) => a.completed).length;
