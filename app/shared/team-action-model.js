@@ -31,7 +31,25 @@ import { supabase } from './supabase-client.js';
 import { getLatestAttempt } from './archetype-model.js';
 import { formatDateTime } from './ui.js';
 
+// Real gap found live (Ascensão da Marca): this whole module is built on
+// encounter_defs, the Persea-specific E1-E8 methodology table — a
+// non-Persea program has no such structured sequence at all. Before this
+// check, a non-Persea client still got matched against encounter_defs by
+// raw number (there's no program_slug on that table), so her staff card
+// read "Encontro 1 (Extração e Essência)" — a real Persea methodology
+// name — for a program that was never sold to her.
+function usesEncounterJourney(client) {
+  return !!client.program_slug?.startsWith('persea');
+}
+
 export async function computeTeamNextStep(client, clientId) {
+  if (!usesEncounterJourney(client)) {
+    return {
+      label: 'Acompanhar andamento',
+      detail: 'Este programa não usa a jornada estruturada de encontros (E1-E8) da Persea — acompanhe pela aba Jornada e pelos encontros agendados na Agenda.',
+      kind: 'other_program',
+    };
+  }
   const [{ data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype] = await Promise.all([
     supabase.from('agenda_items').select('id').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'completed'),
     supabase.from('agenda_items').select('item_date').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'upcoming').order('item_date', { ascending: true }).limit(1).maybeSingle(),
@@ -83,6 +101,7 @@ export async function computeTeamNextStep(client, clientId) {
 // everything further out is 'locked' (not reachable yet). E1's real
 // questionnaire/archetype gate is surfaced the same way it is above.
 export async function loadEncounterJourney(client, clientId) {
+  if (!usesEncounterJourney(client)) return [];
   const [{ data: defs }, { data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype] = await Promise.all([
     supabase.from('encounter_defs').select('*').order('number', { ascending: true }),
     supabase.from('agenda_items').select('id').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'completed'),

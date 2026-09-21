@@ -522,7 +522,7 @@ async function programSummaryCard(client, state) {
       ${!isAssistant ? `<a href="agenda.html?client=${clientId}" class="btn-ghost">Agendar encontro</a>` : ''}
     </div>
     <div class="grid sm:grid-cols-2 gap-4 text-sm mb-5">
-      <div><p class="text-xs text-white/30">Plano</p><p>${TIER_NAME[client.tier] || programDef.name}</p></div>
+      <div><p class="text-xs text-white/30">Plano</p><p>${client.program_slug?.startsWith('persea') ? (TIER_NAME[client.tier] || programDef.name) : programDef.name}</p></div>
       <div><p class="text-xs text-white/30">Fase atual</p><p>Fase ${(client.phase_index || 0) + 1}</p></div>
       <div><p class="text-xs text-white/30">Atividades</p><p>${progress.completedCount} de ${progress.totalIncluded} concluídas (${progress.pct}%)</p></div>
       <div><p class="text-xs text-white/30">Próxima ação da cliente</p><p>${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia'}</p></div>
