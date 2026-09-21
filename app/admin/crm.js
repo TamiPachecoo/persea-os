@@ -62,7 +62,16 @@ function productionClientRow(c) {
         <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}${c.phase_index != null && c._teamNextStep ? ` · Fase ${c.phase_index + 1}` : ''}</p>
         ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
-      <div class="flex items-center gap-3 shrink-0">
+      <!-- Real gap found live on mobile: this block itself never wrapped
+           its own two children (label + badge), only the outer row did.
+           A long combination — e.g. "Preparar contrato →" next to
+           "Cadastro Recebido — Contrato Pendente" — had nowhere to go but
+           to overflow off the right edge of the row (measured: this div's
+           own right edge landed past the viewport width), rendering as a
+           clipped, garbled mess that looked like the row wasn't really
+           there. flex-wrap here lets the label drop below the badge
+           instead of running off-screen. -->
+      <div class="flex items-center gap-3 flex-wrap" style="max-width:100%;">
         ${nextActionLabel ? `<span class="text-xs" style="color:var(--gold);">${nextActionLabel} →</span>` : ''}
         <span class="badge ${c._status.badgeClass}">${c._status.label}</span>
       </div>
