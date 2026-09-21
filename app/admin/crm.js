@@ -22,8 +22,19 @@ import { computeTeamNextStep } from '../shared/team-action-model.js';
 // Leads/VIP-pipeline half stays MockDB-only and is simply not shown in
 // production yet (an honest gap, not faked data), since that conversion
 // wasn't in scope for this pass.
+// Real gap found live, twice now: a client accidentally left checked
+// "Cliente de demonstração" (the checkbox on her contract page) simply
+// vanished from this entire list — the checkbox gives no warning that
+// this is what it does, and the consequence (total invisibility, not a
+// label) reads exactly like a bug. Demo clients are still fetched and
+// shown here now, just tagged — see productionClientRow's badge below —
+// so a mistaken toggle is visible and correctable instead of silently
+// hiding someone. Financial rollups/reports still exclude them from real
+// numbers (that exclusion lives separately in shared/financial-model.js
+// and shared/hubla-model.js, untouched by this — this is only about
+// whether she's visible here, not whether she counts as real revenue).
 async function loadRealClients() {
-  const { data: clients } = await supabase.from('clients').select('*').eq('is_demo', false).order('created_at', { ascending: false });
+  const { data: clients } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
   const rows = clients || [];
   const ids = rows.map((c) => c.id);
   const [{ data: partyInfos }, { data: contracts }] = await Promise.all([
@@ -58,7 +69,10 @@ function productionClientRow(c) {
   return `
     <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2">
       <div class="min-w-0">
-        <p class="font-medium">${c.full_name}</p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="font-medium">${c.full_name}</p>
+          ${c.is_demo ? '<span class="badge" style="background:rgba(196,90,60,.15); color:var(--terracotta); border-color:var(--terracotta);">Demo</span>' : ''}
+        </div>
         <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}${c.phase_index != null && c._teamNextStep ? ` · Fase ${c.phase_index + 1}` : ''}</p>
         ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
