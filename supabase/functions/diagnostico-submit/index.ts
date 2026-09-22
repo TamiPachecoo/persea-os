@@ -65,6 +65,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const fullName = String(body.full_name || "").trim().slice(0, 200);
     const market = String(body.market || "").trim().slice(0, 200);
+    const email = String(body.email || "").trim().slice(0, 200);
+    const whatsapp = String(body.whatsapp || "").trim().slice(0, 40);
     const revenueBand = String(body.revenue_band || "").trim();
     const instagram = body.instagram ? String(body.instagram).trim().slice(0, 100) : null;
     const answers: Record<string, string> = body.answers || {};
@@ -72,6 +74,8 @@ Deno.serve(async (req) => {
 
     if (!fullName) return json({ error: "Nome é obrigatório." }, 400, cors);
     if (!market) return json({ error: "Mercado de atuação é obrigatório." }, 400, cors);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "E-mail inválido." }, 400, cors);
+    if (whatsapp.replace(/\D/g, "").length < 10) return json({ error: "WhatsApp inválido." }, 400, cors);
     if (!["A", "B", "C", "D", "E", "F"].includes(revenueBand)) return json({ error: "Faturamento inválido." }, 400, cors);
     if (!["A", "B", "C", "D", "E"].includes(mirrorAnswer)) return json({ error: "Resposta espelho inválida." }, 400, cors);
 
@@ -113,7 +117,7 @@ Deno.serve(async (req) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { error: insErr } = await admin.from("value_perception_diagnostics").insert({
-      full_name: fullName, market, revenue_band: revenueBand, instagram, answers,
+      full_name: fullName, market, email, whatsapp, revenue_band: revenueBand, instagram, answers,
       score_positioning: pillarScores.positioning, score_image: pillarScores.image,
       score_visibility: pillarScores.visibility, score_connection: pillarScores.connection,
       score_sales: pillarScores.sales, value_index: valueIndex, classification,

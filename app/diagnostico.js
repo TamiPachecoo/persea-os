@@ -168,9 +168,14 @@ const app = document.getElementById('app');
 const progressFill = document.getElementById('progress-fill');
 
 // step 0 = intro, 1-4 = dados iniciais, 5-25 = QUESTIONS, 26 = mirror, 27 = submitting/result
-const TOTAL_STEPS = 4 + QUESTIONS.length + 1;
+const TOTAL_STEPS = 6 + QUESTIONS.length + 1;
 let step = 0;
-const data = { full_name: '', market: '', revenue_band: '', instagram: '', answers: {}, mirror_answer: '' };
+const data = { full_name: '', market: '', email: '', whatsapp: '', revenue_band: '', instagram: '', answers: {}, mirror_answer: '' };
+
+function maskPhone(v) {
+  return v.replace(/\D/g, '').slice(0, 11)
+    .replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{4,5})(\d{4})$/, '$1-$2');
+}
 let result = null;
 let submitError = '';
 
@@ -199,22 +204,26 @@ function renderIntro() {
 }
 
 function renderTextField(opts) {
-  const { title, hint, placeholder, value, required, onNext } = opts;
+  const { title, hint, placeholder, value, required, type = 'text', mask, validate, onNext } = opts;
   app.innerHTML = `
     <div class="screen">
       <p class="q-num">${step} / ${TOTAL_STEPS}</p>
       <h2 class="q-title">${title}</h2>
-      <input class="field" id="field-input" type="text" placeholder="${placeholder || ''}" value="${value || ''}" />
+      <input class="field" id="field-input" type="${type}" placeholder="${placeholder || ''}" value="${value || ''}" />
       ${hint ? `<p class="hint">${hint}</p>` : ''}
       <div class="nav-row">
         <button type="button" class="btn-back" id="back" ${step === 1 ? 'disabled' : ''}>Voltar</button>
-        <button type="button" class="btn-primary" id="next" ${required && !value ? 'disabled' : ''}>Continuar</button>
+        <button type="button" class="btn-primary" id="next" ${required && !(value && (!validate || validate(value))) ? 'disabled' : ''}>Continuar</button>
       </div>
     </div>
   `;
   const input = app.querySelector('#field-input');
   const nextBtn = app.querySelector('#next');
-  input.addEventListener('input', () => { nextBtn.disabled = required && !input.value.trim(); });
+  const isValid = () => { const v = input.value.trim(); return !required || (!!v && (!validate || validate(v))); };
+  input.addEventListener('input', () => {
+    if (mask) input.value = mask(input.value);
+    nextBtn.disabled = !isValid();
+  });
   input.focus();
   app.querySelector('#back').addEventListener('click', () => { step -= 1; render(); });
   nextBtn.addEventListener('click', () => { onNext(input.value.trim()); step += 1; render(); });
@@ -341,12 +350,26 @@ function render() {
     renderTextField({ title: 'Mercado de atuação', placeholder: 'Em que área você atua?', value: data.market, required: true, onNext: (v) => { data.market = v; } });
     return;
   }
-  if (step === 3) { renderRevenueField(); return; }
+  if (step === 3) {
+    renderTextField({
+      title: 'E-mail', placeholder: 'seu@email.com', value: data.email, required: true, type: 'email',
+      validate: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), onNext: (v) => { data.email = v; },
+    });
+    return;
+  }
   if (step === 4) {
+    renderTextField({
+      title: 'WhatsApp', placeholder: '(00) 00000-0000', value: data.whatsapp, required: true, mask: maskPhone,
+      validate: (v) => v.replace(/\D/g, '').length >= 10, onNext: (v) => { data.whatsapp = v; },
+    });
+    return;
+  }
+  if (step === 5) { renderRevenueField(); return; }
+  if (step === 6) {
     renderTextField({ title: 'Instagram', placeholder: '@seuusuario', value: data.instagram, required: INSTAGRAM_REQUIRED, hint: INSTAGRAM_REQUIRED ? '' : 'Opcional.', onNext: (v) => { data.instagram = v; } });
     return;
   }
-  const qIndex = step - 5;
+  const qIndex = step - 7;
   if (qIndex >= 0 && qIndex < QUESTIONS.length) {
     const q = QUESTIONS[qIndex];
     renderQuestion(q, step, data.answers[q.id], (val) => { data.answers[q.id] = val; });

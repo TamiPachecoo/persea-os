@@ -38,12 +38,14 @@ function pillarBar(label, value) {
 
 function diagnosticRow(r) {
   const isOpen = expandedId === r.id;
-  const waHref = r.instagram ? `https://instagram.com/${r.instagram.replace(/^@/, '')}` : null;
+  const igHref = r.instagram ? `https://instagram.com/${r.instagram.replace(/^@/, '')}` : null;
+  const waLeadHref = r.whatsapp ? `https://wa.me/55${r.whatsapp.replace(/\D/g, '')}` : null;
   return `
     <div class="py-3" style="border-bottom:1px solid var(--line);">
       <button type="button" data-toggle="${r.id}" class="flex items-center justify-between w-full text-left">
         <div class="min-w-0">
           <p class="font-medium">${r.full_name}</p>
+          <p class="text-xs text-white/30">${r.email} · ${r.whatsapp}</p>
           <p class="text-xs text-white/30">${r.market} · ${REVENUE_LABEL[r.revenue_band] || r.revenue_band} · ${formatDateTime(r.created_at)}</p>
         </div>
         <div class="flex items-center gap-3 shrink-0">
@@ -62,7 +64,9 @@ function diagnosticRow(r) {
           <p class="text-xs text-white/20 mt-1">${GAP_LABEL[r.perception_gap] || r.perception_gap} · resposta espelho: ${r.mirror_classification}</p>
           <p class="text-xs text-white/20 mt-1">Coerência de percepção: ${Math.round(r.coherence_index)} pontos de diferença entre o maior e o menor pilar.</p>
           <div class="flex flex-wrap gap-3 mt-3">
-            ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">Instagram</a>` : ''}
+            ${waLeadHref ? `<a href="${waLeadHref}" target="_blank" rel="noopener" class="btn-primary" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
+            <a href="mailto:${r.email}" class="btn-ghost" style="padding:6px 12px;font-size:11px;">E-mail</a>
+            ${igHref ? `<a href="${igHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">Instagram</a>` : ''}
           </div>
         </div>
       ` : ''}
@@ -72,7 +76,7 @@ function diagnosticRow(r) {
 
 function exportCsv() {
   downloadCSV('diagnostico-percepcao-de-valor.csv', [
-    ['full_name', 'Nome'], ['market', 'Mercado'], ['revenue_band', 'Faturamento'], ['instagram', 'Instagram'],
+    ['full_name', 'Nome'], ['email', 'E-mail'], ['whatsapp', 'WhatsApp'], ['market', 'Mercado'], ['revenue_band', 'Faturamento'], ['instagram', 'Instagram'],
     ['value_index', 'Índice'], ['classification', 'Classificação'], ['main_opportunity', 'Principal Oportunidade'],
     ['score_positioning', 'Posicionamento'], ['score_image', 'Imagem'], ['score_visibility', 'Visibilidade'],
     ['score_connection', 'Conexão'], ['score_sales', 'Vendas'], ['coherence_index', 'Coerência'],
@@ -84,7 +88,8 @@ function exportCsv() {
 function render() {
   const filtered = rows.filter((r) => !search
     || r.full_name.toLowerCase().includes(search.toLowerCase())
-    || r.market.toLowerCase().includes(search.toLowerCase()));
+    || r.market.toLowerCase().includes(search.toLowerCase())
+    || r.email.toLowerCase().includes(search.toLowerCase()));
 
   content.innerHTML = `
     <div class="mb-8 flex items-start justify-between flex-wrap gap-3">
