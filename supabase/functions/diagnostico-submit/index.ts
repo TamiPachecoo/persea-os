@@ -50,11 +50,11 @@ function classify(index: number): string {
 }
 
 const CLASSIFICATION_COPY: Record<string, string> = {
-  "VALOR INVISÍVEL": "Existe uma distância significativa entre o valor que você entrega e aquilo que o mercado consegue perceber.",
-  "VALOR SUBPERCEBIDO": "O mercado reconhece parte do seu valor, mas ainda existe uma diferença relevante entre o que você entrega e o que é percebido.",
-  "VALOR RECONHECIDO": "Existe uma percepção consistente de valor, mas alguns pontos ainda limitam sua diferenciação, influência ou conversão.",
-  "VALOR POSICIONADO": "Existe clareza e consistência entre seu posicionamento, imagem, visibilidade, conexão e capacidade de transformar valor em oportunidades.",
-  "VALOR POTENCIALIZADO": "Existe forte alinhamento entre posicionamento, imagem, visibilidade, conexão e vendas. Seu valor não é apenas percebido: ele se transforma em reconhecimento, oportunidades e resultado.",
+  "VALOR INVISÍVEL": "O mercado não está enxergando o que você realmente vale. Cada dia que passa sem corrigir isso é oportunidade, autoridade e receita ficando na mesa para outra pessoa capturar.",
+  "VALOR SUBPERCEBIDO": "Parte do seu valor está se perdendo entre o que você entrega e o que o mercado percebe. Essa distância tem um preço concreto: é ele que está sendo cobrado de você agora, em cada venda mais difícil do que precisaria ser.",
+  "VALOR RECONHECIDO": "Você já é percebido como competente, mas competência sozinha parou de ser suficiente. Enquanto os pontos específicos identificados aqui continuarem sem solução, você vai seguir disputando espaço com quem entrega menos e cobra menos que você.",
+  "VALOR POSICIONADO": "Seu posicionamento já trabalha a seu favor, mas isso não te protege dos pontos que ainda estão drenando parte do valor que você poderia estar capturando. São exatamente esses pontos que hoje separam você de quem domina o seu mercado.",
+  "VALOR POTENCIALIZADO": "Seu valor já se converte em reconhecimento, oportunidades e resultado acima da média do seu mercado. Neste patamar, o risco deixou de ser passar despercebido — é perder posição para quem está evoluindo mais rápido do que você agora mesmo.",
 };
 
 Deno.serve(async (req) => {
