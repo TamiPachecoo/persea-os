@@ -21,139 +21,108 @@ const REVENUE_OPTIONS = [
   { value: 'F', label: 'Prefiro não informar' },
 ];
 
-// The 21 evaluative questions (q5–q25), verbatim, in pillar order —
-// pillar identity itself is never shown to the respondent mid-quiz.
+// 15 evaluative questions — 3 per pillar, shortened per Nay's own
+// feedback after taking the quiz herself ("ficou cansativo, muito
+// texto"). Pillar identity is never shown to the respondent mid-quiz.
+// Keeping 3 questions per pillar (instead of the original 4/4/4/4/5)
+// also means every pillar now normalizes the same way: min 3, max 12 —
+// see diagnostico-submit's PILLARS map, which must stay in sync with
+// this list's ids.
 const QUESTIONS = [
-  { id: 'q5', text: 'Quando alguém pergunta por que deveria escolher meu trabalho em vez de outra opção disponível no mercado:', options: [
-    'Tenho dificuldade para explicar por que meu trabalho deveria ser escolhido.',
-    'Consigo explicar o que faço, mas meu diferencial ainda depende muito da comparação com outras opções do mercado.',
-    'Consigo explicar meus diferenciais, mas ainda tenho dificuldade para transformá-los em uma percepção clara de valor.',
-    'Consigo comunicar com clareza por que meu trabalho é diferente, relevante e merece ser escolhido.',
+  { id: 'q1', text: 'Quando alguém pergunta por que escolher você e não outra opção do mercado:', options: [
+    'Tenho dificuldade para explicar.',
+    'Explico, mas dependo da comparação com concorrentes.',
+    'Explico meus diferenciais, mas sem clareza total de valor.',
+    'Comunico com clareza por que meu trabalho merece ser escolhido.',
   ]},
-  { id: 'q6', text: 'Sobre o caminho que quero construir profissionalmente:', options: [
-    'Ainda não tenho clareza sobre onde quero chegar.',
-    'Tenho uma ideia, mas muitas vezes me sinto dividido entre possibilidades.',
-    'Sei onde quero chegar, mas ainda tenho dúvidas sobre quais caminhos priorizar.',
-    'Tenho clareza do que quero construir e das prioridades que precisam orientar minhas decisões.',
+  { id: 'q2', text: 'No meu mercado, hoje:', options: [
+    'Poderia ser facilmente substituído.',
+    'Tenho diferenciais, mas pouco percebidos.',
+    'Sou reconhecido por características específicas.',
+    'Tenho um território claro e sou lembrado por algo específico.',
   ]},
-  { id: 'q7', text: 'Quando penso no meu posicionamento no mercado:', options: [
-    'Sinto que poderia ser substituído facilmente por outras pessoas da minha área.',
-    'Sei que tenho diferenciais, mas eles ainda não são percebidos com clareza.',
-    'Sou reconhecido por algumas características específicas do meu trabalho.',
-    'Tenho um território claro no mercado e sou lembrado por algo específico.',
+  { id: 'q3', text: 'Meu público ideal:', options: [
+    'Ainda não está definido.',
+    'Está definido de forma ampla.',
+    'Sei quem quero atrair e o que essa pessoa busca.',
+    'Sei exatamente quem atrair, o que valoriza e por quê.',
   ]},
-  { id: 'q8', text: 'Meu público ideal:', options: [
-    'Ainda não está claramente definido.',
-    'Está definido de forma ampla, mas tento falar com públicos diferentes.',
-    'Sei quem quero atrair e quais problemas essa pessoa busca resolver.',
-    'Sei exatamente quem quero atrair, o que essa pessoa valoriza e por que meu trabalho é relevante para ela.',
+  { id: 'q4', text: 'Minha imagem pessoal comunica o nível do meu trabalho?', options: [
+    'Não, existe uma diferença clara.',
+    'Comunica parte, mas não tudo.',
+    'Comunica profissionalismo e boa parte do valor.',
+    'Traduz intencionalmente o nível e o valor do meu trabalho.',
   ]},
-  { id: 'q9', text: 'Quando minha imagem pessoal é comparada ao nível do trabalho que entrego:', options: [
-    'Existe uma diferença clara entre os dois.',
-    'Minha imagem é adequada, mas não comunica tudo o que entrego.',
-    'Minha imagem comunica profissionalismo e boa parte do meu valor.',
-    'Minha imagem traduz intencionalmente o nível, o posicionamento e o valor do meu trabalho.',
+  { id: 'q5', text: 'Minha forma de me vestir e me apresentar:', options: [
+    'É automática, sem muita intenção.',
+    'Busca adequação, mas sem intenção clara.',
+    'Tenho consciência de como quero ser percebido.',
+    'É usada intencionalmente para criar destaque.',
   ]},
-  { id: 'q10', text: 'Minha forma de me vestir, cuidar da aparência e me apresentar:', options: [
-    'Acontece principalmente de forma automática ou conforme a ocasião.',
-    'Busco estar adequado ao ambiente, mas sem muita intenção.',
-    'Tenho consciência de como quero ser percebido e faço escolhas coerentes.',
-    'Uso minha imagem de maneira intencional para criar destaque e reforçar a percepção que quero construir.',
-  ]},
-  { id: 'q11', text: 'Quando entro em um ambiente com outras pessoas da minha área:', options: [
+  { id: 'q6', text: 'Em ambientes com pessoas da minha área:', options: [
     'Costumo passar despercebido.',
     'Sou percebido, mas raramente me destaco.',
-    'Consigo me destacar em algumas situações.',
-    'Consigo me destacar no meio de muitos, recebo olhares e percebo pessoas se aproximando naturalmente.',
+    'Me destaco em algumas situações.',
+    'Me destaco com frequência e atraio aproximações naturalmente.',
   ]},
-  { id: 'q12', text: 'Minha aparência, postura e forma de me apresentar estão:', options: [
-    'Abaixo do nível de percepção que gostaria de transmitir.',
-    'Dentro do esperado para minha área.',
-    'Acima da média em alguns aspectos.',
-    'Normalmente acima da média das outras pessoas, o que me coloca em um lugar de destaque.',
+  { id: 'q7', text: 'Minha comunicação nas redes sociais é:', options: [
+    'Pouca ou sem intenção clara.',
+    'Frequente, mas sem clareza do objetivo.',
+    'Estratégica, com temas definidos.',
+    'Intencional, fala direto com meu público e reforça meu posicionamento.',
   ]},
-  { id: 'q13', text: 'Quando publico ou me comunico nas redes sociais:', options: [
-    'Publico pouco ou sem uma intenção clara.',
-    'Publico com frequência, mas muitas vezes sem saber exatamente o que quero gerar.',
-    'Tenho uma estratégia de conteúdo e sei quais temas quero associar ao meu trabalho.',
-    'Minha comunicação é intencional, conversa diretamente com meu público ideal e reforça o posicionamento que quero ocupar.',
+  { id: 'q8', text: 'Quando alguém conhece meu perfil pela primeira vez:', options: [
+    'Não entende bem o que faço.',
+    'Entende o que faço, mas não o diferencial.',
+    'Entende o trabalho e alguns diferenciais.',
+    'Entende rápido o que faço, para quem, e por que prestar atenção.',
   ]},
-  { id: 'q14', text: 'Quando alguém conhece meu perfil pela primeira vez:', options: [
-    'Provavelmente não entende claramente o que faço ou para quem trabalho.',
-    'Entende o que faço, mas não necessariamente percebe meu diferencial.',
-    'Entende meu trabalho e consegue identificar alguns diferenciais.',
-    'Entende rapidamente o que faço, para quem faço e por que deveria prestar atenção em mim.',
+  { id: 'q9', text: 'Minha presença digital hoje:', options: [
+    'Não representa meu nível.',
+    'Representa parte, mas parece comum.',
+    'É coerente, mas poderia gerar mais autoridade.',
+    'Reforça minha autoridade e me diferencia.',
   ]},
-  { id: 'q15', text: 'Sobre minha presença digital hoje:', options: [
-    'Não representa o nível do profissional que sou.',
-    'Representa parte do que faço, mas ainda parece comum.',
-    'É coerente com meu trabalho, mas ainda poderia gerar mais autoridade e diferenciação.',
-    'Reforça minha autoridade de maneira autêntica e me diferencia de outras pessoas da minha área.',
+  { id: 'q10', text: 'Ao conversar com alguém que não conheço:', options: [
+    'Tenho dificuldade em iniciar e sustentar a conversa.',
+    'Converso, mas sem criar conexão real.',
+    'Crio conexão e demonstro interesse.',
+    'Crio conexão natural, com interesse genuíno e clareza sobre mim.',
   ]},
-  { id: 'q16', text: 'Quando me comunico, pessoalmente ou nas redes:', options: [
-    'Sinto que muitas vezes estou tentando parecer algo que não sou.',
-    'Consigo ser natural, mas nem sempre sei como direcionar essa comunicação.',
-    'Consigo equilibrar naturalidade com intenção na maior parte das situações.',
-    'Sei exatamente o que quero comunicar, mas faço isso de maneira natural, sem parecer artificial ou ensaiado.',
-  ]},
-  { id: 'q17', text: 'Quando converso com alguém que não conheço:', options: [
-    'Tenho dificuldade para iniciar e sustentar uma conversa.',
-    'Consigo conversar, mas muitas vezes não sei como criar uma conexão verdadeira.',
-    'Consigo criar conexão e demonstrar interesse pela outra pessoa.',
-    'Consigo criar conexão com naturalidade, demonstrando interesse genuíno sem perder clareza sobre quem sou e o que faço.',
-  ]},
-  { id: 'q18', text: 'Quando interajo profissionalmente, as pessoas tendem a:', options: [
-    'Me respeitar, mas me perceber como distante.',
-    'Me achar agradável, mas minha competência nem sempre fica evidente.',
+  { id: 'q11', text: 'Profissionalmente, as pessoas tendem a:', options: [
+    'Me respeitar, mas me achar distante.',
+    'Me achar agradável, mas duvidar da minha competência.',
     'Me perceber como competente e agradável.',
-    'Me perceber como alguém competente, acessível e naturalmente agradável de estar por perto.',
+    'Me perceber como competente, acessível e agradável.',
   ]},
-  { id: 'q19', text: 'Em ambientes sociais e profissionais, do mais simples ao mais sofisticado:', options: [
-    'Muitas vezes me sinto deslocado ou inseguro sobre como me comportar.',
-    'Sei me comportar bem em ambientes conhecidos, mas fico inseguro em contextos mais formais.',
-    'Consigo me adaptar à maioria dos ambientes, embora nem sempre com total naturalidade.',
-    'Transito com naturalidade entre diferentes ambientes, respeitando os códigos comportamentais de cada um, sem perder minha autenticidade.',
+  { id: 'q12', text: 'As oportunidades que chegam pelas minhas relações:', options: [
+    'São raras.',
+    'Vêm principalmente de quem já me conhece.',
+    'Aparecem em algumas situações relevantes.',
+    'São frequentes, com indicações e convites constantes.',
   ]},
-  { id: 'q20', text: 'Sobre as oportunidades que chegam por meio das minhas relações:', options: [
-    'Raramente sou lembrado ou indicado para oportunidades.',
-    'Sou lembrado principalmente por pessoas que já conheço bem.',
-    'Sou indicado ou convidado para algumas oportunidades relevantes.',
-    'Sou frequentemente lembrado, indicado ou convidado para oportunidades relevantes na minha área.',
+  { id: 'q13', text: 'Ao definir meu preço:', options: [
+    'Tenho dificuldade em definir um valor justo.',
+    'Uso o mercado como referência principal.',
+    'Cobro acima da média, mas nem sempre sustento.',
+    'Defino pelo valor que entrego e pelo posicionamento construído.',
   ]},
-  { id: 'q21', text: 'Quando defino o preço do meu produto ou serviço:', options: [
-    'Tenho dificuldade para definir um preço que considere justo para mim e para o cliente.',
-    'Costumo usar os preços praticados no mercado como principal referência.',
-    'Cobro acima da média em algumas ofertas, mas ainda tenho dificuldade para sustentar essa diferença em todas as situações.',
-    'Meu preço é definido principalmente pelo valor que entrego, pelo posicionamento que construí e pelo público que quero atender.',
+  { id: 'q14', text: 'Ao apresentar meu preço:', options: [
+    'Fico inseguro e tenho dificuldade em sustentar.',
+    'Sinto necessidade de justificar bastante.',
+    'Apresento com segurança, mas objeções me desestabilizam.',
+    'Apresento com segurança e sustento o valor sem me justificar.',
   ]},
-  { id: 'q22', text: 'Quando apresento meu preço:', options: [
-    'Fico inseguro e tenho dificuldade para sustentar o valor.',
-    'Sinto necessidade de justificar bastante o preço.',
-    'Consigo apresentar com segurança, mas algumas objeções ainda me desestabilizam.',
-    'Apresento meu preço com segurança e consigo sustentar o valor sem precisar me justificar excessivamente.',
-  ]},
-  { id: 'q23', text: 'Quando uma pessoa demonstra interesse, mas não compra imediatamente:', options: [
-    'Sinto que preciso insistir para tentar fechar.',
-    'Faço várias tentativas porque tenho medo de perder a oportunidade.',
-    'Faço acompanhamento, mas nem sempre sei como conduzir a conversa.',
-    'Sei acompanhar sem pressionar, entender o que está impedindo a decisão e conduzir a conversa de forma natural.',
-  ]},
-  { id: 'q24', text: 'Quando recebo uma objeção como "está caro", "vou pensar" ou "preciso falar com alguém":', options: [
+  { id: 'q15', text: 'Diante de "está caro" ou "vou pensar":', options: [
     'Fico sem saber o que responder.',
-    'Tento explicar novamente meu produto ou serviço.',
-    'Consigo responder algumas objeções, mas ainda improviso bastante.',
-    'Sei investigar o que realmente está por trás da objeção e conduzir a conversa sem pressão.',
-  ]},
-  { id: 'q25', text: 'Na hora de vender, minha segurança vem principalmente:', options: [
-    'Da minha capacidade técnica ou da qualidade daquilo que entrego.',
-    'Do fato de saber que meu produto ou serviço é bom.',
-    'Da qualidade da minha entrega e da minha capacidade de conduzir uma boa conversa comercial.',
-    'Da clareza sobre meu valor, meu posicionamento, minha oferta e minha capacidade de conduzir a decisão.',
+    'Tento explicar novamente o produto ou serviço.',
+    'Respondo algumas objeções, mas improviso bastante.',
+    'Investigo o que está por trás da objeção e conduzo sem pressão.',
   ]},
 ];
 
 const MIRROR_QUESTION = {
-  id: 'q26',
+  id: 'q_mirror',
   text: 'Depois de responder a este diagnóstico, qual afirmação mais representa sua realidade hoje?',
   options: [
     'Eu entrego mais valor do que o mercado consegue perceber.',

@@ -26,14 +26,17 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...cors } });
 }
 
-// Pillar -> question slugs + normalization range. Matches the spec exactly:
-// four questions per pillar scored 1-4 except Vendas (five questions).
+// Pillar -> question ids + normalization range. Trimmed from the
+// original 4/4/4/4/5 down to 3 questions per pillar (15 total, was 21)
+// after Nay found the full version too long/tiring to fill out — every
+// pillar now normalizes the same way (min 3, max 12). Weights unchanged.
+// Must stay in sync with diagnostico.js's own QUESTIONS array (q1-q15).
 const PILLARS: Record<string, { questions: string[]; min: number; max: number; weight: number; label: string }> = {
-  positioning: { questions: ["q5", "q6", "q7", "q8"], min: 4, max: 16, weight: 0.25, label: "Posicionamento" },
-  image: { questions: ["q9", "q10", "q11", "q12"], min: 4, max: 16, weight: 0.20, label: "Imagem" },
-  visibility: { questions: ["q13", "q14", "q15", "q16"], min: 4, max: 16, weight: 0.20, label: "Visibilidade" },
-  connection: { questions: ["q17", "q18", "q19", "q20"], min: 4, max: 16, weight: 0.15, label: "Conexão" },
-  sales: { questions: ["q21", "q22", "q23", "q24", "q25"], min: 5, max: 20, weight: 0.20, label: "Vendas" },
+  positioning: { questions: ["q1", "q2", "q3"], min: 3, max: 12, weight: 0.25, label: "Posicionamento" },
+  image: { questions: ["q4", "q5", "q6"], min: 3, max: 12, weight: 0.20, label: "Imagem" },
+  visibility: { questions: ["q7", "q8", "q9"], min: 3, max: 12, weight: 0.20, label: "Visibilidade" },
+  connection: { questions: ["q10", "q11", "q12"], min: 3, max: 12, weight: 0.15, label: "Conexão" },
+  sales: { questions: ["q13", "q14", "q15"], min: 3, max: 12, weight: 0.20, label: "Vendas" },
 };
 const LETTER_POINTS: Record<string, number> = { A: 1, B: 2, C: 3, D: 4 };
 const MIRROR_CLASSIFICATION: Record<string, string> = {
