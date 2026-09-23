@@ -169,6 +169,7 @@ const MOBILE_TAB_ICON = {
   people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M15.5 5.5c1.4.4 2.4 1.6 2.4 3s-1 2.6-2.4 3"/><path d="M16 14.6c2 .5 3.5 2.1 3.5 4.4"/></svg>',
   clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="17" rx="2"/><rect x="9" y="3" width="6" height="3" rx="1"/><path d="M8.5 12h7M8.5 15.5h7"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+  content: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v15.5a1 1 0 0 1-1 1H6.5A2.5 2.5 0 0 1 4 18Z"/><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20"/></svg>',
 };
 
 // Real feedback: the fixed bottom nav was scoped to client only when
@@ -226,13 +227,27 @@ const MOBILE_NAV_CONFIG = {
 };
 
 function mobileRoleNav(role, active, dir, program) {
-  const { tabs } = MOBILE_NAV_CONFIG[role];
+  const isAscensaoMarca = role === 'client' && program === 'ascensao-marca';
+  // Ascensão da Marca clients rarely need Financeiro after signing (one
+  // contract, not recurring installments to track closely) but do use
+  // Conteúdos often — swap that fixed tab for her instead of leaving a
+  // low-value one taking the prime bottom-bar spot.
+  const tabs = isAscensaoMarca
+    ? MOBILE_NAV_CONFIG.client.tabs.map(([href, label, icon]) => (
+        href === 'financial.html' ? ['content.html', 'Conteúdos', MOBILE_TAB_ICON.content] : [href, label, icon]
+      ))
+    : MOBILE_NAV_CONFIG[role].tabs;
   // Playbook is a Persea-only deliverable — Ascensão da Marca has no
   // equivalent, so hide it there rather than linking to a page that has
   // nothing for her (same reasoning as program-model.js's own program-scoped
-  // activity access, just applied to this one static nav entry).
+  // activity access, just applied to this one static nav entry). Conteúdos
+  // drops out of "Mais" once it's a fixed tab for her (so it isn't listed
+  // twice) and Financeiro moves in — demoted, not removed, since she still
+  // needs to reach it occasionally, just not from the prime bottom-bar spot.
   const showsPlaybook = !program || program.startsWith('persea');
-  const mais = MOBILE_NAV_CONFIG[role].mais.filter(([href]) => showsPlaybook || href !== 'playbook.html');
+  let mais = MOBILE_NAV_CONFIG[role].mais.filter(([href]) =>
+    (showsPlaybook || href !== 'playbook.html') && (!isAscensaoMarca || href !== 'content.html'));
+  if (isAscensaoMarca) mais = [...mais, ['financial.html', 'Financeiro']];
   const maisActive = mais.some(([href]) => href === active);
   const tabsHtml = tabs.map(([href, label, icon]) => `
     <a href="${dir}${href}" class="mobile-tab-link ${active === href ? 'active' : ''}">
