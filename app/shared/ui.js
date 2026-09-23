@@ -185,13 +185,17 @@ const MOBILE_TAB_ICON = {
 // ASSISTANT_NAV/client nav lands in "Mais" instead of being invented here.
 const MOBILE_NAV_CONFIG = {
   client: {
+    // Conteúdos gets the fixed bottom-bar spot — she uses it far more
+    // often day-to-day than Financeiro, which only really matters once
+    // in a while (checking a parcela). Financeiro is demoted into "Mais",
+    // not removed.
     tabs: [
       ['program.html', 'Início', MOBILE_TAB_ICON.home],
       ['encontros.html', 'Encontros', MOBILE_TAB_ICON.calendar],
-      ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
+      ['content.html', 'Conteúdos', MOBILE_TAB_ICON.content],
     ],
     mais: [
-      ['content.html', 'Conteúdos'],
+      ['financial.html', 'Financeiro'],
       ['questionnaire.html', 'Extração de Marca'],
       ['arquetipos.html', 'Arquétipos'],
       ['business-survey.html', 'Negócios'],
@@ -227,27 +231,13 @@ const MOBILE_NAV_CONFIG = {
 };
 
 function mobileRoleNav(role, active, dir, program) {
-  const isAscensaoMarca = role === 'client' && program === 'ascensao-marca';
-  // Ascensão da Marca clients rarely need Financeiro after signing (one
-  // contract, not recurring installments to track closely) but do use
-  // Conteúdos often — swap that fixed tab for her instead of leaving a
-  // low-value one taking the prime bottom-bar spot.
-  const tabs = isAscensaoMarca
-    ? MOBILE_NAV_CONFIG.client.tabs.map(([href, label, icon]) => (
-        href === 'financial.html' ? ['content.html', 'Conteúdos', MOBILE_TAB_ICON.content] : [href, label, icon]
-      ))
-    : MOBILE_NAV_CONFIG[role].tabs;
+  const { tabs } = MOBILE_NAV_CONFIG[role];
   // Playbook is a Persea-only deliverable — Ascensão da Marca has no
   // equivalent, so hide it there rather than linking to a page that has
   // nothing for her (same reasoning as program-model.js's own program-scoped
-  // activity access, just applied to this one static nav entry). Conteúdos
-  // drops out of "Mais" once it's a fixed tab for her (so it isn't listed
-  // twice) and Financeiro moves in — demoted, not removed, since she still
-  // needs to reach it occasionally, just not from the prime bottom-bar spot.
+  // activity access, just applied to this one static nav entry).
   const showsPlaybook = !program || program.startsWith('persea');
-  let mais = MOBILE_NAV_CONFIG[role].mais.filter(([href]) =>
-    (showsPlaybook || href !== 'playbook.html') && (!isAscensaoMarca || href !== 'content.html'));
-  if (isAscensaoMarca) mais = [...mais, ['financial.html', 'Financeiro']];
+  const mais = MOBILE_NAV_CONFIG[role].mais.filter(([href]) => showsPlaybook || href !== 'playbook.html');
   const maisActive = mais.some(([href]) => href === active);
   const tabsHtml = tabs.map(([href, label, icon]) => `
     <a href="${dir}${href}" class="mobile-tab-link ${active === href ? 'active' : ''}">
