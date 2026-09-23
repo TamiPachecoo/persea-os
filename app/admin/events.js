@@ -23,6 +23,12 @@ const brl = (cents) => (cents / 100).toLocaleString('pt-BR', { style: 'currency'
 let statusFilter = '';
 let search = '';
 let registrations = [];
+let manualPaymentLinkUrl = '';
+
+async function loadTenantManualLink() {
+  const { data } = await supabase.from('tenant_settings').select('event_manual_payment_link_url').eq('id', 1).maybeSingle();
+  return data?.event_manual_payment_link_url || '';
+}
 
 async function loadRegistrations() {
   const { data } = await supabase.from('event_registrations').select('*').order('created_at', { ascending: false });
@@ -79,6 +85,14 @@ function render() {
       ${card(`<p class="text-xs text-white/30 mb-1">Receita confirmada</p><p class="text-2xl font-serif" style="color:var(--gold);">${brl(receita)}</p>`)}
     </div>
     ${card(`
+      <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
+      <p class="text-xs text-white/30 mb-4">Cole aqui um Link de Pagamento criado no app da SumUp (com parcelas e "Não repassar a taxa" configurados). Enquanto este campo estiver preenchido, toda nova inscrição é enviada para este link em vez de um checkout automático — isso significa que o pagamento não é confirmado sozinho: marque "Paga" manualmente aqui depois de conferir no seu app SumUp. Deixe em branco para voltar ao checkout automático (sem parcelamento).</p>
+      <form id="manual-link-form" class="flex flex-wrap gap-2">
+        <input name="manualLink" class="field text-sm" style="flex:1; min-width:260px;" value="${manualPaymentLinkUrl}" placeholder="https://pay.sumup.com/..." />
+        <button type="submit" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar</button>
+      </form>
+    `, 'mb-6')}
+    ${card(`
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-white/50">Inscrições</p>
         <span class="text-xs text-white/30">${filtered.length} de ${registrations.length}</span>
@@ -98,6 +112,14 @@ function render() {
 
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
   content.querySelector('#status-filter').addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
+  content.querySelector('#manual-link-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = new FormData(e.target).get('manualLink').trim();
+    const { error } = await supabase.from('tenant_settings').update({ event_manual_payment_link_url: url || null }).eq('id', 1);
+    if (error) { toast(error.message, { tone: 'error' }); return; }
+    manualPaymentLinkUrl = url;
+    toast(url ? 'Link salvo — novas inscrições vão para ele.' : 'Link removido — voltando ao checkout automático.');
+  });
 
   content.querySelectorAll('[data-mark-paid]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -122,7 +144,7 @@ function render() {
 }
 
 async function refresh() {
-  registrations = await loadRegistrations();
+  [registrations, manualPaymentLinkUrl] = await Promise.all([loadRegistrations(), loadTenantManualLink()]);
   render();
 }
 
