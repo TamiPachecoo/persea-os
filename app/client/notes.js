@@ -18,7 +18,7 @@ import { renderShell, card, initClientSwitcher } from '../shared/ui.js';
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'notes' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'notes.html', title: 'Suas Notas' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'notes.html', title: 'Suas Notas' });
 initClientSwitcher();
 
 const notes = MockDB.getNotes(activeClientId);

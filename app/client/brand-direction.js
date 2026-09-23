@@ -16,7 +16,7 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'bran
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 const client = __clientCtx.client;
-document.body.innerHTML = renderShell({ role: 'client', active: 'brand-direction.html', title: 'Direção da Marca' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'brand-direction.html', title: 'Direção da Marca' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

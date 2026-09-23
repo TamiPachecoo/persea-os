@@ -28,7 +28,7 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'valu
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 const client = __clientCtx.client;
-document.body.innerHTML = renderShell({ role: 'client', active: 'value-analysis.html', title: 'Leitura Estratégica de Valor' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'value-analysis.html', title: 'Leitura Estratégica de Valor' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

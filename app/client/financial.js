@@ -21,7 +21,7 @@ import {
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'financial' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'financial.html', title: 'Financeiro' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'financial.html', title: 'Financeiro' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

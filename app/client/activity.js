@@ -10,7 +10,7 @@ import { renderShell, card, formatDateTime, initClientSwitcher } from '../shared
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'activity' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'activity.html', title: 'Atividade' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'activity.html', title: 'Atividade' });
 initClientSwitcher();
 
 const { data: events } = await supabase.from('client_activity_log').select('*').eq('client_id', activeClientId).order('occurred_at', { ascending: false });

@@ -13,7 +13,7 @@ import { getPublishedPlaybook, getQuizResult, buildQuizQuestions, submitQuizResu
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'quiz' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Quiz Rápido' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'playbook.html', title: 'Quiz Rápido' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

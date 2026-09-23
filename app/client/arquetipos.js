@@ -19,7 +19,7 @@ const ARCHETYPE_SCALE_LABELS = {
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'arquetipos' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Teste de Arquétipos' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Teste de Arquétipos' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

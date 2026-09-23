@@ -35,7 +35,8 @@ let showRequestForm = false;
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'encontros' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'encontros.html', title: 'Encontros' });
+const isAscensaoMarca = __clientCtx.client?.program_slug === 'ascensao-marca';
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'encontros.html', title: 'Encontros' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
@@ -309,6 +310,11 @@ async function render() {
       <p class="text-white/40 text-sm mb-1">Encontros</p>
       <h1 class="text-3xl font-serif">Seus Encontros</h1>
     </div>
+    ${isAscensaoMarca ? card(`
+      <p class="text-sm mb-2" style="color:var(--gold);">Como seus encontros são marcados</p>
+      <p class="text-sm mb-2" style="color:var(--muted);">O Encontro E1 (Diagnóstico) é realizado depois que a equipe analisa o material que você preencheu.</p>
+      <p class="text-sm" style="color:var(--muted);">O Encontro E3 é marcado com a equipe depois do envio das imagens solicitadas no Guia de Atividades.</p>
+    `, 'mb-6') : ''}
     ${encounterRequestsHtml}
     <div id="meeting-request-card" class="mb-8"></div>
     ${usageSummary(items)}

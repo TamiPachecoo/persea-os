@@ -225,8 +225,14 @@ const MOBILE_NAV_CONFIG = {
   },
 };
 
-function mobileRoleNav(role, active, dir) {
-  const { tabs, mais } = MOBILE_NAV_CONFIG[role];
+function mobileRoleNav(role, active, dir, program) {
+  const { tabs } = MOBILE_NAV_CONFIG[role];
+  // Playbook is a Persea-only deliverable — Ascensão da Marca has no
+  // equivalent, so hide it there rather than linking to a page that has
+  // nothing for her (same reasoning as program-model.js's own program-scoped
+  // activity access, just applied to this one static nav entry).
+  const showsPlaybook = !program || program.startsWith('persea');
+  const mais = MOBILE_NAV_CONFIG[role].mais.filter(([href]) => showsPlaybook || href !== 'playbook.html');
   const maisActive = mais.some(([href]) => href === active);
   const tabsHtml = tabs.map(([href, label, icon]) => `
     <a href="${dir}${href}" class="mobile-tab-link ${active === href ? 'active' : ''}">
@@ -387,7 +393,7 @@ const ROLE_DIR = { admin: '/admin/', assistant: '/assistant/', client: '/client/
 // renderShell({..., title: '...'}) call sites need editing; it's just
 // inert now. The browser tab title is unaffected — that's each page's own
 // <title> tag in its .html file's <head>, unrelated to this.
-export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
+export function renderShell({ role, active, tenantName = 'PERSEA', title, program }) {
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
   const dir = ROLE_DIR[role] || '';
   const navHtml = nav.map(([href, label]) => `
@@ -416,7 +422,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title }) {
         ${role === 'client' ? onboardingGateBanner(active) : ''}
         <div id="app-content"></div>
       </main>
-      ${mobileRoleNav(role, active, dir)}
+      ${mobileRoleNav(role, active, dir, program)}
     </div>
   `;
 }

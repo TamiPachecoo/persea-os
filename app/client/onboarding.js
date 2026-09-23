@@ -33,7 +33,7 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'onbo
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 const client = __clientCtx.client; // real clients row, from client-context.js
-document.body.innerHTML = renderShell({ role: 'client', active: 'onboarding.html', title: 'Onboarding' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'onboarding.html', title: 'Onboarding' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

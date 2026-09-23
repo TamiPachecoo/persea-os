@@ -14,7 +14,7 @@ import { renderShell, card, toast, initClientSwitcher, formatDateTime } from '..
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'business-survey' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Pesquisa de Precificação' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Pesquisa de Precificação' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

@@ -20,7 +20,7 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'prog
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 const client = __clientCtx.client;
-document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Seu Programa' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Seu Programa' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 content.innerHTML = card('<p class="text-sm" style="color:var(--muted);">Carregando seu programa…</p>');

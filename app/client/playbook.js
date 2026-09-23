@@ -14,7 +14,7 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'play
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 const client = __clientCtx.client;
-document.body.innerHTML = renderShell({ role: 'client', active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'playbook.html', title: 'Playbook de Marca Pessoal' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

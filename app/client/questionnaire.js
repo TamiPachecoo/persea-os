@@ -35,7 +35,7 @@ const QUESTIONNAIRE_TEMPLATE = [
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'questionnaire' });
 if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'questionnaire.html', title: 'Extração de Marca' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'questionnaire.html', title: 'Extração de Marca' });
 initClientSwitcher();
 
 const content = document.getElementById('app-content');

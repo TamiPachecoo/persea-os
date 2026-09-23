@@ -22,7 +22,7 @@ const activeClientId = __clientCtx.clientId;
 // recorded classes (resources.general_audience), which are a Persea-only
 // benefit per spec.
 const isPersea = __clientCtx.client?.program_slug?.startsWith('persea') ?? true;
-document.body.innerHTML = renderShell({ role: 'client', active: 'content.html', title: 'Conteúdos' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'content.html', title: 'Conteúdos' });
 initClientSwitcher();
 
 const content = document.getElementById('app-content');

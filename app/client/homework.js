@@ -16,7 +16,7 @@ if (!__clientCtx) throw new Error('not authorized');
 const activeClientId = __clientCtx.clientId;
 const BUCKET = 'client-uploads';
 
-document.body.innerHTML = renderShell({ role: 'client', active: 'homework.html', title: 'Tarefas' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'homework.html', title: 'Tarefas' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 

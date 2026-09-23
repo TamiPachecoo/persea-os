@@ -12,7 +12,7 @@ import { renderShell, card, toast, initClientSwitcher, formatDateTime } from '..
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'content-activity' });
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
-document.body.innerHTML = renderShell({ role: 'client', active: 'program.html', title: 'Conteúdo' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Conteúdo' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
