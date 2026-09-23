@@ -111,6 +111,45 @@
   }
   .note strong{ color:var(--cream); font-weight:500; }
 
+  .warning{
+    display:flex; gap:12px; align-items:flex-start;
+    background:rgba(184,134,58,.08); border:1px solid var(--terracotta-soft);
+    border-radius:12px; padding:14px 16px; margin-bottom:28px;
+  }
+  .warning svg{ width:18px; height:18px; color:var(--terracotta); flex-shrink:0; margin-top:1px; }
+  .warning p{ margin:0; font-size:13px; line-height:1.6; color:var(--muted); }
+  .warning strong{ color:var(--cream); font-weight:500; }
+
+  /* Illustrated mockups — not literal screenshots (no device to capture
+     from), but real layouts of each browser's own UI, with the exact
+     element to tap highlighted, so "what to look for" still comes across. */
+  .mock{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:14px; margin:14px 0 4px;
+  }
+  .mock-caption{ font-size:11px; color:var(--muted); text-align:center; margin-top:8px; }
+  .mock-toolbar{
+    display:flex; align-items:center; justify-content:space-around;
+    background:#1b1815; border-radius:10px; padding:12px 8px;
+  }
+  .mock-icon{ width:22px; height:22px; color:var(--muted); position:relative; }
+  .mock-icon svg{ width:100%; height:100%; }
+  .mock-icon.active{ color:var(--terracotta); }
+  .mock-icon.active::after{
+    content:''; position:absolute; inset:-8px; border:1.5px solid var(--terracotta);
+    border-radius:50%;
+  }
+  .mock-sheet{ background:#1b1815; border-radius:10px; padding:10px; }
+  .mock-sheet .apps-row{ display:flex; gap:10px; padding:6px 8px 14px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+  .mock-sheet .app-dot{ width:26px; height:26px; border-radius:50%; background:var(--line); flex-shrink:0; }
+  .mock-row{
+    display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:8px;
+    font-size:12.5px; color:var(--muted);
+  }
+  .mock-row svg{ width:16px; height:16px; flex-shrink:0; }
+  .mock-row.active{ background:rgba(184,134,58,.12); color:var(--cream); font-weight:500; }
+  .mock-row.active svg{ color:var(--terracotta); }
+
   footer{
     margin-top:52px; padding-top:28px; border-top:1px solid var(--line);
     text-align:center;
@@ -142,23 +181,37 @@
   </header>
 
   <div class="tabs">
-    <button type="button" class="tab active" data-tab="ios">iPhone</button>
-    <button type="button" class="tab" data-tab="android">Android</button>
+    <button type="button" class="tab active" data-tab="ios">iPhone (Safari)</button>
+    <button type="button" class="tab" data-tab="android">Android (Chrome)</button>
   </div>
 
   <div class="panel active" id="panel-ios">
+    <div class="warning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+      <p>No iPhone, esse passo <strong>só funciona no Safari</strong>. Se você usa o Chrome no iPhone, abra o mesmo endereço no Safari para instalar.</p>
+    </div>
     <div class="step">
       <div class="step-num">1</div>
       <div>
         <h3>Abra o PERSEA no Safari</h3>
-        <p>Acesse <span class="inline-code" style="font-family:ui-monospace,monospace;color:var(--gold);">app.naymurta.com</span> pelo navegador Safari. Precisa ser o Safari, no iPhone esse recurso não funciona em outros navegadores como o Chrome.</p>
+        <p>Acesse <span class="inline-code" style="font-family:ui-monospace,monospace;color:var(--gold);">app.naymurta.com</span> pelo navegador Safari (o ícone da bússola azul).</p>
       </div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
       <div>
         <h3>Toque no ícone de compartilhar</h3>
-        <p>É o quadrado com uma seta apontando para cima <span class="icon-inline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span>, geralmente na barra de baixo da tela.</p>
+        <p>É o quadrado com uma seta apontando para cima, geralmente na barra de baixo da tela.</p>
+        <div class="mock">
+          <div class="mock-toolbar">
+            <div class="mock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+            <div class="mock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></div>
+            <div class="mock-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></div>
+            <div class="mock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="mock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/></svg></div>
+          </div>
+          <p class="mock-caption">Barra de baixo do Safari, toque no ícone destacado</p>
+        </div>
       </div>
     </div>
     <div class="step">
@@ -166,6 +219,17 @@
       <div>
         <h3>Adicionar à Tela de Início</h3>
         <p>Role as opções para baixo e toque em <strong style="color:var(--cream);">"Adicionar à Tela de Início"</strong>.</p>
+        <div class="mock">
+          <div class="mock-sheet">
+            <div class="apps-row">
+              <div class="app-dot"></div><div class="app-dot"></div><div class="app-dot"></div><div class="app-dot"></div>
+            </div>
+            <div class="mock-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar</div>
+            <div class="mock-row active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>Adicionar à Tela de Início</div>
+            <div class="mock-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/></svg>Marcadores</div>
+          </div>
+          <p class="mock-caption">Folha de compartilhamento do Safari</p>
+        </div>
       </div>
     </div>
     <div class="step">
@@ -182,14 +246,21 @@
       <div class="step-num">1</div>
       <div>
         <h3>Abra o PERSEA no Chrome</h3>
-        <p>Acesse <span class="inline-code" style="font-family:ui-monospace,monospace;color:var(--gold);">app.naymurta.com</span> pelo navegador Chrome.</p>
+        <p>Acesse <span class="inline-code" style="font-family:ui-monospace,monospace;color:var(--gold);">app.naymurta.com</span> pelo navegador Chrome (o ícone colorido em círculo).</p>
       </div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
       <div>
         <h3>Toque nos três pontinhos</h3>
-        <p>No canto superior direito da tela, toque no menu <span class="icon-inline"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></span>.</p>
+        <p>No canto superior direito da tela, ao lado da barra de endereço.</p>
+        <div class="mock">
+          <div class="mock-toolbar" style="justify-content:space-between;">
+            <p class="mock-caption" style="margin:0;color:var(--muted);font-size:12px;">app.naymurta.com</p>
+            <div class="mock-icon active"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></div>
+          </div>
+          <p class="mock-caption">Barra de endereço do Chrome, toque nos três pontinhos</p>
+        </div>
       </div>
     </div>
     <div class="step">
@@ -197,6 +268,15 @@
       <div>
         <h3>Instalar aplicativo</h3>
         <p>Toque em <strong style="color:var(--cream);">"Instalar aplicativo"</strong> ou <strong style="color:var(--cream);">"Adicionar à tela inicial"</strong> (o texto varia conforme a versão do Chrome).</p>
+        <div class="mock">
+          <div class="mock-sheet">
+            <div class="mock-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>Nova aba</div>
+            <div class="mock-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9M3 12h4M3 12l3-3M3 12l3 3"/></svg>Histórico</div>
+            <div class="mock-row active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>Instalar aplicativo</div>
+            <div class="mock-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Configurações</div>
+          </div>
+          <p class="mock-caption">Menu do Chrome (três pontinhos)</p>
+        </div>
       </div>
     </div>
     <div class="step">
