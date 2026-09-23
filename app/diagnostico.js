@@ -157,7 +157,7 @@ function letterFor(i) { return String.fromCharCode(65 + i); }
 
 function renderIntro() {
   app.innerHTML = `
-    <div class="screen">
+    <div class="screen center">
       <p class="eyebrow serif">Diagnóstico</p>
       <h1 class="title">Diagnóstico de<br>Percepção de Valor</h1>
       <p class="lede"><strong>Quanto do seu verdadeiro valor o mercado consegue perceber?</strong></p>
@@ -245,7 +245,7 @@ function renderQuestion(q, stepNum, selectedValue, onSelect, letters) {
 
 async function submitDiagnostic() {
   app.innerHTML = `
-    <div class="screen">
+    <div class="screen center">
       <p class="lede">Calculando seu resultado...</p>
     </div>
   `;
@@ -269,7 +269,7 @@ function renderResult() {
   const waText = encodeURIComponent(`Olá! Acabei de fazer o Diagnóstico de Percepção de Valor e meu resultado foi: ${result.classification}. Quero entender melhor o que isso significa e solicitar minha análise estratégica.`);
   const waHref = `https://wa.me/${WHATSAPP_NUMBER}?text=${waText}`;
   app.innerHTML = `
-    <div class="screen">
+    <div class="screen center">
       <p class="eyebrow serif">Seu resultado</p>
       <h1 class="result-band">${result.classification}</h1>
       <p class="lede">${result.classification_copy}</p>
@@ -296,7 +296,7 @@ function renderResult() {
 
 function renderSubmitError() {
   app.innerHTML = `
-    <div class="screen">
+    <div class="screen center">
       <p class="lede">${submitError}</p>
       <div class="nav-row" style="justify-content:flex-start;">
         <button type="button" class="btn-primary" id="retry">Tentar novamente</button>
