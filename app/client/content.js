@@ -3,8 +3,8 @@
 // not host course content — but the category cards/recommendations now
 // come from real `content_categories`/`resources`/`resource_assignments`/
 // `tenant_settings` instead of MockDB fixtures. Every access CTA still
-// routes through hublaHref() (falls back to https://app.hub.la/ when a
-// specific category/resource has no configured link yet) — never a fake
+// routes through hublaHref(), which always sends her to Hubla's sign-in
+// page rather than a specific category/resource deep link — never a fake
 // internal lesson page.
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';

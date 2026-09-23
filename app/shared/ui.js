@@ -565,15 +565,15 @@ export function externalLinkAttrs(url) {
 
 // Product decision: PERSEA does not duplicate Hubla's own course/content
 // delivery — every content/course/class access action hands off to Hubla,
-// never to a fake internal page pretending to host it. A specific
-// per-category/per-resource hublaUrl (set by admin) is preferred when
-// valid (it lands the client on the exact right course); anything unset
-// or invalid falls back to the general Hubla app rather than rendering as
-// a dead "em breve"/disabled control — every content CTA must always go
-// somewhere real. See client/content.js, client/images.js.
-export const HUBLA_FALLBACK_URL = 'https://app.hub.la/';
-export function hublaHref(url) {
-  return isValidHttpUrl(url) ? url : HUBLA_FALLBACK_URL;
+// never to a fake internal page pretending to host it. Every client-facing
+// Hubla CTA sends her to the sign-in page rather than a specific
+// per-category/per-resource deep link — a client who isn't already logged
+// into Hubla needs to sign in before any deep link works anyway, so
+// signin is the one destination guaranteed to always go somewhere real.
+// See client/content.js, client/images.js, client/onboarding.js.
+export const HUBLA_SIGNIN_URL = 'https://app.hub.la/signin';
+export function hublaHref() {
+  return HUBLA_SIGNIN_URL;
 }
 
 // A src/href is "usable" either as an admin-entered http(s)/data URL
