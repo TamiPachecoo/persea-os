@@ -110,7 +110,7 @@ function formShell(headerEyebrow, info, fullNameFallback, emailFallback, idPrefi
             <div class="grid sm:grid-cols-3 gap-4">
               ${field('Profissão', 'profession', info.profession)}
               ${field('Nacionalidade', 'nationality', info.nationality)}
-              ${field('Estado civil', `${idPrefix}maritalStatus`, info.maritalStatus || info.marital_status, { required: false })}
+              ${field('Estado civil', `${idPrefix}maritalStatus`, info.maritalStatus || info.marital_status)}
             </div>
           </div>
         </div>

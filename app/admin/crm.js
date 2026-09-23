@@ -64,7 +64,8 @@ async function loadRealClients() {
 }
 
 function productionClientRow(c) {
-  const tierLabel = c.tier === 'premium' ? 'Premium' : 'Essential';
+  const isPersea = c.program_slug?.startsWith('persea') ?? true;
+  const tierLabel = isPersea ? (c.tier === 'premium' ? 'Premium' : 'Essential') : null;
   const nextActionLabel = c._status.nextAction ? NEXT_ACTION_LABEL[c._status.nextAction] : null;
   return `
     <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2">
@@ -73,7 +74,7 @@ function productionClientRow(c) {
           <p class="font-medium">${c.full_name}</p>
           ${c.is_demo ? '<span class="badge" style="background:rgba(196,90,60,.15); color:var(--terracotta); border-color:var(--terracotta);">Demo</span>' : ''}
         </div>
-        <p class="text-xs text-white/30">${c.email || 'sem e-mail'} · ${tierLabel}${c.phase_index != null && c._teamNextStep ? ` · Fase ${c.phase_index + 1}` : ''}</p>
+        <p class="text-xs text-white/30">${c.email || 'sem e-mail'}${tierLabel ? ` · ${tierLabel}` : ''}${c.phase_index != null && c._teamNextStep ? ` · Fase ${c.phase_index + 1}` : ''}</p>
         ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
       <!-- Real gap found live on mobile: this block itself never wrapped

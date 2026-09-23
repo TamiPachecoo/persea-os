@@ -57,7 +57,7 @@ function assembleContratanteLine(partyInfo, fallbackFullName) {
     }
     return `CONTRATANTE PJ: ${p.company_name}, pessoa jurídica inscrita no CNPJ sob o nº ${p.cnpj}, neste ato representada por ${fullName}, residente e domiciliado(a) em ${assembleAddress(p) || '[ENDEREÇO]'}, e-mail: ${p.email || '[E-MAIL]'}.`;
   }
-  return `CONTRATANTE PF: ${fullName || '[NOME COMPLETO]'}, inscrito(a) no CPF sob o nº ${p.cpf || '[CPF]'}, residente e domiciliado(a) em ${assembleAddress(p) || '[ENDEREÇO]'}${p.cep ? `, CEP ${p.cep}` : ''}, telefone/WhatsApp: ${p.whatsapp || '[TELEFONE]'}, e-mail: ${p.email || '[E-MAIL]'}.`;
+  return `CONTRATANTE PF: ${fullName || '[NOME COMPLETO]'}, ${p.nationality || '[NACIONALIDADE]'}, ${p.marital_status || '[ESTADO CIVIL]'}, ${p.profession || '[PROFISSÃO]'}, inscrito(a) no CPF sob o nº ${p.cpf || '[CPF]'}, residente e domiciliado(a) em ${assembleAddress(p) || '[ENDEREÇO]'}${p.cep ? `, CEP ${p.cep}` : ''}, telefone/WhatsApp: ${p.whatsapp || '[TELEFONE]'}, e-mail: ${p.email || '[E-MAIL]'}.`;
 }
 
 // Real deals rarely fit "entrada + N equal installments, one method for

@@ -727,7 +727,7 @@ function profileHeaderCard(c, status) {
           <p class="text-xl font-serif">${c.full_name}</p>
           <span class="badge ${status.badgeClass}">${status.label}</span>
         </div>
-        <p class="text-xs text-white/30 mt-0.5">${c.email || 'sem e-mail'} · ${TIER_LABEL[c.tier] || c.tier}${c.program_slug ? ` · ${PROGRAM_LABEL_BY_SLUG[c.program_slug] || c.program_slug}` : ''}</p>
+        <p class="text-xs text-white/30 mt-0.5">${c.email || 'sem e-mail'}${c.program_slug?.startsWith('persea') ? ` · ${TIER_LABEL[c.tier] || c.tier}` : ''}${c.program_slug ? ` · ${PROGRAM_LABEL_BY_SLUG[c.program_slug] || c.program_slug}` : ''}</p>
         <form id="photo-form" class="flex items-center gap-2 mt-3 flex-wrap">
           <input name="photo_url" class="field text-sm" style="max-width:340px;" placeholder="Link da foto de perfil" value="${c.photo_url || ''}" />
           <button type="submit" class="btn-ghost">Salvar</button>
