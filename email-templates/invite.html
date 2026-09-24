@@ -3,6 +3,12 @@
   Paste this into: Supabase Dashboard → Authentication → Email Templates → Invite user
   Subject line to use: Seu acesso ao Persea está pronto
   Variable used below ({{ .ConfirmationURL }}) is Supabase's own placeholder — leave it exactly as is.
+  {{ .Data.program_slug }} comes from the `data` object invite-client's own
+  inviteUserByEmail() call passes — picks the Persea vs Ascensão da Marca
+  guide link. Only works for invites sent through that function (or any
+  future one that also passes program_slug in `data`); an invite sent
+  directly from the Supabase dashboard has no .Data and falls back to the
+  Persea guide link via the {{ else }} branch below.
 -->
 <div style="background-color:#0c0a09; padding:40px 16px; font-family:Georgia, 'Times New Roman', serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px; margin:0 auto; background-color:#161210; border:1px solid #2c241d; border-radius:8px; overflow:hidden;">
@@ -37,8 +43,19 @@
       </td>
     </tr>
     <tr>
-      <td style="padding:36px 40px 40px; text-align:center; border-top:1px solid #2c241d; margin-top:20px;">
-        <p style="margin:24px 0 0; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5f5850; font-family:Arial, sans-serif;">Persea · Mentoria de Marca Pessoal</p>
+      <td style="padding:32px 40px 0; text-align:center; font-family:Arial, sans-serif; border-top:1px solid #2c241d;">
+        <p style="margin:24px 0 14px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:#b5573a;">Antes de começar</p>
+        {{ if eq .Data.program_slug "ascensao-marca" }}
+        <p style="margin:0 0 10px; font-size:13px; line-height:1.6;"><a href="https://app.naymurta.com/guia-ascensao-marca.html" style="color:#c9a876; text-decoration:underline;">Como acessar e navegar pelo seu espaço →</a></p>
+        {{ else }}
+        <p style="margin:0 0 10px; font-size:13px; line-height:1.6;"><a href="https://app.naymurta.com/guia-persea.html" style="color:#c9a876; text-decoration:underline;">Como acessar e navegar pelo seu espaço →</a></p>
+        {{ end }}
+        <p style="margin:0; font-size:13px; line-height:1.6;"><a href="https://app.naymurta.com/tutorial-instalar.html" style="color:#c9a876; text-decoration:underline;">Instalar o Persea na tela inicial do celular →</a></p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:24px 40px 40px; text-align:center;">
+        <p style="margin:0; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#5f5850; font-family:Arial, sans-serif;">Persea · Mentoria de Marca Pessoal</p>
       </td>
     </tr>
   </table>
