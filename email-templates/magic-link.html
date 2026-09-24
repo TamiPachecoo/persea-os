@@ -3,6 +3,12 @@
   Paste this into: Supabase Dashboard → Authentication → Email Templates → Magic Link
   Subject line to use: Seu link de acesso ao Persea
   Variable used below ({{ .ConfirmationURL }}) is Supabase's own placeholder — leave it exactly as is.
+  NOTE: not wired to any real sign-in flow yet (no signInWithOtp call
+  anywhere in the app) — this template sits unused. Before ever activating
+  it, apply the same {{ .TokenHash }} fix invite.html and
+  reset-password.html now use (see client/set-password.js's header
+  comment) — {{ .ConfirmationURL }} has the same Gmail-link-scanning
+  vulnerability that broke real client invites.
 -->
 <div style="background-color:#0c0a09; padding:40px 16px; font-family:Georgia, 'Times New Roman', serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px; margin:0 auto; background-color:#161210; border:1px solid #2c241d; border-radius:8px; overflow:hidden;">
