@@ -272,12 +272,12 @@ function matrixHtml(classification) {
   const cell = (name, key) => `<div class="matrix-quad ${quad === key ? 'active' : ''}">${name}</div>`;
   return `
     <div class="matrix-outer">
-      <span class="matrix-axis-label vertical">Percepção ↑</span>
+      <p class="matrix-axis-label top">↑ Percepção</p>
       <div class="matrix">
         ${cell('Sustentação', 'top-left')}${cell('Alvo', 'top-right')}
         ${cell('Dispersão', 'bottom-left')}${cell('Esforço', 'bottom-right')}
       </div>
-      <p class="matrix-axis-label">Clareza →</p>
+      <p class="matrix-axis-label bottom">Clareza →</p>
     </div>
   `;
 }

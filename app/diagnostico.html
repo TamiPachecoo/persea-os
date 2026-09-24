@@ -141,13 +141,11 @@
   .matrix-quad.active{ background:var(--terracotta); color:var(--bg); }
   .matrix-axis-label{
     font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
-    text-align:center; margin-top:10px;
+    text-align:center; margin:0;
   }
-  .matrix-axis-label.vertical{
-    position:absolute; left:-34px; top:50%; transform:rotate(-90deg) translateX(50%);
-    transform-origin:left center; white-space:nowrap;
-  }
-  .matrix-outer{ position:relative; padding-left:24px; }
+  .matrix-axis-label.top{ margin-bottom:10px; }
+  .matrix-axis-label.bottom{ margin-top:10px; }
+  .matrix-outer{ max-width:340px; margin:0 auto; }
 
   .state-name{
     font-family:'Playfair Display', serif; font-style:italic; font-weight:500;
