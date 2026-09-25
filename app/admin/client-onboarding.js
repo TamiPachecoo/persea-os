@@ -1209,6 +1209,15 @@ async function render() {
           <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite de acesso</button>
         </div>
       `, 'mb-6') : ''}
+      ${client.access_status === 'created' ? card(`
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="text-sm text-white/50 mb-1">Acesso</p>
+            <p class="text-xs" style="color:var(--muted);">Convite já enviado. Se o link expirou, foi perdido ou nunca chegou (verifique inclusive filtros de segurança do e-mail dela), você pode reenviar aqui.</p>
+          </div>
+          <button id="resend-invite" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Reenviar convite de acesso</button>
+        </div>
+      `, 'mb-6') : ''}
       ${financeiroCard(finState)}
       ${hublaAccessCard(client)}
     `,
@@ -1251,6 +1260,7 @@ async function render() {
   content.querySelector('#regenerate-link')?.addEventListener('click', generateLink);
   content.querySelector('#prepare-contract')?.addEventListener('click', (e) => prepareContract(client, e.target));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
+  content.querySelector('#resend-invite')?.addEventListener('click', sendInvite);
   content.querySelector('#mark-hubla-granted')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     const { error } = await markHublaAccessGranted(clientId);
