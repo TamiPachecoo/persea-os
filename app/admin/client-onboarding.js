@@ -904,9 +904,10 @@ const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito' };
 
 async function loadFinanceiro(contract) {
   if (!contract) return null;
-  const [{ lines, error }, { data: payments }] = await Promise.all([
+  const [{ lines, error }, { data: payments }, { data: tenantPix }] = await Promise.all([
     loadActiveObligations({ contractId: contract.id }),
     supabase.from('payments').select('*').eq('client_id', clientId).order('created_at', { ascending: false }),
+    supabase.from('tenant_settings').select('pix_key, pix_qr_code_url').eq('id', 1).maybeSingle(),
   ]);
   if (error) return { error };
   // Newest payment per line wins — payments already ordered newest-first,
@@ -916,10 +917,96 @@ async function loadFinanceiro(contract) {
   (payments || []).forEach((p) => {
     if (p.intended_payment_line_id && !paymentByLine.has(p.intended_payment_line_id)) paymentByLine.set(p.intended_payment_line_id, p);
   });
-  return { lines: (lines || []).slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)), paymentByLine };
+  return {
+    lines: (lines || []).slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)),
+    paymentByLine,
+    pixKey: tenantPix?.pix_key || null,
+    pixQrUrl: tenantPix?.pix_qr_code_url || null,
+  };
 }
 
-function financeiroLineRow(line, payment, allLines, contractId) {
+// Real gap found: a card installment plan (12x no cartão) is one real-world
+// charge — the card network bills the client's card monthly on its own.
+// Nay never generates 12 separate SumUp links for that; doing so would
+// actually attempt to charge the card 12 separate times, not the single
+// authorization installments actually are. Detected structurally (not by
+// parsing a specific label format, so it generalizes to any future
+// contract, not just this one): consecutive cartão lines with matching
+// amounts (allowing the 1-2 cent remainder from an exact split) and due
+// dates ~1 month apart are one real charge, grouped into a single summary
+// instead of 12 individually-actionable rows.
+function detectCartaoGroups(lines) {
+  const cartaoLines = lines.filter((l) => l.method === 'cartao_credito').slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+  const groups = [];
+  let current = null;
+  for (const l of cartaoLines) {
+    const prev = current ? current.lines[current.lines.length - 1] : null;
+    const sameAmount = prev && Math.abs(l.amount_cents - prev.amount_cents) <= 2;
+    const daysApart = prev ? (new Date(l.due_date) - new Date(prev.due_date)) / 86400000 : null;
+    const isNextMonth = daysApart !== null && daysApart >= 27 && daysApart <= 32;
+    if (current && sameAmount && isNextMonth) current.lines.push(l);
+    else { current = { lines: [l] }; groups.push(current); }
+  }
+  return groups.filter((g) => g.lines.length > 1);
+}
+
+// Marking a line (or a whole cartão block) as received manually: writes a
+// real payments row (status 'paid' from the start — this already
+// happened, we're recording it, not asking anyone to pay again) plus one
+// payment_allocations row per line, splitting the total across exactly the
+// lines it covers. Same ledger every SumUp-driven payment already writes
+// to, so the "A Receber"/"Em Atraso" numbers everywhere else in the app
+// (loadActiveObligations, admin/financial.js) update correctly with zero
+// special-casing on their end.
+async function markLinesReceived(linesToMark, contractId) {
+  const totalCents = linesToMark.reduce((s, l) => s + l.amount_cents, 0);
+  const { data: payment, error: payErr } = await supabase.from('payments').insert({
+    client_id: clientId, contract_id: contractId, amount_cents: totalCents, status: 'paid',
+    paid_at: new Date().toISOString(), currency: 'BRL', provider: 'mock',
+    description: linesToMark.length > 1 ? `Recebido manualmente — ${linesToMark.length} parcelas` : 'Recebido manualmente',
+  }).select('id').single();
+  if (payErr) return { error: payErr.message };
+  const { error: allocErr } = await supabase.from('payment_allocations').insert(
+    linesToMark.map((l) => ({ payment_id: payment.id, payment_line_id: l.id, amount_cents: l.amount_cents })),
+  );
+  if (allocErr) return { error: allocErr.message };
+  return { ok: true };
+}
+
+function pixKeyBlock(finState) {
+  if (editingPixKey) {
+    return `
+      <div class="mt-3 p-3" style="background:rgba(255,255,255,.02); border-radius:8px;">
+        <label class="text-xs text-white/40 block mb-1">Chave Pix</label>
+        <input type="text" data-pix-key-input class="field text-sm mb-2" value="${finState.pixKey || ''}" placeholder="(00) 00000-0000" />
+        <label class="text-xs text-white/40 block mb-1">Link da imagem do QR Code</label>
+        <input type="text" data-pix-qr-input class="field text-sm mb-3" value="${finState.pixQrUrl || ''}" placeholder="/shared/assets/pix-qr-code.jpg" />
+        <div class="flex items-center gap-2">
+          <button type="button" data-cancel-pix-key class="btn-text">Cancelar</button>
+          <button type="button" data-save-pix-key class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar</button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="mt-3 p-3 flex items-center justify-between flex-wrap gap-3" style="background:rgba(255,255,255,.02); border-radius:8px;">
+      <div class="flex items-center gap-3">
+        ${finState.pixQrUrl ? `<img src="${finState.pixQrUrl}" alt="QR Code Pix" style="width:56px;height:56px;border-radius:6px;object-fit:cover;" />` : ''}
+        <div>
+          <p class="text-xs text-white/30">Chave Pix</p>
+          <p class="text-sm">${finState.pixKey || 'Nenhuma chave cadastrada ainda.'}</p>
+        </div>
+      </div>
+      <button type="button" data-edit-pix-key class="btn-text">${finState.pixKey ? 'Editar' : 'Cadastrar chave'}</button>
+    </div>
+  `;
+}
+
+function markReceivedButton(lines, contractId, label = 'Marcar como recebida') {
+  return `<button type="button" data-mark-received="${lines.map((l) => l.id).join(',')}" data-contract-id="${contractId}" class="btn-ghost" style="padding:8px 16px;font-size:12px;">${label}</button>`;
+}
+
+function financeiroLineRow(line, payment, contractId, opts = {}) {
   const methodLabel = FIN_METHOD_LABEL[line.method] || line.method || 'A combinar';
   const isPaid = line.effective_status === 'paid';
 
@@ -959,8 +1046,16 @@ function financeiroLineRow(line, payment, allLines, contractId) {
         <button type="button" data-copy-link="${activePayment.sumup_link_url}" class="btn-ghost">Copiar link</button>
         <button type="button" data-verify-payment="${activePayment.id}" class="btn-text">Verificar pagamento</button>
       </div>`;
+  } else if (opts.compact) {
+    // Sub-line inside an expanded cartão block — no SumUp checkout offered
+    // here (that never made sense per-installment), just the manual option.
+    actionHtml = !isAssistant ? markReceivedButton([line], contractId) : '';
   } else {
-    actionHtml = `<button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>`;
+    actionHtml = `
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>
+        ${!isAssistant ? markReceivedButton([line], contractId) : ''}
+      </div>`;
   }
   return `
     <div class="py-4 border-b border-white/5 last:border-0">
@@ -977,6 +1072,30 @@ function financeiroLineRow(line, payment, allLines, contractId) {
   `;
 }
 
+function cartaoBlockRow(group, paymentByLine, contractId) {
+  const key = group.lines[0].id;
+  const totalCents = group.lines.reduce((s, l) => s + l.amount_cents, 0);
+  const paidLines = group.lines.filter((l) => l.effective_status === 'paid');
+  const allPaid = paidLines.length === group.lines.length;
+  const unpaidLines = group.lines.filter((l) => l.effective_status !== 'paid');
+  const isExpanded = expandedBlockKey === key;
+  return `
+    <div class="py-4 border-b border-white/5 last:border-0">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p class="text-sm">${brl(totalCents / 100)} · ${group.lines.length}x no cartão de crédito</p>
+          <p class="text-xs text-white/30 mt-0.5">Cobrada uma única vez no cartão em ${formatDate(group.lines[0].due_date)} — a operadora organiza as parcelas mensais automaticamente${paidLines.length ? ` · ${paidLines.length}/${group.lines.length} marcadas como recebidas` : ''}</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+          ${allPaid ? '<span class="badge badge-completed">Recebido</span>' : (!isAssistant ? markReceivedButton(unpaidLines, contractId, 'Marcar bloco como recebido') : '')}
+          <button type="button" data-toggle-block="${key}" class="btn-ghost">${isExpanded ? 'Ocultar parcelas' : 'Ver parcelas'}</button>
+        </div>
+      </div>
+      ${isExpanded ? `<div class="mt-3 pl-4" style="border-left:1px solid var(--line);">${group.lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id), contractId, { compact: true })).join('')}</div>` : ''}
+    </div>
+  `;
+}
+
 // Editing a parcela's own value: contract_payment_lines is frozen once its
 // payment_plan_version is 'active' (trg_enforce_frozen_payment_plan_lines
 // blocks a direct UPDATE on purpose — see that trigger's own message) so a
@@ -987,14 +1106,34 @@ function financeiroLineRow(line, payment, allLines, contractId) {
 // for: a Pix parcela where the client actually paid a different amount
 // than originally planned — Nay corrects the record to match reality.
 let editingLineId = null;
+let expandedBlockKey = null;
+let editingPixKey = false;
 
 function financeiroCard(finState, contractId) {
   if (!finState) return '';
   if (finState.error) return card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar o financeiro agora.</p>', 'mb-6');
   const { lines, paymentByLine } = finState;
+  if (!lines.length) {
+    return card(`<p class="text-sm text-white/50 mb-1">Financeiro</p><p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>`, 'mb-6');
+  }
+
+  const groups = detectCartaoGroups(lines);
+  const groupedIds = new Set(groups.flatMap((g) => g.lines.map((l) => l.id)));
+  const renderedGroupKeys = new Set();
+  const rowsHtml = lines.map((l) => {
+    if (!groupedIds.has(l.id)) return financeiroLineRow(l, paymentByLine.get(l.id), contractId);
+    const group = groups.find((g) => g.lines.some((x) => x.id === l.id));
+    if (renderedGroupKeys.has(group)) return '';
+    renderedGroupKeys.add(group);
+    return cartaoBlockRow(group, paymentByLine, contractId);
+  }).join('');
+
+  const hasPix = lines.some((l) => l.method === 'pix');
+
   return card(`
     <p class="text-sm text-white/50 mb-1">Financeiro</p>
-    ${lines.length ? lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id), lines, contractId)).join('') : '<p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>'}
+    ${hasPix ? pixKeyBlock(finState) : ''}
+    <div class="mt-2">${rowsHtml}</div>
   `, 'mb-6');
 }
 
@@ -1420,6 +1559,35 @@ async function render() {
     if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar'; return; }
     editingLineId = null;
     toast('Valor da parcela atualizado.');
+    render();
+  });
+  content.querySelectorAll('[data-toggle-block]').forEach((btn) => {
+    btn.addEventListener('click', () => { expandedBlockKey = expandedBlockKey === btn.dataset.toggleBlock ? null : btn.dataset.toggleBlock; render(); });
+  });
+  content.querySelectorAll('[data-mark-received]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const lineIds = btn.dataset.markReceived.split(',');
+      const linesToMark = finState.lines.filter((l) => lineIds.includes(l.id));
+      if (!linesToMark.length) return;
+      if (!confirm(`Confirmar recebimento de ${brl(linesToMark.reduce((s, l) => s + l.amount_cents, 0) / 100)}?`)) return;
+      btn.disabled = true; btn.textContent = 'Salvando…';
+      const { error } = await markLinesReceived(linesToMark, btn.dataset.contractId);
+      if (error) { toast(error, { tone: 'error' }); btn.disabled = false; return; }
+      toast('Recebimento registrado.');
+      render();
+    });
+  });
+  content.querySelector('[data-edit-pix-key]')?.addEventListener('click', () => { editingPixKey = true; render(); });
+  content.querySelector('[data-cancel-pix-key]')?.addEventListener('click', () => { editingPixKey = false; render(); });
+  content.querySelector('[data-save-pix-key]')?.addEventListener('click', async (e) => {
+    const btn = e.target;
+    const pixKey = content.querySelector('[data-pix-key-input]').value.trim();
+    const pixQrUrl = content.querySelector('[data-pix-qr-input]').value.trim();
+    btn.disabled = true;
+    const { error } = await supabase.from('tenant_settings').update({ pix_key: pixKey || null, pix_qr_code_url: pixQrUrl || null }).eq('id', 1);
+    if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; return; }
+    editingPixKey = false;
+    toast('Chave Pix atualizada.');
     render();
   });
   if (playbookState.active && playbookState.active.status === 'draft') {
