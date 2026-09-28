@@ -936,18 +936,34 @@ async function loadFinanceiro(contract) {
 // dates ~1 month apart are one real charge, grouped into a single summary
 // instead of 12 individually-actionable rows.
 function detectCartaoGroups(lines) {
-  const cartaoLines = lines.filter((l) => l.method === 'cartao_credito').slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
-  const groups = [];
-  let current = null;
+  const cartaoLines = lines.filter((l) => l.method === 'cartao_credito');
+  // Cluster by amount FIRST (±2 cents, for the exact-split remainder),
+  // not by walking the date-sorted sequence — two concurrent installment
+  // blocks with different start dates (exactly Carla's case: one starting
+  // in August, another in February, running side by side for 6 months)
+  // interleave in date order, which broke a naive "same as the previous
+  // item in the sorted list" check after the first overlap. Amount is
+  // what actually identifies which block a line belongs to.
+  const clusters = [];
   for (const l of cartaoLines) {
-    const prev = current ? current.lines[current.lines.length - 1] : null;
-    const sameAmount = prev && Math.abs(l.amount_cents - prev.amount_cents) <= 2;
-    const daysApart = prev ? (new Date(l.due_date) - new Date(prev.due_date)) / 86400000 : null;
-    const isNextMonth = daysApart !== null && daysApart >= 27 && daysApart <= 32;
-    if (current && sameAmount && isNextMonth) current.lines.push(l);
-    else { current = { lines: [l] }; groups.push(current); }
+    const cluster = clusters.find((c) => Math.abs(c[0].amount_cents - l.amount_cents) <= 2);
+    if (cluster) cluster.push(l); else clusters.push([l]);
   }
-  return groups.filter((g) => g.lines.length > 1);
+  const groups = [];
+  for (const cluster of clusters) {
+    if (cluster.length < 2) continue;
+    const sorted = cluster.slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+    // Confirm genuinely-monthly cadence within this same-amount cluster —
+    // guards against two coincidentally-equal one-off charges getting
+    // merged into a fake "installment block".
+    const isMonthly = sorted.every((l, i) => {
+      if (i === 0) return true;
+      const days = (new Date(l.due_date) - new Date(sorted[i - 1].due_date)) / 86400000;
+      return days >= 25 && days <= 35;
+    });
+    if (isMonthly) groups.push({ lines: sorted });
+  }
+  return groups;
 }
 
 // Marking a line (or a whole cartão block) as received manually: writes a
