@@ -742,14 +742,36 @@ function profileHeaderCard(c, status) {
           <span class="badge ${status.badgeClass}">${status.label}</span>
         </div>
         <p class="text-xs text-white/30 mt-0.5">${c.email || 'sem e-mail'}${c.program_slug?.startsWith('persea') ? ` · ${TIER_LABEL[c.tier] || c.tier}` : ''}${c.program_slug ? ` · ${PROGRAM_LABEL_BY_SLUG[c.program_slug] || c.program_slug}` : ''}</p>
+        ${socialLinksRow(c)}
         <form id="photo-form" class="flex items-center gap-2 mt-3 flex-wrap">
           <input name="photo_url" class="field text-sm" style="max-width:340px;" placeholder="Link da foto de perfil" value="${c.photo_url || ''}" />
           <button type="submit" class="btn-ghost">Salvar</button>
         </form>
         <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar — precisa ser um link direto para a imagem, não uma página.</p>
+        <form id="social-links-form" class="flex items-center gap-2 mt-2 flex-wrap">
+          <input name="instagram_url" class="field text-sm" style="max-width:260px;" placeholder="Link do Instagram" value="${c.instagram_url || ''}" />
+          <input name="linkedin_url" class="field text-sm" style="max-width:260px;" placeholder="Link do LinkedIn" value="${c.linkedin_url || ''}" />
+          <button type="submit" class="btn-ghost">Salvar</button>
+        </form>
       </div>
     </div>
   `, 'mb-6');
+}
+
+// Clickable badges shown right under the name whenever a link is on file —
+// hidden entirely when neither is set, so the edit form below is the only
+// thing prompting for them on a fresh profile.
+function socialLinksRow(c) {
+  const links = [
+    isValidHttpUrl(c.instagram_url) ? { url: c.instagram_url, label: 'Instagram' } : null,
+    isValidHttpUrl(c.linkedin_url) ? { url: c.linkedin_url, label: 'LinkedIn' } : null,
+  ].filter(Boolean);
+  if (!links.length) return '';
+  return `
+    <div class="flex items-center gap-3 mt-1.5">
+      ${links.map((l) => `<a href="${l.url}" target="_blank" rel="noopener" class="text-xs" style="color:var(--gold);">${l.label} ↗</a>`).join('')}
+    </div>
+  `;
 }
 
 // "Quem é [Nome]" — the WHO/WHAT/WHY/HOW summary Nay fills in from E1/E2,
@@ -990,10 +1012,16 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
       <div class="py-4 border-b border-white/5 last:border-0" data-edit-line-row="${line.id}">
         <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p class="text-xs text-white/30 mb-1">${line.label || methodLabel} · vencimento ${formatDate(line.due_date)}</p>
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-white/40">R$</span>
-              <input type="number" step="0.01" min="0" data-edit-line-input class="field text-sm" style="width:140px;" value="${(line.amount_cents / 100).toFixed(2)}" />
+            <p class="text-xs text-white/30 mb-1">${line.label || methodLabel}</p>
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-white/40">R$</span>
+                <input type="number" step="0.01" min="0" data-edit-line-input class="field text-sm" style="width:140px;" value="${(line.amount_cents / 100).toFixed(2)}" />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-white/40">Vencimento</span>
+                <input type="date" data-edit-line-date class="field text-sm" value="${line.due_date}" />
+              </div>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -1037,7 +1065,7 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''} · ${methodLabel}
-            ${!isAssistant ? `<button type="button" data-edit-line="${line.id}" class="btn-text" style="font-size:11px;padding:0 0 0 6px;">Editar valor</button>` : ''}
+            ${!isAssistant ? `<button type="button" data-edit-line="${line.id}" class="btn-text" style="font-size:11px;padding:0 0 0 6px;">Editar</button>` : ''}
           </p>
           <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.method === 'cartao_credito' ? ' · acompanhe as parcelas pelo painel da SumUp' : ''}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
         </div>
@@ -1485,6 +1513,16 @@ async function render() {
     toast('Foto atualizada.');
     render();
   });
+  content.querySelector('#social-links-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const instagram_url = fd.get('instagram_url').trim();
+    const linkedin_url = fd.get('linkedin_url').trim();
+    const { error } = await supabase.from('clients').update({ instagram_url: instagram_url || null, linkedin_url: linkedin_url || null }).eq('id', clientId);
+    if (error) { toast('Não foi possível salvar as redes sociais.', { tone: 'error' }); return; }
+    toast('Redes sociais atualizadas.');
+    render();
+  });
   content.querySelector('#internal-notes-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const note = new FormData(e.target).get('note');
@@ -1541,19 +1579,22 @@ async function render() {
     const lineId = btn.dataset.saveEditLine;
     const contractIdForEdit = btn.dataset.contractId;
     const input = content.querySelector('[data-edit-line-input]');
+    const dateInput = content.querySelector('[data-edit-line-date]');
     const newReais = parseFloat(input.value.replace(',', '.'));
     if (!Number.isFinite(newReais) || newReais < 0) { toast('Valor inválido.', { tone: 'error' }); return; }
+    if (!dateInput.value) { toast('Vencimento inválido.', { tone: 'error' }); return; }
     const newCents = Math.round(newReais * 100);
 
     const currentLines = finState.lines;
     const newLines = currentLines.map((l) => ({
-      seq: l.seq, method: l.method, due_date: l.due_date, label: l.label,
+      seq: l.seq, method: l.method, label: l.label,
+      due_date: l.id === lineId ? dateInput.value : l.due_date,
       amount_cents: l.id === lineId ? newCents : l.amount_cents,
     }));
 
     btn.disabled = true; btn.textContent = 'Salvando…';
     const { error } = await supabase.rpc('renegotiate_payment_plan', {
-      p_contract_id: contractIdForEdit, p_new_lines: newLines, p_reason: 'Ajuste manual do valor de uma parcela',
+      p_contract_id: contractIdForEdit, p_new_lines: newLines, p_reason: 'Ajuste manual de valor/vencimento de uma parcela',
     });
     if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar'; return; }
     editingLineId = null;
