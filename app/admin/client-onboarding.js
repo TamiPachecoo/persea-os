@@ -706,9 +706,23 @@ async function saveInternalNote(note) {
 // honest minimal version) — falls back to the real shared initialsAvatar
 // (ui.js) exactly like every other avatar in this app when there's no URL
 // or it fails to load.
+// Real bug found: a syntactically-valid URL (isValidHttpUrl only checks
+// shape) can still fail to actually load — e.g. a raw Instagram CDN link
+// someone right-clicked "copy image address" on, which carries a
+// short-lived signed token and is often blocked from loading on any other
+// site entirely. The old onerror just removed the broken <img>, leaving a
+// blank hole instead of falling back to initials — this renders both,
+// hidden/visible, so a real load failure swaps to the initials avatar
+// instead of nothing (same pattern client-detail.js's own photo already
+// uses).
 function clientPhoto(c, size = 96) {
   if (isValidHttpUrl(c.photo_url)) {
-    return `<img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--line);" onerror="this.remove();" />`;
+    return `
+      <div style="width:${size}px;height:${size}px;flex-shrink:0;position:relative;">
+        <img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div style="display:none;">${initialsAvatar(c.full_name, size)}</div>
+      </div>
+    `;
   }
   return initialsAvatar(c.full_name, size);
 }
@@ -905,9 +919,29 @@ async function loadFinanceiro(contract) {
   return { lines: (lines || []).slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)), paymentByLine };
 }
 
-function financeiroLineRow(line, payment) {
+function financeiroLineRow(line, payment, allLines, contractId) {
   const methodLabel = FIN_METHOD_LABEL[line.method] || line.method || 'A combinar';
   const isPaid = line.effective_status === 'paid';
+
+  if (editingLineId === line.id) {
+    return `
+      <div class="py-4 border-b border-white/5 last:border-0" data-edit-line-row="${line.id}">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="text-xs text-white/30 mb-1">${line.label || methodLabel} · vencimento ${formatDate(line.due_date)}</p>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-white/40">R$</span>
+              <input type="number" step="0.01" min="0" data-edit-line-input class="field text-sm" style="width:140px;" value="${(line.amount_cents / 100).toFixed(2)}" />
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" data-cancel-edit-line class="btn-text">Cancelar</button>
+            <button type="button" data-save-edit-line="${line.id}" data-contract-id="${contractId}" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
   // A payment row's own status only ever drives the "link already
   // generated, here's how to share/check it" controls below — whether the
   // line itself is paid always comes from the ledger (effective_status,
@@ -932,7 +966,9 @@ function financeiroLineRow(line, payment) {
     <div class="py-4 border-b border-white/5 last:border-0">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''} · ${methodLabel}</p>
+          <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''} · ${methodLabel}
+            ${!isAssistant ? `<button type="button" data-edit-line="${line.id}" class="btn-text" style="font-size:11px;padding:0 0 0 6px;">Editar valor</button>` : ''}
+          </p>
           <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
         </div>
         ${actionHtml}
@@ -941,13 +977,24 @@ function financeiroLineRow(line, payment) {
   `;
 }
 
-function financeiroCard(finState) {
+// Editing a parcela's own value: contract_payment_lines is frozen once its
+// payment_plan_version is 'active' (trg_enforce_frozen_payment_plan_lines
+// blocks a direct UPDATE on purpose — see that trigger's own message) so a
+// real edit here goes through renegotiate_payment_plan (admin-only RPC,
+// already existed for exactly this but was never wired to any UI): it
+// supersedes the current version and inserts a fresh one carrying every
+// line, the edited one included, as a new version. Real case this exists
+// for: a Pix parcela where the client actually paid a different amount
+// than originally planned — Nay corrects the record to match reality.
+let editingLineId = null;
+
+function financeiroCard(finState, contractId) {
   if (!finState) return '';
   if (finState.error) return card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar o financeiro agora.</p>', 'mb-6');
   const { lines, paymentByLine } = finState;
   return card(`
     <p class="text-sm text-white/50 mb-1">Financeiro</p>
-    ${lines.length ? lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id))).join('') : '<p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>'}
+    ${lines.length ? lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id), lines, contractId)).join('') : '<p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>'}
   `, 'mb-6');
 }
 
@@ -1218,7 +1265,7 @@ async function render() {
           <button id="resend-invite" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Reenviar convite de acesso</button>
         </div>
       `, 'mb-6') : ''}
-      ${financeiroCard(finState)}
+      ${financeiroCard(finState, contract?.id)}
       ${hublaAccessCard(client)}
     `,
     // "Quem é" moved here (both roles — client_profile_summary is
@@ -1346,6 +1393,34 @@ async function render() {
       toast(data.status === 'paid' ? 'Pagamento confirmado — obrigado!' : `Ainda não confirmado (status: ${data.status}).`);
       render();
     });
+  });
+  content.querySelectorAll('[data-edit-line]').forEach((btn) => {
+    btn.addEventListener('click', () => { editingLineId = btn.dataset.editLine; render(); });
+  });
+  content.querySelector('[data-cancel-edit-line]')?.addEventListener('click', () => { editingLineId = null; render(); });
+  content.querySelector('[data-save-edit-line]')?.addEventListener('click', async (e) => {
+    const btn = e.target;
+    const lineId = btn.dataset.saveEditLine;
+    const contractIdForEdit = btn.dataset.contractId;
+    const input = content.querySelector('[data-edit-line-input]');
+    const newReais = parseFloat(input.value.replace(',', '.'));
+    if (!Number.isFinite(newReais) || newReais < 0) { toast('Valor inválido.', { tone: 'error' }); return; }
+    const newCents = Math.round(newReais * 100);
+
+    const currentLines = finState.lines;
+    const newLines = currentLines.map((l) => ({
+      seq: l.seq, method: l.method, due_date: l.due_date, label: l.label,
+      amount_cents: l.id === lineId ? newCents : l.amount_cents,
+    }));
+
+    btn.disabled = true; btn.textContent = 'Salvando…';
+    const { error } = await supabase.rpc('renegotiate_payment_plan', {
+      p_contract_id: contractIdForEdit, p_new_lines: newLines, p_reason: 'Ajuste manual do valor de uma parcela',
+    });
+    if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar'; return; }
+    editingLineId = null;
+    toast('Valor da parcela atualizado.');
+    render();
   });
   if (playbookState.active && playbookState.active.status === 'draft') {
     content.querySelectorAll('#playbook-form textarea').forEach((textarea) => {
