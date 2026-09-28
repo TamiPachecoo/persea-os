@@ -925,48 +925,7 @@ async function loadFinanceiro(contract) {
   };
 }
 
-// Real gap found: a card installment plan (12x no cartão) is one real-world
-// charge — the card network bills the client's card monthly on its own.
-// Nay never generates 12 separate SumUp links for that; doing so would
-// actually attempt to charge the card 12 separate times, not the single
-// authorization installments actually are. Detected structurally (not by
-// parsing a specific label format, so it generalizes to any future
-// contract, not just this one): consecutive cartão lines with matching
-// amounts (allowing the 1-2 cent remainder from an exact split) and due
-// dates ~1 month apart are one real charge, grouped into a single summary
-// instead of 12 individually-actionable rows.
-function detectCartaoGroups(lines) {
-  const cartaoLines = lines.filter((l) => l.method === 'cartao_credito');
-  // Cluster by amount FIRST (±2 cents, for the exact-split remainder),
-  // not by walking the date-sorted sequence — two concurrent installment
-  // blocks with different start dates (exactly Carla's case: one starting
-  // in August, another in February, running side by side for 6 months)
-  // interleave in date order, which broke a naive "same as the previous
-  // item in the sorted list" check after the first overlap. Amount is
-  // what actually identifies which block a line belongs to.
-  const clusters = [];
-  for (const l of cartaoLines) {
-    const cluster = clusters.find((c) => Math.abs(c[0].amount_cents - l.amount_cents) <= 2);
-    if (cluster) cluster.push(l); else clusters.push([l]);
-  }
-  const groups = [];
-  for (const cluster of clusters) {
-    if (cluster.length < 2) continue;
-    const sorted = cluster.slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
-    // Confirm genuinely-monthly cadence within this same-amount cluster —
-    // guards against two coincidentally-equal one-off charges getting
-    // merged into a fake "installment block".
-    const isMonthly = sorted.every((l, i) => {
-      if (i === 0) return true;
-      const days = (new Date(l.due_date) - new Date(sorted[i - 1].due_date)) / 86400000;
-      return days >= 25 && days <= 35;
-    });
-    if (isMonthly) groups.push({ lines: sorted });
-  }
-  return groups;
-}
-
-// Marking a line (or a whole cartão block) as received manually: writes a
+// Marking a line (or a whole method block) as received manually: writes a
 // real payments row (status 'paid' from the start — this already
 // happened, we're recording it, not asking anyone to pay again) plus one
 // payment_allocations row per line, splitting the total across exactly the
@@ -1063,7 +1022,7 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
         <button type="button" data-verify-payment="${activePayment.id}" class="btn-text">Verificar pagamento</button>
       </div>`;
   } else if (opts.compact) {
-    // Sub-line inside an expanded cartão block — no SumUp checkout offered
+    // Sub-line inside an expanded method block — no SumUp checkout offered
     // here (that never made sense per-installment), just the manual option.
     actionHtml = !isAssistant ? markReceivedButton([line], contractId) : '';
   } else {
@@ -1080,7 +1039,7 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
           <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''} · ${methodLabel}
             ${!isAssistant ? `<button type="button" data-edit-line="${line.id}" class="btn-text" style="font-size:11px;padding:0 0 0 6px;">Editar valor</button>` : ''}
           </p>
-          <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
+          <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.method === 'cartao_credito' ? ' · acompanhe as parcelas pelo painel da SumUp' : ''}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
         </div>
         ${actionHtml}
       </div>
@@ -1088,26 +1047,52 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
   `;
 }
 
-function cartaoBlockRow(group, paymentByLine, contractId) {
-  const key = group.lines[0].id;
-  const totalCents = group.lines.reduce((s, l) => s + l.amount_cents, 0);
-  const paidLines = group.lines.filter((l) => l.effective_status === 'paid');
-  const allPaid = paidLines.length === group.lines.length;
-  const unpaidLines = group.lines.filter((l) => l.effective_status !== 'paid');
+// Real gap found: a card installment plan (12x no cartão) is one real-world
+// charge — the card network bills the client's card monthly on its own,
+// and the SumUp checkout that ran it already has the full breakdown. Nay
+// never needs 12 separate lines tracked in THIS system for that — a
+// cartão payment is recorded here as a single line (the one real charge),
+// full stop. Contract-level admin.js's own commercial-terms form creates
+// it that way for new clients; contracts imported with a pre-existing
+// 12-line breakdown (Carla's case) get collapsed once via
+// renegotiate_payment_plan. Multi-line blocks that DO need visible
+// tracking — Pix above all, since amounts and receipt dates genuinely
+// vary per real payment — are grouped by method into one collapsible
+// summary instead of always showing every line at once.
+function groupLinesByMethod(lines) {
+  const byMethod = new Map();
+  for (const l of lines) {
+    const key = l.method || 'outro';
+    if (!byMethod.has(key)) byMethod.set(key, []);
+    byMethod.get(key).push(l);
+  }
+  return Array.from(byMethod.entries()).map(([method, methodLines]) => ({
+    method, lines: methodLines.slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)),
+  }));
+}
+
+function methodBlockRow(section, paymentByLine, contractId) {
+  const { method, lines } = section;
+  const label = FIN_METHOD_LABEL[method] || method || 'A combinar';
+  const key = `method-${method}`;
+  const totalCents = lines.reduce((s, l) => s + l.amount_cents, 0);
+  const paidLines = lines.filter((l) => l.effective_status === 'paid');
+  const allPaid = paidLines.length === lines.length;
+  const unpaidLines = lines.filter((l) => l.effective_status !== 'paid');
   const isExpanded = expandedBlockKey === key;
   return `
     <div class="py-4 border-b border-white/5 last:border-0">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <p class="text-sm">${brl(totalCents / 100)} · ${group.lines.length}x no cartão de crédito</p>
-          <p class="text-xs text-white/30 mt-0.5">Cobrada uma única vez no cartão em ${formatDate(group.lines[0].due_date)} — a operadora organiza as parcelas mensais automaticamente${paidLines.length ? ` · ${paidLines.length}/${group.lines.length} marcadas como recebidas` : ''}</p>
+          <p class="text-sm">${brl(totalCents / 100)} · ${label} · ${lines.length} parcelas</p>
+          <p class="text-xs text-white/30 mt-0.5">${paidLines.length}/${lines.length} recebidas</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap justify-end">
-          ${allPaid ? '<span class="badge badge-completed">Recebido</span>' : (!isAssistant ? markReceivedButton(unpaidLines, contractId, 'Marcar bloco como recebido') : '')}
+          ${allPaid ? '<span class="badge badge-completed">Recebido</span>' : (!isAssistant ? markReceivedButton(unpaidLines, contractId, 'Marcar restante como recebido') : '')}
           <button type="button" data-toggle-block="${key}" class="btn-ghost">${isExpanded ? 'Ocultar parcelas' : 'Ver parcelas'}</button>
         </div>
       </div>
-      ${isExpanded ? `<div class="mt-3 pl-4" style="border-left:1px solid var(--line);">${group.lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id), contractId, { compact: true })).join('')}</div>` : ''}
+      ${isExpanded ? `<div class="mt-3 pl-4" style="border-left:1px solid var(--line);">${lines.map((l) => financeiroLineRow(l, paymentByLine.get(l.id), contractId, { compact: true })).join('')}</div>` : ''}
     </div>
   `;
 }
@@ -1133,15 +1118,13 @@ function financeiroCard(finState, contractId) {
     return card(`<p class="text-sm text-white/50 mb-1">Financeiro</p><p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>`, 'mb-6');
   }
 
-  const groups = detectCartaoGroups(lines);
-  const groupedIds = new Set(groups.flatMap((g) => g.lines.map((l) => l.id)));
-  const renderedGroupKeys = new Set();
-  const rowsHtml = lines.map((l) => {
-    if (!groupedIds.has(l.id)) return financeiroLineRow(l, paymentByLine.get(l.id), contractId);
-    const group = groups.find((g) => g.lines.some((x) => x.id === l.id));
-    if (renderedGroupKeys.has(group)) return '';
-    renderedGroupKeys.add(group);
-    return cartaoBlockRow(group, paymentByLine, contractId);
+  const sections = groupLinesByMethod(lines);
+  const sectionsHtml = sections.map((section) => {
+    if (section.lines.length === 1) {
+      const l = section.lines[0];
+      return financeiroLineRow(l, paymentByLine.get(l.id), contractId);
+    }
+    return methodBlockRow(section, paymentByLine, contractId);
   }).join('');
 
   const hasPix = lines.some((l) => l.method === 'pix');
@@ -1149,7 +1132,7 @@ function financeiroCard(finState, contractId) {
   return card(`
     <p class="text-sm text-white/50 mb-1">Financeiro</p>
     ${hasPix ? pixKeyBlock(finState) : ''}
-    <div class="mt-2">${rowsHtml}</div>
+    <div class="mt-2">${sectionsHtml}</div>
   `, 'mb-6');
 }
 
