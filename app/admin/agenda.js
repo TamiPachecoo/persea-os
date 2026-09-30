@@ -888,7 +888,12 @@ function openDayListModalReal(key, itemsByDay) {
 // creation reuses the exact same real function the demo path already
 // calls — never a second integration.
 async function openQuickScheduleModalReal(defaultDateKey, presetClientId) {
-  const [clients, encounterDefs] = await Promise.all([loadRealClients(), loadRealEncounterDefs()]);
+  // Status is fetched here, not read from what renderProductionAgenda last
+  // cached: the ?client= shortcut opens this modal on page load, before that
+  // render has resolved the status, which hid the "create on Google / Meet"
+  // checkbox and silently saved meetings with no Meet link.
+  const [clients, encounterDefs, calendarStatus] = await Promise.all([loadRealClients(), loadRealEncounterDefs(), getCalendarStatus()]);
+  realCalendarStatus = calendarStatus;
   const dateValue = defaultDateKey ? `${defaultDateKey}T09:00` : '';
 
   const { el, close } = openModal({
@@ -978,8 +983,10 @@ async function openQuickScheduleModalReal(defaultDateKey, presetClientId) {
       if (error || data?.error) {
         toast(`Encontro agendado — mas não foi possível criar no Google Calendar: ${data?.error || error.message}`, { tone: 'error' });
       } else {
-        await supabase.from('agenda_items').update({ google_event_id: data.event_id, online_link: data.meet_url || insertPayload.online_link }).eq('id', created.id);
-        toast('Encontro agendado — criado também no Google Calendar, com link do Meet.');
+        const { error: linkErr } = await supabase.from('agenda_items').update({ google_event_id: data.event_id, online_link: data.meet_url || insertPayload.online_link }).eq('id', created.id);
+        if (linkErr) toast('Encontro criado no Google Calendar, mas o link do Meet não foi salvo no PERSEA — cole o link manualmente no encontro.', { tone: 'error' });
+        else if (!data.meet_url) toast('Encontro criado no Google Calendar, mas o Google não retornou link do Meet — cole o link manualmente no encontro.', { tone: 'error' });
+        else toast('Encontro agendado — criado também no Google Calendar, com link do Meet.');
       }
     } else {
       toast('Encontro agendado.');
