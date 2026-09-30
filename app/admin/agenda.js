@@ -999,7 +999,8 @@ async function openQuickScheduleModalReal(defaultDateKey, presetClientId) {
 async function openAgendaModalReal(itemId) {
   const item = await loadRealAgendaItem(itemId);
   if (!item) { toast('Não foi possível carregar este item.', { tone: 'error' }); return; }
-  const clients = await loadRealClients();
+  const [clients, calendarStatus] = await Promise.all([loadRealClients(), getCalendarStatus()]);
+  realCalendarStatus = calendarStatus;
 
   const { el, close } = openModal({
     title: 'Editar Encontro',
@@ -1044,6 +1045,9 @@ async function openAgendaModalReal(itemId) {
         <div>
           <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para a cliente, se houver)</span></label>
           <input name="onlineLink" class="field" value="${item.online_link || ''}" placeholder="https://..." />
+          ${!item.google_event_id && realCalendarStatus.connected ? `
+            <button type="button" id="generate-meet-link" class="btn-ghost mt-2" style="padding:6px 12px; font-size:12px;">Gerar link do Meet</button>
+          ` : ''}
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Notas de Preparação <span class="text-white/20">(interno)</span></label>
@@ -1053,11 +1057,80 @@ async function openAgendaModalReal(itemId) {
           <label class="text-xs text-white/40 block mb-1">Notas Gerais / da Reunião <span class="text-white/20">(interno)</span></label>
           <textarea name="generalNotes" rows="2" class="field">${item.general_notes || ''}</textarea>
         </div>
-        <div class="flex justify-end pt-2">
+        <div class="flex justify-between items-center pt-2">
+          <button type="button" id="delete-agenda-item" class="btn-text" style="color:var(--terracotta);">Excluir encontro</button>
           <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar Alterações</button>
         </div>
       </form>
     `,
+  });
+
+  // Creates the Google event (and its Meet link) for an item saved without
+  // one, then stores both on the item so the client gets "Entrar na Reunião".
+  // Uses the form's current title/date so unsaved edits aren't lost on Google.
+  el.querySelector('#generate-meet-link')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const form = el.querySelector('#agenda-form-real');
+    const linkInput = form.querySelector('[name="onlineLink"]');
+    if (linkInput.value.trim() && !confirm('Este encontro já tem um link. Substituir por um novo link do Meet?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Gerando…';
+    const startIso = new Date(form.querySelector('[name="date"]').value).toISOString();
+    const endIso = new Date(new Date(startIso).getTime() + (item.duration_minutes || 60) * 60 * 1000).toISOString();
+    const summary = form.querySelector('[name="title"]').value || item.title;
+    const { data, error } = await supabase.functions.invoke('google-calendar-create-event', { body: { summary, start: startIso, end: endIso } });
+    if (error || data?.error) {
+      toast(`Não foi possível criar no Google Calendar: ${data?.error || error.message}`, { tone: 'error' });
+      btn.disabled = false; btn.textContent = 'Gerar link do Meet'; return;
+    }
+    if (!data.meet_url) {
+      toast('Evento criado no Google Calendar, mas o Google não retornou link do Meet — cole o link manualmente.', { tone: 'error' });
+    }
+    const onlineLink = data.meet_url || linkInput.value.trim() || null;
+    const { error: saveErr } = await supabase.from('agenda_items').update({ google_event_id: data.event_id, online_link: onlineLink }).eq('id', itemId);
+    if (saveErr) {
+      toast('Evento criado no Google, mas o link não foi salvo no PERSEA — cole o link manualmente.', { tone: 'error' });
+      btn.disabled = false; btn.textContent = 'Gerar link do Meet'; return;
+    }
+    item.google_event_id = data.event_id;
+    linkInput.value = onlineLink || '';
+    btn.remove();
+    if (data.meet_url) toast('Link do Meet gerado — a cliente já pode entrar pela página Encontros.');
+  });
+
+  // Hard delete for items booked by mistake (cancelling keeps them in the
+  // client's history instead). Removes the linked Google event first, via
+  // update-event's cancel path, so nothing is left behind on the calendar.
+  el.querySelector('#delete-agenda-item').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const { count: recordingCount } = await supabase.from('meeting_recordings').select('id', { count: 'exact', head: true }).eq('agenda_item_id', itemId);
+    const warning = recordingCount
+      ? 'Excluir este encontro? A gravação e a transcrição vinculadas também serão apagadas. Isto não pode ser desfeito.'
+      : 'Excluir este encontro? Ele some da agenda e da página da cliente. Isto não pode ser desfeito.';
+    if (!confirm(warning)) return;
+    btn.disabled = true;
+    btn.textContent = 'Excluindo…';
+
+    if (item.google_event_id && realCalendarStatus.connected) {
+      const { data: gData, error: gErr } = await supabase.functions.invoke('google-calendar-update-event', {
+        body: { event_id: item.google_event_id, status: 'cancelled' },
+      });
+      if ((gErr || gData?.error) && !confirm(`Não foi possível remover o evento do Google Calendar (${gData?.error || gErr.message}). Excluir só no PERSEA mesmo assim?`)) {
+        btn.disabled = false; btn.textContent = 'Excluir encontro'; return;
+      }
+    }
+
+    // encounter_requests.confirmed_agenda_item_id has no ON DELETE action,
+    // so a linked request would block the delete — unlink it first.
+    await supabase.from('encounter_requests').update({ confirmed_agenda_item_id: null }).eq('confirmed_agenda_item_id', itemId);
+    const { error } = await supabase.from('agenda_items').delete().eq('id', itemId);
+    if (error) {
+      toast('Não foi possível excluir agora.', { tone: 'error' });
+      btn.disabled = false; btn.textContent = 'Excluir encontro'; return;
+    }
+    close();
+    toast('Encontro excluído.');
+    renderProductionAgenda();
   });
 
   el.querySelector('#agenda-form-real').addEventListener('submit', async (e) => {
