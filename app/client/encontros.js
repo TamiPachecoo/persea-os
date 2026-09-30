@@ -92,8 +92,10 @@ function recordingShapeFor(it, recordingRow, driveArtifacts) {
   const video = linked.find((a) => a.artifact_type === 'recording');
   const doc = linked.find((a) => a.artifact_type === 'transcript');
   if (video || doc) {
+    // A file staff attached to this meeting means it already happened —
+    // show it even if nobody flipped the meeting's status to "completed".
     return {
-      lifecycleStatus,
+      lifecycleStatus: 'finalizada',
       recording: {
         recordingStatus: video ? 'disponivel' : 'sem_gravacao',
         transcriptStatus: doc ? 'disponivel' : 'nao_disponivel',

@@ -13,7 +13,7 @@ import {
 import { renderShell, card, toast, badgeFromMaps, initialsAvatar, formatDateTime, isValidHttpUrl, externalLinkAttrs, functionErrorMessage } from '../shared/ui.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
-import { loadDriveArtifacts, linkSessionToClient, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
+import { loadDriveArtifacts, linkSessionToClient, linkSessionToMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'agenda.html', title: 'Gravações' });
@@ -26,6 +26,26 @@ const content = document.getElementById('app-content');
 async function loadClientOptions() {
   const { data } = await supabase.from('clients').select('id, full_name').order('full_name');
   return data || [];
+}
+
+// Every client's meetings, for the "which meeting?" picker — linking a
+// session to a specific meeting (agenda_items row) is what makes it show
+// up on that meeting's card, both in the client's own Encontros page and
+// in her staff profile's Encontros tab. A client-only link lands in "sem
+// encontro definido" on the profile until a meeting is picked.
+const MEETING_TYPES = ['class', 'individual_meeting', 'checkpoint', 'group_meeting', 'online_event', 'photo_review'];
+async function loadMeetingsByClient() {
+  const { data } = await supabase.from('agenda_items').select('id, title, type, item_date, related_student_id')
+    .not('related_student_id', 'is', null).in('type', MEETING_TYPES).order('item_date', { ascending: false });
+  const byClient = {};
+  (data || []).forEach((m) => { (byClient[m.related_student_id] || (byClient[m.related_student_id] = [])).push(m); });
+  return byClient;
+}
+function meetingOptionsHtml(meetings) {
+  return `
+    <option value="">Encontro: definir depois</option>
+    ${(meetings || []).map((m) => `<option value="${m.id}">${m.title} · ${formatDateTime(m.item_date)}</option>`).join('')}
+  `;
 }
 
 const ARTIFACT_TYPE_ICON = { recording: '🎥', transcript: '📝', unknown: '📁' };
@@ -52,8 +72,9 @@ function slotLabelFor(a) {
 // for a real reported confusion: linking "the folder" row looked like
 // linking "the meeting," while the actual recording/transcript rows sat
 // right below it still showing "sem cliente vinculada."
-function driveArtifactRow(a, clients) {
+function driveArtifactRow(a, clients, meetingsByClient) {
   const isMatched = !!a.client_id;
+  const meetingLabel = a.agenda_items ? `${a.agenda_items.title} · ${formatDateTime(a.agenda_items.item_date)}` : null;
   return `
     <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
       <div class="flex-1 min-w-[240px]">
@@ -62,16 +83,22 @@ function driveArtifactRow(a, clients) {
           ${formatDateTime(a.discovered_at)} descoberto
           ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
         </p>
+        ${isMatched ? `<p class="text-xs mt-0.5" style="color:${meetingLabel ? 'var(--muted)' : 'var(--terracotta)'};">${meetingLabel ? `Encontro: ${meetingLabel}` : 'Sem encontro definido. A cliente só vê a gravação depois que você escolher o encontro.'}</p>` : ''}
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir no Drive ↗</a>
         ${isMatched ? `
+          ${!a.agenda_item_id && (meetingsByClient[a.client_id] || []).length ? `
+            <select data-set-meeting-select="${a.id}" class="field text-sm" style="width:auto;">${meetingOptionsHtml(meetingsByClient[a.client_id])}</select>
+            <button type="button" data-set-meeting="${a.id}" data-client-id="${a.client_id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Definir encontro</button>
+          ` : ''}
           <button type="button" data-unlink-artifact="${a.id}" class="btn-text">Desvincular</button>
         ` : `
           <select data-link-client-select="${a.id}" class="field text-sm" style="width:auto;">
             <option value="">Vincular a...</option>
             ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
           </select>
+          <select data-link-meeting-select="${a.id}" class="field text-sm" style="width:auto;" disabled><option value="">Escolha a cliente primeiro</option></select>
           <select data-link-slot-select="${a.id}" class="field text-sm" style="width:auto;">${slotOptionsHtml()}</select>
           <button type="button" data-link-artifact="${a.id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
         `}
@@ -87,7 +114,7 @@ function driveArtifactRow(a, clients) {
 // and keyword are real filters on Google's own side (see
 // google-drive-meet-files), not just cosmetic — a wider date range or a
 // keyword actually changes what Drive returns, up to 25 results per search.
-function renderDriveArtifactsCard({ artifacts, error }, clients) {
+function renderDriveArtifactsCard({ artifacts, error }, clients, meetingsByClient) {
   return card(`
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
       <div class="flex items-center gap-2">
@@ -119,7 +146,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
     </div>
     <p class="text-xs text-white/20 mb-3 max-w-2xl">Gravações e transcrições que o Google Meet salva automaticamente no Drive conectado. Confirmar em qualquer uma vincula a gravação, a transcrição e a pasta da mesma sessão juntas, nunca atribuídas sozinhas sem certeza.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
-      : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients)).join('')
+      : artifacts.length ? artifacts.map((a) => driveArtifactRow(a, clients, meetingsByClient)).join('')
       : '<p class="text-sm" style="color:var(--gold);">Nada descoberto ainda. Clique em "Buscar Gravações" ou use a busca avançada.</p>'}
   `, 'mb-8');
 }
@@ -187,7 +214,7 @@ function meetingRow(m) {
 async function render() {
   const all = MockDB.getMeetingsOverview();
   const filtered = activeFilter ? all.filter((m) => m.filterBucket === activeFilter) : all;
-  const [driveArtifacts, clientOptions] = await Promise.all([loadDriveArtifacts(), loadClientOptions()]);
+  const [driveArtifacts, clientOptions, meetingsByClient] = await Promise.all([loadDriveArtifacts(), loadClientOptions(), loadMeetingsByClient()]);
 
   content.innerHTML = `
     <div class="mb-8">
@@ -196,7 +223,7 @@ async function render() {
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Uma visão de todas as reuniões individuais, o status da gravação e da transcrição de cada uma, e o que ainda precisa de ação.</p>
     </div>
 
-    ${renderDriveArtifactsCard(driveArtifacts, clientOptions)}
+    ${renderDriveArtifactsCard(driveArtifacts, clientOptions, meetingsByClient)}
 
     ${renderSyncSummary()}
 
@@ -261,18 +288,59 @@ async function render() {
     }
     runDriveSearch(e.target, 'Buscar', body);
   });
+  // Picking a client fills that row's meeting picker with her meetings.
+  // Picking a meeting hides the manual E-slot picker, since the slot is
+  // then derived from the meeting itself (see slotForMeeting).
+  content.querySelectorAll('[data-link-client-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const id = select.dataset.linkClientSelect;
+      const meetingSelect = content.querySelector(`[data-link-meeting-select="${id}"]`);
+      const meetings = meetingsByClient[select.value] || [];
+      meetingSelect.innerHTML = !select.value ? '<option value="">Escolha a cliente primeiro</option>'
+        : meetings.length ? meetingOptionsHtml(meetings) : '<option value="">Nenhum encontro agendado para ela</option>';
+      meetingSelect.disabled = !meetings.length;
+      content.querySelector(`[data-link-slot-select="${id}"]`).classList.remove('hidden');
+    });
+  });
+  content.querySelectorAll('[data-link-meeting-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      content.querySelector(`[data-link-slot-select="${select.dataset.linkMeetingSelect}"]`).classList.toggle('hidden', !!select.value);
+    });
+  });
   content.querySelectorAll('[data-link-artifact]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const select = content.querySelector(`[data-link-client-select="${btn.dataset.linkArtifact}"]`);
+      const id = btn.dataset.linkArtifact;
+      const select = content.querySelector(`[data-link-client-select="${id}"]`);
       if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
-      const slotValue = content.querySelector(`[data-link-slot-select="${btn.dataset.linkArtifact}"]`).value;
+      const meetingId = content.querySelector(`[data-link-meeting-select="${id}"]`).value;
       const profile = await getCurrentProfile();
-      const { error } = await linkSessionToClient(btn.dataset.sessionKey, select.value, profile.id, {
-        encounterSlug: slotValue && slotValue !== 'checkpoint' ? slotValue : null,
-        isCheckpoint: slotValue === 'checkpoint',
-      });
+      let error;
+      if (meetingId) {
+        const meeting = (meetingsByClient[select.value] || []).find((m) => m.id === meetingId);
+        ({ error } = await linkSessionToMeeting(btn.dataset.sessionKey, select.value, meeting, profile.id));
+      } else {
+        const slotValue = content.querySelector(`[data-link-slot-select="${id}"]`).value;
+        ({ error } = await linkSessionToClient(btn.dataset.sessionKey, select.value, profile.id, {
+          encounterSlug: slotValue && slotValue !== 'checkpoint' ? slotValue : null,
+          isCheckpoint: slotValue === 'checkpoint',
+        }));
+      }
       if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
-      toast('Sessão (gravação, transcrição e pasta) vinculada à cliente.');
+      toast(meetingId
+        ? 'Sessão vinculada ao encontro. A cliente já vê a gravação na página Encontros.'
+        : 'Sessão vinculada à cliente. Defina o encontro para ela ver a gravação.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-set-meeting]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const meetingId = content.querySelector(`[data-set-meeting-select="${btn.dataset.setMeeting}"]`).value;
+      if (!meetingId) { toast('Selecione um encontro primeiro.', { tone: 'error' }); return; }
+      const meeting = (meetingsByClient[btn.dataset.clientId] || []).find((m) => m.id === meetingId);
+      const profile = await getCurrentProfile();
+      const { error } = await linkSessionToMeeting(btn.dataset.sessionKey, btn.dataset.clientId, meeting, profile.id);
+      if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
+      toast('Gravação vinculada ao encontro. A cliente já pode assistir na página Encontros.');
       render();
     });
   });

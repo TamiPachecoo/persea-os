@@ -8,7 +8,7 @@ import { supabase } from './supabase-client.js';
 
 export async function loadDriveArtifacts() {
   const { data, error } = await supabase.from('google_meet_drive_artifacts')
-    .select('id, google_drive_file_id, artifact_type, name, mime_type, web_view_link, agenda_item_id, client_id, encounter_slug, is_checkpoint, match_confidence, matched_at, discovered_at, clients(full_name)')
+    .select('id, google_drive_file_id, artifact_type, name, mime_type, web_view_link, agenda_item_id, client_id, encounter_slug, is_checkpoint, match_confidence, matched_at, discovered_at, clients(full_name), agenda_items(title, item_date)')
     .order('discovered_at', { ascending: false });
   if (error) return { artifacts: [], error: error.message };
   return { artifacts: data || [], error: null };
@@ -22,7 +22,7 @@ export async function loadDriveArtifacts() {
 // so it isn't just invisible.
 export async function loadArtifactsForClient(clientId) {
   const { data, error } = await supabase.from('google_meet_drive_artifacts')
-    .select('id, google_drive_file_id, artifact_type, name, mime_type, web_view_link, encounter_slug, is_checkpoint, match_confidence, matched_at, discovered_at')
+    .select('id, google_drive_file_id, artifact_type, name, mime_type, web_view_link, agenda_item_id, encounter_slug, is_checkpoint, match_confidence, matched_at, discovered_at')
     .eq('client_id', clientId)
     .order('discovered_at', { ascending: false });
   if (error) return { artifacts: [], error: error.message };
@@ -67,10 +67,11 @@ export function sessionKeyFor(name) {
 // isCheckpoint) is optional — the Gravações page's quick-confirm flow
 // leaves both null (just "belongs to this client," unclassified); linking
 // from a specific E-tab or the Checkpoints card sets one of them.
-export function linkSessionToClient(sessionKey, clientId, staffId, { encounterSlug = null, isCheckpoint = false } = {}) {
+export function linkSessionToClient(sessionKey, clientId, staffId, { encounterSlug = null, isCheckpoint = false, agendaItemId = null } = {}) {
   return supabase.from('google_meet_drive_artifacts')
     .update({
       client_id: clientId,
+      agenda_item_id: agendaItemId,
       encounter_slug: encounterSlug,
       is_checkpoint: isCheckpoint,
       match_confidence: 'manual',
@@ -100,10 +101,44 @@ export function linkArtifactToSlot(artifactId, clientId, staffId, { encounterSlu
   }).eq('id', artifactId);
 }
 
+// A specific scheduled meeting (agenda_items row) is what the client's own
+// Encontros page keys recordings on — a file linked only to the client,
+// with no agenda_item_id, is invisible to her. Derives the E1-E8 slot /
+// checkpoint flag from the meeting itself so the older per-encounter views
+// stay consistent without a second, separate classification step.
+export function slotForMeeting(meeting) {
+  const m = /^E(\d)\b/.exec(meeting?.title || '');
+  if (m) return { encounterSlug: `e${m[1]}`, isCheckpoint: false };
+  if (meeting?.type === 'checkpoint') return { encounterSlug: null, isCheckpoint: true };
+  return { encounterSlug: null, isCheckpoint: false };
+}
+
+// Attaches a whole Meet session (recording + transcript + folder, shared
+// name prefix — see sessionKeyFor) to one of this client's meetings.
+// Claims files that are either still unlinked or already linked to this
+// same client — never one linked to a different client, which needs an
+// explicit Desvincular first.
+export function linkSessionToMeeting(sessionKey, clientId, meeting, staffId) {
+  const { encounterSlug, isCheckpoint } = slotForMeeting(meeting);
+  return supabase.from('google_meet_drive_artifacts')
+    .update({
+      client_id: clientId,
+      agenda_item_id: meeting.id,
+      encounter_slug: encounterSlug,
+      is_checkpoint: isCheckpoint,
+      match_confidence: 'manual',
+      matched_at: new Date().toISOString(),
+      matched_by: staffId,
+      updated_at: new Date().toISOString(),
+    })
+    .or(`client_id.is.null,client_id.eq.${clientId}`)
+    .ilike('name', `${sessionKey}%`);
+}
+
 // Undo — puts a mistaken link back in the unmatched pool.
 export function unlinkArtifact(artifactId) {
   return supabase.from('google_meet_drive_artifacts').update({
-    client_id: null, encounter_slug: null, is_checkpoint: false,
+    client_id: null, agenda_item_id: null, encounter_slug: null, is_checkpoint: false,
     match_confidence: null, matched_at: null, matched_by: null,
     updated_at: new Date().toISOString(),
   }).eq('id', artifactId);

@@ -35,6 +35,7 @@ import { getVersions, getSections, createDraft, saveSectionContent, publishVersi
 import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action-model.js';
 import { markHublaAccessGranted } from '../shared/hubla-model.js';
+import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -106,6 +107,7 @@ const CONTRACT_STATUS_LABEL = {
 // RLS policy exists for it at all — see this file's own header comment).
 const ALL_TABS = [
   ['jornada', 'Jornada'],
+  ['encontros', 'Encontros'],
   ['financeiro', 'Financeiro'],
   ['direcao-marca', 'Direção de Marca'],
   ['pesquisa', 'Precificação & Valor'],
@@ -1357,6 +1359,115 @@ function openDeleteClientModal(client) {
   });
 }
 
+// Encontros — every meeting scheduled with her, with the recording/
+// transcript attached to each. Recordings are linked from the Gravações
+// page or right here; a file linked to her but not to a specific meeting
+// sits in "Sem encontro definido" (the client can't see those yet — her
+// own Encontros page shows recordings per meeting only).
+const ENC_MEETING_TYPES = ['class', 'individual_meeting', 'checkpoint', 'group_meeting', 'online_event', 'photo_review'];
+const ENC_STATUS_LABEL = { upcoming: 'Agendado', completed: 'Realizado', rescheduled: 'Remarcado', cancelled: 'Cancelado' };
+const ENC_STATUS_BADGE = { upcoming: 'badge-progress', completed: 'badge-completed', rescheduled: 'badge-locked', cancelled: 'badge-locked' };
+const ENC_FILE_LABEL = { recording: '🎥 Gravação', transcript: '📝 Transcrição', unknown: '📁 Pasta da sessão' };
+
+async function loadEncontros() {
+  const [{ data: meetings }, { artifacts: mine }, { artifacts: unlinked }] = await Promise.all([
+    supabase.from('agenda_items').select('id, title, type, status, item_date, online_link').eq('related_student_id', clientId)
+      .in('type', ENC_MEETING_TYPES).order('item_date', { ascending: false }),
+    loadArtifactsForClient(clientId),
+    loadUnlinkedArtifacts(),
+  ]);
+  // Attach candidates, one per Meet session (recording+transcript+folder
+  // share a name prefix): her own files not on a meeting yet, then the
+  // still-unclaimed pool from Drive discovery.
+  const sessions = new Map();
+  [...mine.filter((a) => !a.agenda_item_id), ...unlinked].forEach((a) => {
+    const key = sessionKeyFor(a.name);
+    if (!sessions.has(key)) sessions.set(key, { key, mine: !!a.client_id });
+  });
+  return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()] };
+}
+
+function encontroFileRow(a) {
+  return `
+    <div class="flex items-center justify-between flex-wrap gap-2 py-1.5">
+      <p class="text-sm">${ENC_FILE_LABEL[a.artifact_type] || '📁 Arquivo'} <span class="text-white/30 text-xs">· ${a.name}</span></p>
+      <div class="flex items-center gap-3">
+        <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir ↗</a>
+        <button type="button" data-enc-unlink="${a.id}" class="btn-text">Desvincular</button>
+      </div>
+    </div>
+  `;
+}
+
+function sessionPickerHtml(meetingId, sessions) {
+  if (!sessions.length) return '<p class="text-xs text-white/20">Nenhuma gravação disponível para anexar. Busque novas em Agenda → Gravações.</p>';
+  return `
+    <div class="flex items-center gap-2 flex-wrap">
+      <select data-enc-session-select="${meetingId}" class="field text-sm" style="width:auto; max-width:100%;">
+        <option value="">Anexar gravação…</option>
+        ${sessions.map((x) => `<option value="${x.key.replace(/"/g, '&quot;')}">${x.mine ? '★ ' : ''}${x.key}</option>`).join('')}
+      </select>
+      <button type="button" data-enc-attach="${meetingId}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Anexar</button>
+    </div>
+  `;
+}
+
+function encontrosTabHtml({ meetings, artifacts, sessions }) {
+  const unassigned = artifacts.filter((a) => !a.agenda_item_id);
+  return `
+    ${unassigned.length ? card(`
+      <p class="text-sm mb-1" style="color:var(--terracotta);">Gravações sem encontro definido</p>
+      <p class="text-xs text-white/30 mb-3">Vinculadas a ela, mas ainda não a um encontro, então ela não vê estas gravações. Use "Anexar gravação" no encontro certo abaixo (marcadas com ★).</p>
+      ${unassigned.map(encontroFileRow).join('')}
+    `, 'mb-6') : ''}
+    ${meetings.length ? meetings.map((m) => {
+      const files = artifacts.filter((a) => a.agenda_item_id === m.id);
+      const isPast = m.status !== 'upcoming' || new Date(m.item_date) < new Date();
+      return card(`
+        <div class="flex items-start justify-between flex-wrap gap-2 mb-2">
+          <div class="min-w-0">
+            <p class="font-serif text-lg break-words">${m.title}</p>
+            <p class="text-xs text-white/40 mt-0.5">${formatDateTime(m.item_date)}${isValidHttpUrl(m.online_link) ? ` · <a ${externalLinkAttrs(m.online_link)} class="btn-text" style="display:inline;">Meet ↗</a>` : ''}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="badge ${ENC_STATUS_BADGE[m.status] || 'badge-locked'}">${ENC_STATUS_LABEL[m.status] || m.status}</span>
+            ${!isAssistant ? `<a href="agenda.html?item=${m.id}" class="btn-text">Editar</a>` : ''}
+          </div>
+        </div>
+        <div class="pt-3 mt-2" style="border-top:1px solid var(--line);">
+          ${files.length ? files.map(encontroFileRow).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">A gravação pode ser anexada depois do encontro.</p>'}
+        </div>
+      `, 'mb-4');
+    }).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado com ela ainda.</p>', 'mb-6')}
+  `;
+}
+
+function wireEncontrosTab(encontros) {
+  content.querySelectorAll('[data-enc-unlink]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Desvincular este arquivo? Ele volta para a lista de gravações não vinculadas.')) return;
+      const { error } = await unlinkArtifact(btn.dataset.encUnlink);
+      if (error) { toast('Erro ao desvincular.', { tone: 'error' }); return; }
+      toast('Vínculo removido.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-enc-attach]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const meetingId = btn.dataset.encAttach;
+      const sessionKey = content.querySelector(`[data-enc-session-select="${meetingId}"]`).value;
+      if (!sessionKey) { toast('Selecione uma gravação primeiro.', { tone: 'error' }); return; }
+      const meeting = encontros.meetings.find((m) => m.id === meetingId);
+      btn.disabled = true;
+      const profile = await getCurrentProfile();
+      const { error } = await linkSessionToMeeting(sessionKey, clientId, meeting, profile.id);
+      if (error) { toast('Erro ao anexar.', { tone: 'error' }); btn.disabled = false; return; }
+      toast('Gravação anexada. A cliente já pode assistir na página Encontros.');
+      render();
+    });
+  });
+}
+
 function tabBarHtml() {
   return `
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
@@ -1382,6 +1493,7 @@ async function render() {
     loadImageProject(),
   ]);
   const programSummaryHtml = await programSummaryCard(client, state);
+  const encontros = activeTab === 'encontros' ? await loadEncontros() : null;
 
   const status = deriveClientStatus({
     accessStatus: client.access_status,
@@ -1399,6 +1511,7 @@ async function render() {
       ${programSummaryHtml}
       ${phaseBreakdownCard(state, journey)}
     `,
+    encontros: encontros ? encontrosTabHtml(encontros) : '',
     financeiro: `
       ${!partyInfo?.submitted ? registrationLinkCard({ tokenActive, latestToken }) : ''}
       ${partyInfo?.submitted ? partyInfoSummary(partyInfo) : ''}
@@ -1465,6 +1578,7 @@ async function render() {
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });
+  if (encontros) wireEncontrosTab(encontros);
   if (activeTab === 'direcao-marca' && isAssistant && isValidHttpUrl(brandState.bdRow?.pinterest_url)) {
     mountPinterestBoard(document.getElementById('bd-board-area'), brandState.bdRow.pinterest_url);
   }
