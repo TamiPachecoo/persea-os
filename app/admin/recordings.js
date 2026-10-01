@@ -28,22 +28,23 @@ async function loadClientOptions() {
   return data || [];
 }
 
-// Every client's meetings, for the "which meeting?" picker — linking a
-// session to a specific meeting (agenda_items row) is what makes it show
-// up on that meeting's card, both in the client's own Encontros page and
-// in her staff profile's Encontros tab. A client-only link lands in "sem
-// encontro definido" on the profile until a meeting is picked.
+// Every client's PAST meetings, for the optional "which meeting?" picker.
+// Linking to the client alone is enough for her to see the recording (in
+// the Gravações section of her Encontros page); picking a meeting just
+// files it on that meeting's card instead. A meeting that hasn't happened
+// yet (or was cancelled) can't have a recording, so it's never offered.
 const MEETING_TYPES = ['class', 'individual_meeting', 'checkpoint', 'group_meeting', 'online_event', 'photo_review'];
 async function loadMeetingsByClient() {
   const { data } = await supabase.from('agenda_items').select('id, title, type, item_date, related_student_id')
-    .not('related_student_id', 'is', null).in('type', MEETING_TYPES).order('item_date', { ascending: false });
+    .not('related_student_id', 'is', null).in('type', MEETING_TYPES).neq('status', 'cancelled')
+    .lte('item_date', new Date().toISOString()).order('item_date', { ascending: false });
   const byClient = {};
   (data || []).forEach((m) => { (byClient[m.related_student_id] || (byClient[m.related_student_id] = [])).push(m); });
   return byClient;
 }
 function meetingOptionsHtml(meetings) {
   return `
-    <option value="">Encontro: definir depois</option>
+    <option value="">Sem encontro específico</option>
     ${(meetings || []).map((m) => `<option value="${m.id}">${m.title} · ${formatDateTime(m.item_date)}</option>`).join('')}
   `;
 }
@@ -83,14 +84,14 @@ function driveArtifactRow(a, clients, meetingsByClient) {
           ${formatDateTime(a.discovered_at)} descoberto
           ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
         </p>
-        ${isMatched ? `<p class="text-xs mt-0.5" style="color:${meetingLabel ? 'var(--muted)' : 'var(--terracotta)'};">${meetingLabel ? `Encontro: ${meetingLabel}` : 'Sem encontro definido. A cliente só vê a gravação depois que você escolher o encontro.'}</p>` : ''}
+        ${isMatched && meetingLabel ? `<p class="text-xs mt-0.5" style="color:var(--muted);">Encontro: ${meetingLabel}</p>` : ''}
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir no Drive ↗</a>
         ${isMatched ? `
           ${!a.agenda_item_id && (meetingsByClient[a.client_id] || []).length ? `
             <select data-set-meeting-select="${a.id}" class="field text-sm" style="width:auto;">${meetingOptionsHtml(meetingsByClient[a.client_id])}</select>
-            <button type="button" data-set-meeting="${a.id}" data-client-id="${a.client_id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Definir encontro</button>
+            <button type="button" data-set-meeting="${a.id}" data-client-id="${a.client_id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Arquivar no encontro</button>
           ` : ''}
           <button type="button" data-unlink-artifact="${a.id}" class="btn-text">Desvincular</button>
         ` : `
@@ -297,7 +298,7 @@ async function render() {
       const meetingSelect = content.querySelector(`[data-link-meeting-select="${id}"]`);
       const meetings = meetingsByClient[select.value] || [];
       meetingSelect.innerHTML = !select.value ? '<option value="">Escolha a cliente primeiro</option>'
-        : meetings.length ? meetingOptionsHtml(meetings) : '<option value="">Nenhum encontro agendado para ela</option>';
+        : meetings.length ? meetingOptionsHtml(meetings) : '<option value="">Sem encontro específico</option>';
       meetingSelect.disabled = !meetings.length;
       content.querySelector(`[data-link-slot-select="${id}"]`).classList.remove('hidden');
     });
@@ -326,9 +327,7 @@ async function render() {
         }));
       }
       if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
-      toast(meetingId
-        ? 'Sessão vinculada ao encontro. A cliente já vê a gravação na página Encontros.'
-        : 'Sessão vinculada à cliente. Defina o encontro para ela ver a gravação.');
+      toast('Gravação vinculada à cliente. Ela já pode assistir na página Encontros.');
       render();
     });
   });
@@ -340,7 +339,7 @@ async function render() {
       const profile = await getCurrentProfile();
       const { error } = await linkSessionToMeeting(btn.dataset.sessionKey, btn.dataset.clientId, meeting, profile.id);
       if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
-      toast('Gravação vinculada ao encontro. A cliente já pode assistir na página Encontros.');
+      toast('Gravação arquivada no encontro.');
       render();
     });
   });

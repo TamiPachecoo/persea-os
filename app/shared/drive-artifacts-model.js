@@ -135,6 +135,14 @@ export function linkSessionToMeeting(sessionKey, clientId, meeting, staffId) {
     .ilike('name', `${sessionKey}%`);
 }
 
+// Takes a file off its meeting but keeps it linked to the client — it goes
+// back to her general Gravações list instead of the unmatched pool.
+export function detachArtifactFromMeeting(artifactId) {
+  return supabase.from('google_meet_drive_artifacts').update({
+    agenda_item_id: null, updated_at: new Date().toISOString(),
+  }).eq('id', artifactId);
+}
+
 // Undo — puts a mistaken link back in the unmatched pool.
 export function unlinkArtifact(artifactId) {
   return supabase.from('google_meet_drive_artifacts').update({

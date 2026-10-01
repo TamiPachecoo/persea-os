@@ -15,6 +15,7 @@
 import { AGENDA_TYPE_LABEL, AGENDA_STATUS_LABEL } from '../shared/mock-db.js';
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
+import { sessionKeyFor } from '../shared/drive-artifacts-model.js';
 import { renderShell, card, formatDateTime, formatDate, toast, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock } from '../shared/ui.js';
 
 const AGENDA_TYPE_ICON = {
@@ -123,6 +124,31 @@ function meetingCard(it, recordingByAgendaId, driveArtifacts) {
     ${linkOk ? `<a ${externalLinkAttrs(it.online_link)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Entrar na Reunião ↗</a>` : ''}
     ${meetingShape.recording ? `<div class="mt-4 pt-4" style="border-top:1px solid var(--line);">${renderClientRecordingBlock(meetingShape)}</div>` : ''}
   `, 'mb-5');
+}
+
+// Recordings Nay linked to her without filing them on a specific meeting —
+// one card per Meet session (recording + transcript share a name prefix).
+function recordingsCard(files) {
+  const sessions = new Map();
+  files.forEach((a) => {
+    const key = sessionKeyFor(a.name);
+    if (!sessions.has(key)) sessions.set(key, { key, discoveredAt: a.discovered_at });
+    const s = sessions.get(key);
+    if (a.artifact_type === 'recording') s.video = a;
+    if (a.artifact_type === 'transcript') s.doc = a;
+  });
+  const list = [...sessions.values()].filter((s) => s.video || s.doc);
+  if (!list.length) return '';
+  return `
+    <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">Gravações</p>
+    ${list.map((s) => card(`
+      <p class="text-lg font-serif mb-3 break-words">${s.key}</p>
+      <div class="flex flex-wrap items-center gap-2">
+        ${s.video ? `<a ${externalLinkAttrs(s.video.web_view_link)} class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Assistir gravação ↗</a>` : ''}
+        ${s.doc ? `<a ${externalLinkAttrs(s.doc.web_view_link)} class="btn-ghost">Abrir transcrição ↗</a>` : ''}
+      </div>
+    `, 'mb-5')).join('')}
+  `;
 }
 
 async function loadMeetingRequests() {
@@ -295,9 +321,10 @@ async function render() {
   const items = (itemsRaw || []).filter((it) => MEETING_TYPES.has(it.type));
   const ids = items.map((it) => it.id);
 
-  const [{ data: recordingRows }, { data: driveArtifactsRaw }, encounterRequestsHtml] = await Promise.all([
+  const [{ data: recordingRows }, { data: driveArtifactsRaw }, { data: looseFiles }, encounterRequestsHtml] = await Promise.all([
     ids.length ? supabase.from('meeting_recordings').select('*').in('agenda_item_id', ids) : Promise.resolve({ data: [] }),
     ids.length ? supabase.from('google_meet_drive_artifacts').select('*').in('agenda_item_id', ids) : Promise.resolve({ data: [] }),
+    supabase.from('google_meet_drive_artifacts').select('*').eq('client_id', clientId).is('agenda_item_id', null).order('discovered_at', { ascending: false }),
     renderEncounterRequestsCardReal(),
   ]);
   const recordingByAgendaId = new Map((recordingRows || []).map((r) => [r.agenda_item_id, r]));
@@ -322,6 +349,8 @@ async function render() {
     ${usageSummary(items)}
     <p class="text-xs uppercase mb-4" style="color:var(--muted); letter-spacing:.12em;">Próximos</p>
     ${upcoming.length ? upcoming.map((it) => meetingCard(it, recordingByAgendaId, driveArtifacts)).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado no momento — Nay avisa por aqui assim que marcar o próximo.</p>', 'mb-5')}
+
+    ${recordingsCard(looseFiles || [])}
 
     ${past.length ? `
       <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">Anteriores</p>

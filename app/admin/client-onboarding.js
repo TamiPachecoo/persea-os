@@ -35,7 +35,7 @@ import { getVersions, getSections, createDraft, saveSectionContent, publishVersi
 import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action-model.js';
 import { markHublaAccessGranted } from '../shared/hubla-model.js';
-import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
+import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, detachArtifactFromMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -1359,11 +1359,11 @@ function openDeleteClientModal(client) {
   });
 }
 
-// Encontros — every meeting scheduled with her, with the recording/
-// transcript attached to each. Recordings are linked from the Gravações
-// page or right here; a file linked to her but not to a specific meeting
-// sits in "Sem encontro definido" (the client can't see those yet — her
-// own Encontros page shows recordings per meeting only).
+// Encontros — her recordings plus every meeting scheduled with her.
+// Recordings are linked to the client from the Gravações page; she sees
+// them as soon as they're linked. Filing one on a specific past meeting is
+// optional — it then shows on that meeting's card instead of the general
+// Gravações list. Upcoming meetings never take a recording.
 const ENC_MEETING_TYPES = ['class', 'individual_meeting', 'checkpoint', 'group_meeting', 'online_event', 'photo_review'];
 const ENC_STATUS_LABEL = { upcoming: 'Agendado', completed: 'Realizado', rescheduled: 'Remarcado', cancelled: 'Cancelado' };
 const ENC_STATUS_BADGE = { upcoming: 'badge-progress', completed: 'badge-completed', rescheduled: 'badge-locked', cancelled: 'badge-locked' };
@@ -1387,12 +1387,19 @@ async function loadEncontros() {
   return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()] };
 }
 
-function encontroFileRow(a) {
+function encontroFileRow(a, pastMeetings = null) {
   return `
     <div class="flex items-center justify-between flex-wrap gap-2 py-1.5">
       <p class="text-sm">${ENC_FILE_LABEL[a.artifact_type] || '📁 Arquivo'} <span class="text-white/30 text-xs">· ${a.name}</span></p>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 flex-wrap">
         <a ${externalLinkAttrs(a.web_view_link)} class="btn-text">Abrir ↗</a>
+        ${pastMeetings?.length ? `
+          <select data-enc-file-meeting="${a.id}" data-session-key="${sessionKeyFor(a.name).replace(/"/g, '&quot;')}" class="field text-sm" style="width:auto;">
+            <option value="">Arquivar em um encontro…</option>
+            ${pastMeetings.map((m) => `<option value="${m.id}">${m.title} · ${formatDate(m.item_date)}</option>`).join('')}
+          </select>
+        ` : ''}
+        ${a.agenda_item_id ? `<button type="button" data-enc-unfile="${a.id}" class="btn-text">Tirar do encontro</button>` : ''}
         <button type="button" data-enc-unlink="${a.id}" class="btn-text">Desvincular</button>
       </div>
     </div>
@@ -1412,17 +1419,22 @@ function sessionPickerHtml(meetingId, sessions) {
   `;
 }
 
+function isPastMeeting(m) {
+  return m.status !== 'cancelled' && new Date(m.item_date) <= new Date();
+}
+
 function encontrosTabHtml({ meetings, artifacts, sessions }) {
   const unassigned = artifacts.filter((a) => !a.agenda_item_id);
+  const pastMeetings = meetings.filter(isPastMeeting);
   return `
-    ${unassigned.length ? card(`
-      <p class="text-sm mb-1" style="color:var(--terracotta);">Gravações sem encontro definido</p>
-      <p class="text-xs text-white/30 mb-3">Vinculadas a ela, mas ainda não a um encontro, então ela não vê estas gravações. Use "Anexar gravação" no encontro certo abaixo (marcadas com ★).</p>
-      ${unassigned.map(encontroFileRow).join('')}
-    `, 'mb-6') : ''}
+    ${card(`
+      <p class="text-sm text-white/50 mb-1">Gravações</p>
+      <p class="text-xs text-white/30 mb-3">Gravações vinculadas a ela. Ela já vê todas na página Encontros. Arquivar em um encontro já realizado é opcional.</p>
+      ${unassigned.length ? unassigned.map((a) => encontroFileRow(a, pastMeetings)).join('') : '<p class="text-xs text-white/20">Nenhuma gravação avulsa. Vincule novas em Agenda → Gravações.</p>'}
+    `, 'mb-6')}
     ${meetings.length ? meetings.map((m) => {
       const files = artifacts.filter((a) => a.agenda_item_id === m.id);
-      const isPast = m.status !== 'upcoming' || new Date(m.item_date) < new Date();
+      const isPast = isPastMeeting(m);
       return card(`
         <div class="flex items-start justify-between flex-wrap gap-2 mb-2">
           <div class="min-w-0">
@@ -1435,7 +1447,7 @@ function encontrosTabHtml({ meetings, artifacts, sessions }) {
           </div>
         </div>
         <div class="pt-3 mt-2" style="border-top:1px solid var(--line);">
-          ${files.length ? files.map(encontroFileRow).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">A gravação pode ser anexada depois do encontro.</p>'}
+          ${files.length ? files.map((a) => encontroFileRow(a)).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">Encontro ainda não realizado.</p>'}
         </div>
       `, 'mb-4');
     }).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado com ela ainda.</p>', 'mb-6')}
@@ -1452,6 +1464,26 @@ function wireEncontrosTab(encontros) {
       render();
     });
   });
+  content.querySelectorAll('[data-enc-file-meeting]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      if (!select.value) return;
+      const meeting = encontros.meetings.find((m) => m.id === select.value);
+      select.disabled = true;
+      const profile = await getCurrentProfile();
+      const { error } = await linkSessionToMeeting(select.dataset.sessionKey, clientId, meeting, profile.id);
+      if (error) { toast('Erro ao arquivar.', { tone: 'error' }); select.disabled = false; return; }
+      toast('Gravação arquivada no encontro.');
+      render();
+    });
+  });
+  content.querySelectorAll('[data-enc-unfile]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { error } = await detachArtifactFromMeeting(btn.dataset.encUnfile);
+      if (error) { toast('Erro ao tirar do encontro.', { tone: 'error' }); return; }
+      toast('Gravação voltou para a lista geral dela.');
+      render();
+    });
+  });
   content.querySelectorAll('[data-enc-attach]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const meetingId = btn.dataset.encAttach;
@@ -1462,7 +1494,7 @@ function wireEncontrosTab(encontros) {
       const profile = await getCurrentProfile();
       const { error } = await linkSessionToMeeting(sessionKey, clientId, meeting, profile.id);
       if (error) { toast('Erro ao anexar.', { tone: 'error' }); btn.disabled = false; return; }
-      toast('Gravação anexada. A cliente já pode assistir na página Encontros.');
+      toast('Gravação anexada ao encontro. A cliente já pode assistir na página Encontros.');
       render();
     });
   });
