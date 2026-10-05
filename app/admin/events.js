@@ -36,8 +36,35 @@ const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || '';
 const inviteUrl = (code) => `${EVENT_SITE}/?convite=${encodeURIComponent(code)}`;
 const prepUrl = (token) => `${EVENT_SITE}/preparacao.html?t=${token}`;
 const waLink = (phone, text) => `https://wa.me/55${String(phone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')}?text=${encodeURIComponent(text)}`;
-const inviteMessage = (r, code) => `Oi, ${firstName(r.full_name)}! Como você vai viver a Experiência PERSEA, você ganhou ${code.max_uses === 1 ? 'um convite' : `${code.max_uses} convites`} para levar alguém especial com um valor exclusivo de convidada: ${INVITE_PRICE} (em vez de R$ 997). É só enviar este link para quem você quer convidar: ${inviteUrl(code.code)}`;
-const prepMessage = (r) => `Oi, ${firstName(r.full_name)}! Que alegria ter você na Experiência PERSEA. Para prepararmos o seu dia, responda estas 5 perguntas rápidas (leva 1 minuto): ${prepUrl(r.prep_token)}`;
+// WhatsApp messages: *bold* and _italic_ are WhatsApp formatting; blank
+// lines keep each idea on its own so it reads as a note, not a block.
+const inviteMessage = (r, code) => [
+  `Olá, ${firstName(r.full_name)}!`,
+  '',
+  'Que alegria ter você na *Experiência PERSEA*.',
+  '',
+  `Como participante, você recebeu ${code.max_uses === 1 ? '*um convite exclusivo*' : `*${code.max_uses} convites exclusivos*`} para levar alguém especial com você, com uma condição especial de convidada.`,
+  '',
+  'É uma ótima oportunidade de viver esse dia ao lado de quem você admira.',
+  '',
+  'Para convidar, é só enviar este link:',
+  inviteUrl(code.code),
+  '',
+  '_24 de outubro · Belo Horizonte_',
+].join('\n');
+const prepMessage = (r) => [
+  `Olá, ${firstName(r.full_name)}!`,
+  '',
+  'Estamos preparando cada detalhe da *Experiência PERSEA* para receber você.',
+  '',
+  'Para adaptarmos o espaço e o cardápio, precisamos saber se você tem alguma *alergia*, *restrição alimentar* ou *necessidade de acessibilidade*. Também queremos entender o que você espera viver neste dia.',
+  '',
+  'São 6 perguntas rápidas, leva cerca de 1 minuto:',
+  prepUrl(r.prep_token),
+  '',
+  'Com carinho,',
+  'Equipe Nay Murta',
+].join('\n');
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Personal code from her first name, e.g. MARY-PERSEA, MARY2-PERSEA if taken.
@@ -92,6 +119,7 @@ function prepBlock(r) {
       </div>`;
   }
   const food = (r.prep_food_restrictions || []).join(', ') + (r.prep_food_note ? ` (${esc(r.prep_food_note)})` : '');
+  const access = (r.prep_accessibility || []).filter((x) => x !== 'Não preciso');
   const item = (label, value) => `<div><p class="text-xs text-white/30">${label}</p><p class="text-sm">${value}</p></div>`;
   return `
     <div class="mt-1 p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
@@ -100,6 +128,7 @@ function prepBlock(r) {
         ${item('Expectativas', esc((r.prep_expectations || []).join(' · ')) + (r.prep_expectations_note ? `<br><span class="text-white/50">"${esc(r.prep_expectations_note)}"</span>` : ''))}
         ${item('Restrição alimentar', food || '—')}
         ${item('Alergias', r.prep_allergies ? `<span style="color:var(--terracotta);">${esc(r.prep_allergies)}</span>` : 'Nenhuma')}
+        ${item('Acessibilidade', access.length ? `<span style="color:var(--terracotta);">${esc(access.join(', '))}${r.prep_accessibility_note ? ` (${esc(r.prep_accessibility_note)})` : ''}</span>` : (r.prep_accessibility ? 'Não precisa' : '—'))}
         ${item('Faturamento mensal', `${esc(r.prep_revenue_current || '—')} → meta ${esc(r.prep_revenue_goal || '—')}`)}
       </div>
       <button type="button" data-copy-prep="${r.id}" class="btn-text mt-2" style="font-size:11px;">Copiar link do formulário</button>

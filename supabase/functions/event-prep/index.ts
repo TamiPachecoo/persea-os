@@ -31,6 +31,7 @@ const EXPECTATIONS = [
   "Viver uma experiência inspiradora",
 ];
 const FOOD = ["Nenhuma", "Vegetariana", "Vegana", "Sem glúten", "Sem lactose", "Low carb", "Outra"];
+const ACCESS = ["Não preciso", "Cadeira de rodas ou mobilidade reduzida", "Acesso sem escadas", "Assento com apoio ou mais conforto", "Deficiência auditiva", "Deficiência visual", "Gestante", "Outra"];
 const REVENUE_NOW = ["Até R$ 5 mil", "R$ 5 mil a R$ 10 mil", "R$ 10 mil a R$ 20 mil", "R$ 20 mil a R$ 50 mil", "Acima de R$ 50 mil"];
 const REVENUE_GOAL = ["Até R$ 10 mil", "R$ 10 mil a R$ 20 mil", "R$ 20 mil a R$ 50 mil", "R$ 50 mil a R$ 100 mil", "Acima de R$ 100 mil"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: reg } = await admin.from("event_registrations")
-      .select("id, full_name, prep_submitted_at, prep_expectations, prep_expectations_note, prep_food_restrictions, prep_food_note, prep_allergies, prep_revenue_current, prep_revenue_goal")
+      .select("id, full_name, prep_submitted_at, prep_expectations, prep_expectations_note, prep_food_restrictions, prep_food_note, prep_allergies, prep_accessibility, prep_accessibility_note, prep_revenue_current, prep_revenue_goal")
       .eq("prep_token", token).maybeSingle();
     if (!reg) return json({ error: "Link inválido ou expirado." }, 404, cors);
 
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
         answers: {
           expectations: reg.prep_expectations || [], expectations_note: reg.prep_expectations_note || "",
           food: reg.prep_food_restrictions || [], food_note: reg.prep_food_note || "",
-          allergies: reg.prep_allergies || "", revenue_current: reg.prep_revenue_current || "", revenue_goal: reg.prep_revenue_goal || "",
+          allergies: reg.prep_allergies || "", accessibility: reg.prep_accessibility || [], accessibility_note: reg.prep_accessibility_note || "", revenue_current: reg.prep_revenue_current || "", revenue_goal: reg.prep_revenue_goal || "",
         },
       }, 200, cors);
     }
@@ -70,6 +71,9 @@ Deno.serve(async (req) => {
     if (!expectations.length) return json({ error: "Escolha pelo menos uma expectativa." }, 400, cors);
     if (!food.length) return json({ error: "Responda sobre restrições alimentares." }, 400, cors);
     if (food.includes("Outra") && !clean(a.food_note, 300)) return json({ error: "Conte qual é a sua restrição alimentar." }, 400, cors);
+    const access = (Array.isArray(a.accessibility) ? a.accessibility : []).filter((x: string) => ACCESS.includes(x));
+    if (!access.length) return json({ error: "Responda sobre acessibilidade." }, 400, cors);
+    if (access.includes("Outra") && !clean(a.accessibility_note, 300)) return json({ error: "Conte qual é a sua necessidade de acessibilidade." }, 400, cors);
     if (!REVENUE_NOW.includes(a.revenue_current)) return json({ error: "Escolha seu faturamento atual." }, 400, cors);
     if (!REVENUE_GOAL.includes(a.revenue_goal)) return json({ error: "Escolha sua meta de faturamento." }, 400, cors);
 
@@ -77,6 +81,7 @@ Deno.serve(async (req) => {
       prep_expectations: expectations, prep_expectations_note: clean(a.expectations_note, 600),
       prep_food_restrictions: food.includes("Nenhuma") ? ["Nenhuma"] : food, prep_food_note: clean(a.food_note, 300),
       prep_allergies: clean(a.allergies, 300),
+      prep_accessibility: access.includes("Não preciso") ? ["Não preciso"] : access, prep_accessibility_note: clean(a.accessibility_note, 300),
       prep_revenue_current: a.revenue_current, prep_revenue_goal: a.revenue_goal,
       prep_submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", reg.id);
