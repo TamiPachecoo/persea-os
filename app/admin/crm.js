@@ -222,6 +222,31 @@ async function loadRealLeads() {
   return data || [];
 }
 
+// Answers from naymurta.com/aplicacao (mentoria-application → leads.application).
+function applicationBlock(l) {
+  const a = l.application;
+  if (!a) return '';
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const item = (label, value) => value ? `<div><p class="text-xs text-white/30">${label}</p><p class="text-sm">${value}</p></div>` : '';
+  return `
+    <details class="mt-2">
+      <summary class="text-xs cursor-pointer" style="color:var(--gold);">Aplicação da mentoria · ${formatDate(l.application_submitted_at)} · ${esc(a.priority)} · ${esc(a.revenue)}</summary>
+      <div class="grid sm:grid-cols-2 gap-3 mt-3 p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
+        ${item('Instagram / LinkedIn', esc(l.instagram))}
+        ${item('Idade', esc(a.age))}
+        ${item('Hoje ela é', esc(a.role))}
+        ${item('Universo', esc(a.field === 'Outro' && a.field_other ? a.field_other : a.field))}
+        ${item('Faturamento mensal', esc(a.revenue))}
+        ${item('Imagem x nível (0–10)', esc(a.thermometer))}
+        ${item('Quer comemorar em 12 meses', esc(a.goal))}
+        ${item('O que mais trava', esc((a.blocks || []).join(' · ')))}
+        ${item('Quer que pensem', esc(a.phrase ? `“${a.phrase}”` : ''))}
+        ${item('Investir agora é', esc(a.priority))}
+        ${a.question ? `<div class="sm:col-span-2"><p class="text-xs text-white/30">Pergunta para a Nay</p><p class="text-sm">“${esc(a.question)}”</p></div>` : ''}
+      </div>
+    </details>`;
+}
+
 function realLeadRow(l) {
   const waHref = l.phone ? `https://wa.me/55${l.phone.replace(/\D/g, '')}` : null;
   return `
@@ -230,6 +255,7 @@ function realLeadRow(l) {
         <p class="font-medium break-words">${l.full_name || '(sem nome)'}</p>
         <p class="text-xs text-white/30 break-words">${l.email || 'sem e-mail'} · ${l.phone || 'sem telefone'}</p>
         <p class="text-xs text-white/20 mt-1">${LEAD_SOURCE_LABEL[l.source] || l.source} · recebido ${formatDate(l.created_at)}</p>
+        ${applicationBlock(l)}
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
