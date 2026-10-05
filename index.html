@@ -1,11 +1,392 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8" />
-<meta http-equiv="refresh" content="0; url=/perseaexperience">
-<title>Nay Murta | Mentoria PERSEA</title>
-</head>
-<body>
-  <p>Redirecionando para <a href="/perseaexperience">a página da Nay Murta</a>...</p>
-</body>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mentoria PERSEA, PERSEA Experience, Grupo VIP e palestras com Nay Murta.">
+<meta property="og:title" content="Nay Murta | PERSEA">
+<meta property="og:description" content="Mentoria PERSEA, PERSEA Experience, Grupo VIP e palestras.">
+<meta property="og:image" content="https://naymurta.com/portais/mentoria1.jpg">
+<link rel="icon" type="image/png" href="/portais/symbol.png">
+<title>Nay Murta | PERSEA</title>
+<meta name="language" content="pt-BR">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Poppins:wght@300;400;500&display=swap">
+<style>
+/* Layout: a cinematic opening, then four full-height portals side by side (stacked on phones); choosing one opens its own full-screen chapter through a gold circular reveal. */
+:root{
+  --ink:#0b0908;
+  --smoke:#16120f;
+  --ivory:#f3ece1;
+  --champagne:#dcc4a2;
+  --gold:#c19a62;
+  --ash:#a3968a;
+  --hair:rgba(243,236,225,.16);
+  --display:'Cormorant Garamond', Garamond, Georgia, serif;
+  --body:'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ease:cubic-bezier(.7,0,.2,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--ivory);font-family:var(--body);font-weight:300;overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+a{color:inherit}
+:focus-visible{outline:1px solid var(--champagne);outline-offset:3px}
+
+.i-mentoria1{background-image:url("/portais/mentoria1.jpg")}
+.i-exp1{background-image:url("/portais/exp1.jpg")}
+.i-vip1{background-image:url("/portais/vip1.jpg")}
+.i-pal1{background-image:url("/portais/pal1.jpg")}
+.i-symbol{background-image:url("/portais/symbol.png")}
+.i-logo{background-image:url("/portais/logo.png")}
+
+/* film grain + cursor light */
+.grain{display:none;position:fixed;inset:-50%;z-index:60;pointer-events:none;opacity:.09;background-size:160px;animation:grain 1s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-4%)}60%{transform:translate(-4%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+.glow{position:fixed;inset:0;z-index:55;pointer-events:none;background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(220,196,162,.13),transparent 60%);mix-blend-mode:screen;opacity:0;transition:opacity .6s}
+@media (pointer:fine){.glow.on{opacity:1}}
+
+/* header */
+.top{position:fixed;inset:0 0 auto 0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:calc(18px + env(safe-area-inset-top,0px)) 28px 18px;background:linear-gradient(180deg,rgba(11,9,8,.75),transparent);pointer-events:none}
+.top>*{pointer-events:auto}
+.top .brand{display:block;width:132px;aspect-ratio:397/102;background-size:contain;background-repeat:no-repeat;background-position:left center}
+.top .line{font-family:var(--display);font-style:italic;font-size:17px;color:var(--champagne);margin:0;text-align:center;flex:1;min-width:0}
+.social{display:flex;gap:6px}
+.social a{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--hair);border-radius:50%;transition:border-color .3s,background .3s}
+.social a:hover{border-color:var(--champagne);background:rgba(220,196,162,.08)}
+.social svg{width:15px;height:15px;fill:var(--ivory)}
+@media(max-width:760px){.top{padding-inline:16px}.top .line{display:none}.top .brand{width:112px}}
+
+/* moving media (stands in for the looping videos) */
+.media{position:absolute;inset:0;overflow:hidden}
+.layer{position:absolute;inset:-8%;background-size:cover;background-position:center;will-change:transform,opacity}
+.layer.a{animation:driftA 22s ease-in-out infinite alternate}
+.layer.b{animation:driftB 22s ease-in-out infinite alternate,swap 14s ease-in-out infinite}
+@keyframes driftA{from{transform:scale(1.04) translate(-1.5%,1%)}to{transform:scale(1.14) translate(1.5%,-1.5%)}}
+@keyframes driftB{from{transform:scale(1.12) translate(2%,-1%)}to{transform:scale(1.02) translate(-2%,1.5%)}}
+@keyframes swap{0%,38%{opacity:0}50%,88%{opacity:1}100%{opacity:0}}
+.media .sweep{position:absolute;inset:0;background:linear-gradient(115deg,transparent 35%,rgba(220,196,162,.14) 50%,transparent 65%);background-size:250% 100%;animation:sweep 9s linear infinite;mix-blend-mode:screen}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-120% 0}}
+.bw .layer{filter:grayscale(1) contrast(1.06)}
+.media .poster{inset:0;animation:none}
+.media .poster.i-vip1{background-position:68% center} /* books sit right of centre in the source photo */
+.media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s ease}
+.media video.ready{opacity:1}
+
+/* portals */
+.hub{position:fixed;inset:0;display:flex;padding-top:0}
+.portal{position:relative;flex:1 1 0;min-width:0;overflow:hidden;text-align:left;border-right:1px solid var(--hair);transition:flex-grow 1.1s var(--ease)}
+.portal:last-child{border-right:0}
+.portal .media{transition:filter 1s var(--ease)}
+.portal .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,9,8,.15) 0%,rgba(11,9,8,.2) 40%,rgba(11,9,8,.92) 100%);transition:background 1s}
+.hub.has-active .portal:not(.active) .media{filter:grayscale(1) brightness(.2)}
+.p-text>*{transition:opacity .5s,transform .5s,font-size .6s var(--ease),color .5s}
+.hub.has-active .portal:not(.active) .eyebrow,
+.hub.has-active .portal:not(.active) .p-sub,
+.hub.has-active .portal:not(.active) .p-cta{opacity:0;visibility:hidden;height:0;margin:0;overflow:hidden}
+.hub.has-active .portal:not(.active) .p-title{color:var(--ash)}
+.portal.active{flex-grow:2.7}
+.hub.has-active .portal:not(.active) .p-title{font-size:12.5px;letter-spacing:.2em}
+.p-title{overflow-wrap:break-word;hyphens:auto}
+.p-text{position:absolute;left:0;right:0;bottom:0;padding:0 28px 64px;display:flex;flex-direction:column;gap:10px}
+.eyebrow{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--champagne);margin:0}
+.p-title{font-family:var(--body);font-weight:400;font-size:clamp(20px,2vw,30px);line-height:1.2;letter-spacing:.16em;text-transform:uppercase;margin:0;text-wrap:balance}
+.p-sub{font-family:var(--display);font-style:italic;font-size:clamp(17px,1.4vw,21px);line-height:1.3;color:var(--champagne);margin:0;max-width:34ch;opacity:0;transform:translateY(10px);transition:opacity .6s .15s,transform .6s .15s}
+.p-cta{display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ivory);opacity:0;transform:translateY(10px);transition:opacity .6s .25s,transform .6s .25s}
+.portal.active .p-sub,.portal.active .p-cta{opacity:1;transform:none}
+.portal .tick{position:absolute;top:0;left:0;height:2px;width:0;background:var(--champagne)}
+.hub.cycling .portal.active .tick{animation:tick 4.2s linear forwards}
+@keyframes tick{to{width:100%}}
+
+@media(max-width:760px){
+  .hub{flex-direction:column;padding-top:calc(64px + env(safe-area-inset-top,0px))}
+  .portal{border-right:0;border-bottom:1px solid var(--hair)}
+  .portal.active{flex-grow:3.4}
+  .hub.has-active .portal:not(.active) .p-title{font-size:12px}
+  .hub.has-active .portal:not(.active) .p-text{padding-bottom:14px}
+  .p-text{padding:0 18px 18px;gap:6px}
+  .portal.active:last-child .p-text{padding-bottom:46px}
+  .p-title{font-size:21px}
+  .p-sub{font-size:17px}
+  .portal:not(.active) .p-cta{display:none}
+}
+
+/* chapter */
+.chapter{position:fixed;inset:0;z-index:50;clip-path:circle(0px at var(--cx,50%) var(--cy,50%));transition:clip-path 1.05s var(--ease);overflow-y:auto;overscroll-behavior:contain}
+.chapter.open{clip-path:circle(150vmax at var(--cx,50%) var(--cy,50%))}
+.chapter .media{position:fixed}
+.chapter .shade{position:fixed;inset:0;background:linear-gradient(90deg,rgba(11,9,8,.94) 0%,rgba(11,9,8,.72) 45%,rgba(11,9,8,.25) 100%)}
+.ring{position:fixed;z-index:51;left:var(--cx,50%);top:var(--cy,50%);width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;border:1px solid var(--champagne);opacity:0;pointer-events:none}
+.ring.go{animation:ring 1.05s var(--ease) forwards}
+@keyframes ring{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(260)}}
+.c-in{position:relative;min-height:100%;display:flex;flex-direction:column;justify-content:center;gap:22px;max-width:640px;padding:calc(110px + env(safe-area-inset-top,0px)) 28px 64px 7vw}
+.c-in>*{opacity:0;transform:translateY(18px)}
+.chapter.open .c-in>*{animation:rise .9s var(--ease) forwards}
+.chapter.open .c-in>*:nth-child(2){animation-delay:.42s}.chapter.open .c-in>*:nth-child(3){animation-delay:.5s}.chapter.open .c-in>*:nth-child(4){animation-delay:.58s}.chapter.open .c-in>*:nth-child(5){animation-delay:.66s}.chapter.open .c-in>*:nth-child(6){animation-delay:.74s}.chapter.open .c-in>*:nth-child(1){animation-delay:.34s}.chapter.open .c-in>*:nth-child(7){animation-delay:.82s}
+@keyframes rise{to{opacity:1;transform:none}}
+.back{align-self:flex-start;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ash);display:inline-flex;gap:10px;align-items:center}
+.back:hover{color:var(--ivory)}
+.c-title{font-family:var(--display);font-weight:400;font-size:clamp(40px,6vw,76px);line-height:.98;margin:0;text-wrap:balance}
+.c-title em{color:var(--champagne)}
+.c-copy{font-size:15px;line-height:1.7;color:rgba(243,236,225,.78);margin:0;max-width:52ch}
+.facts{display:flex;flex-wrap:wrap;gap:8px}
+.facts span{border:1px solid var(--hair);border-radius:999px;padding:7px 14px;font-size:12px;color:var(--ivory);background:rgba(11,9,8,.35);backdrop-filter:blur(6px)}
+.c-actions{display:flex;flex-wrap:wrap;align-items:center;gap:18px}
+.btn{display:inline-flex;align-items:center;gap:12px;background:var(--ivory);color:var(--ink);text-decoration:none;font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:500;padding:16px 26px;border-radius:2px;transition:background .3s,gap .3s}
+.btn:hover{background:var(--champagne);gap:18px}
+.btn.off,.btn.off:hover{background:transparent;color:var(--ash);border:1px dashed var(--hair);gap:12px;cursor:default}
+.hint{font-size:12px;color:var(--ash)}
+.pillars{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.pillars li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px;padding:14px 0;border-bottom:1px solid var(--hair);font-size:14px;line-height:1.55;color:rgba(243,236,225,.75)}
+.pillars .pn{font-family:var(--display);font-size:24px;line-height:1;color:var(--champagne);font-variant-numeric:lining-nums}
+.pillars b{display:block;font-weight:500;color:var(--ivory);letter-spacing:.14em;text-transform:uppercase;font-size:12px;margin-bottom:3px}
+.c-close{font-family:var(--display);font-style:italic;font-size:clamp(20px,2.2vw,26px);line-height:1.3;color:var(--champagne);margin:0;max-width:30ch}
+@media(max-width:760px){.c-in{padding-left:20px;padding-right:20px;justify-content:flex-end}.chapter .shade{background:linear-gradient(180deg,rgba(11,9,8,.25) 0%,rgba(11,9,8,.75) 45%,rgba(11,9,8,.96) 100%)}}
+
+/* opening */
+.intro{position:fixed;inset:0;z-index:70;background:var(--ink);display:grid;place-items:center;transition:opacity 1.1s var(--ease),visibility 1.1s}
+.intro.done{opacity:0;visibility:hidden}
+.intro .media{opacity:0;animation:introBg 3.6s ease forwards}
+@keyframes introBg{0%,30%{opacity:0}100%{opacity:.45}}
+.intro-stack{position:relative;display:flex;flex-direction:column;align-items:center;gap:22px;padding-inline:20px;text-align:center}
+.intro .sym{width:64px;aspect-ratio:63/102;background-size:contain;background-repeat:no-repeat;background-position:center;clip-path:inset(100% 0 0 0);filter:drop-shadow(0 0 0 rgba(220,196,162,0));animation:draw 1.5s .2s var(--ease) forwards,shine 1.6s 1.4s ease forwards}
+@keyframes draw{to{clip-path:inset(0 0 0 0)}}
+@keyframes shine{50%{filter:drop-shadow(0 0 18px rgba(220,196,162,.55))}100%{filter:drop-shadow(0 0 6px rgba(220,196,162,.2))}}
+.intro .word{width:min(300px,70vw);aspect-ratio:397/102;background-size:contain;background-repeat:no-repeat;background-position:center;opacity:0;letter-spacing:0;animation:fadeup 1.1s 1.35s var(--ease) forwards}
+.intro .tag{font-family:var(--display);font-style:italic;font-size:clamp(18px,2.4vw,24px);color:var(--champagne);margin:0;opacity:0;animation:fadeup 1.1s 1.9s var(--ease) forwards}
+@keyframes fadeup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.skip{position:absolute;right:24px;bottom:calc(24px + env(safe-area-inset-bottom,0px));font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ash)}
+
+.proto{position:fixed;left:16px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:45;font-size:10.5px;letter-spacing:.08em;color:var(--ash);background:rgba(11,9,8,.7);border:1px solid var(--hair);border-radius:999px;padding:6px 12px;backdrop-filter:blur(6px)}
+
+@media(max-width:760px){.proto{display:none}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .layer.b{opacity:0}
+  .intro{display:none}
+  .chapter.open .c-in>*{opacity:1;transform:none}
+  .p-sub,.p-cta{opacity:1;transform:none}
+}
+</style>
+
+<div class="intro" id="intro" aria-hidden="true">
+  <div class="media"><div class="layer poster i-pal1"></div><video muted loop playsinline preload="auto"><source src="/portais/videos/palestras.webm" type="video/webm"><source src="/portais/videos/palestras.mp4" type="video/mp4"></video></div>
+  <div class="intro-stack">
+    <div class="sym i-symbol"></div>
+    <div class="word i-logo"></div>
+    <p class="tag">Profissionais competentes não podem ser invisíveis.</p>
+  </div>
+  <button class="skip" id="skip" type="button">Pular</button>
+</div>
+
+<header class="top">
+  <a class="brand i-logo" href="#" aria-label="PERSEA · Nay Murta"></a>
+  <p class="line">Escolha por onde começar.</p>
+  <nav class="social" aria-label="Redes sociais">
+    <a href="https://instagram.com/naymurta" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24"><path d="M12 7.3A4.7 4.7 0 1 0 16.7 12 4.7 4.7 0 0 0 12 7.3Zm0 7.7a3 3 0 1 1 3-3 3 3 0 0 1-3 3Zm6-7.9a1.1 1.1 0 1 1-1.1-1.1A1.1 1.1 0 0 1 18 7.1ZM21.9 8.2a5.4 5.4 0 0 0-1.5-3.9 5.4 5.4 0 0 0-3.9-1.5C15 2.7 9 2.7 7.5 2.8a5.4 5.4 0 0 0-3.9 1.5A5.4 5.4 0 0 0 2.1 8.2C2 9.7 2 14.3 2.1 15.8a5.4 5.4 0 0 0 1.5 3.9 5.4 5.4 0 0 0 3.9 1.5c1.5.1 7.5.1 9 0a5.4 5.4 0 0 0 3.9-1.5 5.4 5.4 0 0 0 1.5-3.9c.1-1.5.1-6.1 0-7.6Zm-2 9.6a3.1 3.1 0 0 1-1.7 1.7c-1.2.5-4 .4-5.2.4s-4.1.1-5.2-.4a3.1 3.1 0 0 1-1.7-1.7C5.6 16.6 5.7 13.8 5.7 12.5s-.1-4.1.4-5.2a3.1 3.1 0 0 1 1.7-1.7c1.2-.5 4-.4 5.2-.4s4.1-.1 5.2.4a3.1 3.1 0 0 1 1.7 1.7c.5 1.2.4 4 .4 5.2s.1 4.1-.4 5.3Z"/></svg></a>
+    <a href="https://wa.me/5531997078270" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 24 24"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1s-.5-.1-.7.1-.8 1-1 1.2-.4.2-.7.1a8.2 8.2 0 0 1-2.4-1.5 9 9 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.6l.4-.5a2 2 0 0 0 .3-.5.6.6 0 0 0 0-.5c0-.1-.7-1.6-.9-2.2s-.5-.5-.7-.5h-.6a1.1 1.1 0 0 0-.8.4 3.4 3.4 0 0 0-1 2.5 5.9 5.9 0 0 0 1.2 3.1 13.4 13.4 0 0 0 5.2 4.6c1.9.8 2.6.9 3.6.7a3 3 0 0 0 2-1.4 2.5 2.5 0 0 0 .2-1.4c-.1-.2-.3-.3-.6-.4ZM12 21.8a9.8 9.8 0 0 1-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4a9.8 9.8 0 1 1 8.3 4.6Zm8.4-18.2A11.8 11.8 0 0 0 1.8 17.8L.1 24l6.4-1.7a11.8 11.8 0 0 0 5.6 1.4 11.8 11.8 0 0 0 8.3-20.1Z"/></svg></a>
+    <a href="https://www.linkedin.com/in/naymurta" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24"><path d="M20.4 20.5h-3.6v-5.6c0-1.3 0-3-1.8-3s-2.1 1.4-2.1 2.9v5.7H9.4V9h3.4v1.6a3.7 3.7 0 0 1 3.4-1.9c3.6 0 4.3 2.4 4.3 5.5ZM5.3 7.4a2.1 2.1 0 1 1 2.1-2.1 2.1 2.1 0 0 1-2.1 2.1Zm1.8 13.1H3.6V9h3.6ZM22.2 0H1.8A1.8 1.8 0 0 0 0 1.7v20.6A1.8 1.8 0 0 0 1.8 24h20.4a1.8 1.8 0 0 0 1.8-1.7V1.7A1.8 1.8 0 0 0 22.2 0Z"/></svg></a>
+  </nav>
+</header>
+
+<main class="hub cycling" id="hub" lang="pt-BR"></main>
+
+<section class="chapter" id="chapter" hidden aria-modal="true" role="dialog" aria-labelledby="c-title">
+  <div class="media" id="c-media"></div>
+  <div class="shade"></div>
+  <div class="c-in" id="c-in"></div>
+</section>
+<div class="ring" id="ring"></div>
+
+<div class="glow" id="glow"></div>
+<div class="grain" id="grain"></div>
+
+<script>
+const PATHS = [
+  { id:'mentoria', bw:true, a:'mentoria1', b:'mentoria2',
+    eyebrow:'Mentoria PERSEA', name:'Mentoria PERSEA', meta:'Posicionamento e Ascensão Profissional', title:'Mentoria PERSEA',
+    cTitle:'Sua competência, <em>percebida e valorizada.</em>',
+    copy:'Transformamos conhecimento e experiência em posicionamento, reconhecimento e valor comercial.',
+    facts:['Posicionamento','Imagem','Comunicação','Visibilidade','Vendas'],
+    cta:'Conheça a mentoria', more:true, hint:'',
+    // second step: what the mentoria is, condensed from Nay's positioning text
+    about:{
+      title:'Posicionamento e <em>Ascensão Profissional.</em>',
+      lede:'Para profissionais que já têm conhecimento e experiência e querem comunicar melhor seu valor, ser reconhecidas e transformar isso em oportunidades e vendas.',
+      pillars:[
+        ['Posicionamento','Quem você é, o que te diferencia, para quem você trabalha e como quer ser reconhecida.'],
+        ['Imagem','Sua apresentação alinhada à sua competência, aos seus objetivos e ao valor que você quer transmitir.'],
+        ['Comunicação','Seu conhecimento traduzido em mensagens claras e convincentes, que mostram seu diferencial.'],
+        ['Visibilidade','Ser reconhecida pelas pessoas certas: nas redes, em eventos e nas suas relações profissionais.'],
+        ['Vendas','Segurança para apresentar, precificar e vender seus serviços, transformando reconhecimento em negócios.'],
+      ],
+      close:'Da profissional competente para a profissional que se posiciona, demonstra seu valor e vende sua expertise.',
+      cta:'Aplicar para a mentoria', href:'https://naymurta.com/aplicacao/', hint:'Leva 2 minutos.',
+    } },
+  { id:'experiencia', a:'exp1', b:'exp2',
+    eyebrow:'PERSEA Experience · 24 out', name:'PERSEA Experience', meta:'24 de outubro de 2026 · Belo Horizonte', title:'PERSEA Experience',
+    sub:'Experiência presencial para transformar competência em percepção de valor.',
+    cTitle:'Uma nova <em>percepção</em> de você, em um dia.',
+    copy:'Uma experiência presencial para profissionais que sabem que podem ocupar um lugar maior, mas ainda não conseguem transformar sua competência em percepção de valor.',
+    facts:['24 de outubro de 2026','Belo Horizonte','08h às 18h','Lote 1 · R$ 997'],
+    cta:'Garantir minha vaga', href:'https://perseaexperience.naymurta.com', hint:'Vagas limitadas.' },
+  { id:'vip', a:'vip1', b:'vip2',
+    eyebrow:'Grupo VIP · WhatsApp', name:'Grupo VIP', meta:'Conteúdo exclusivo, direto no WhatsApp', title:'Grupo VIP',
+    sub:'Comunidade gratuita no WhatsApp, com o que eu só compartilho por lá.',
+    cTitle:'O que eu só conto <em>para quem está perto.</em>',
+    copy:'Bastidores, reflexões e convites antecipados, direto no seu WhatsApp. A comunidade é gratuita e você sai quando quiser.',
+    facts:['Comunidade do WhatsApp','Cadastro gratuito'],
+    cta:'Entrar no grupo', href:'https://tr.ee/kipwx9dhbt', hint:'Abre o WhatsApp. Cadastro gratuito.' },
+  { id:'palestras', a:'pal1', b:'pal2',
+    eyebrow:'Palestras e Treinamentos', name:'Palestras e Treinamentos', meta:'Para empresas e eventos', title:'Palestras e Treinamentos',
+    sub:'Imagem, presença e percepção de valor para lideranças e times.',
+    cTitle:'Minha palestra <em>no seu palco.</em>',
+    copy:'Levo palestras e treinamentos sobre imagem, presença e percepção de valor para lideranças, times comerciais e eventos corporativos.',
+    facts:['Palestras','Treinamentos in-company','Eventos corporativos'],
+    cta:'Falar comigo no WhatsApp', href:'https://wa.me/5531997078270?text=Ol%C3%A1%2C%20Nay%21%20Tenho%20interesse%20em%20uma%20palestra%20ou%20treinamento%20para%20a%20minha%20empresa%20ou%20evento.', hint:'Respondo pessoalmente ou pela minha equipe.' },
+];
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const hub = document.getElementById('hub');
+const media = (p) => `<div class="media ${p.bw ? 'bw' : ''}"><div class="layer poster i-${p.a}"></div><video muted loop playsinline preload="auto"><source src="/portais/videos/${p.id}.webm" type="video/webm"><source src="/portais/videos/${p.id}.mp4" type="video/mp4"></video></div>`;
+// Start every video in a container (muted autoplay is allowed everywhere); fade it in once frames arrive.
+function playVideos(root) {
+  root.querySelectorAll('video').forEach((v) => {
+    v.muted = true;
+    const show = () => v.classList.add('ready');
+    if (v.readyState >= 3) show(); else v.addEventListener('canplay', show, { once: true });
+    if (!reduce) v.play().catch(() => {});
+  });
+}
+
+hub.innerHTML = PATHS.map((p, i) => `
+  <button class="portal" type="button" data-i="${i}" aria-label="${p.name}: ${p.meta}">
+    ${media(p)}<div class="shade"></div><span class="tick"></span>
+    <span class="p-text">
+      <span class="p-title">${p.name}</span>
+      <span class="p-sub">${p.meta}</span>
+      <span class="p-cta">Entrar</span>
+    </span>
+  </button>`).join('');
+const portals = [...hub.querySelectorAll('.portal')];
+
+let active = -1, cycle = null, resume = null;
+function setActive(i) {
+  active = i;
+  hub.classList.toggle('has-active', i >= 0);
+  portals.forEach((el, n) => el.classList.toggle('active', n === i));
+  // restart the progress tick
+  portals.forEach((el) => { const t = el.querySelector('.tick'); t.style.animation = 'none'; t.offsetWidth; t.style.animation = ''; });
+}
+const touch = matchMedia('(hover: none)').matches;
+function startCycle() {
+  stopCycle();
+  if (touch && active < 0) setActive(0);
+  if (reduce || touch) return;
+  hub.classList.add('cycling');
+  if (active < 0) setActive(0);
+  cycle = setInterval(() => setActive((active + 1) % portals.length), 4200);
+}
+function stopCycle() { clearInterval(cycle); cycle = null; hub.classList.remove('cycling'); }
+
+portals.forEach((el, i) => {
+  el.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'mouse') return; clearTimeout(resume); stopCycle(); setActive(i); });
+  el.addEventListener('focus', () => { if (!el.matches(':focus-visible')) return; stopCycle(); setActive(i); });
+  el.addEventListener('click', (e) => {
+    const touchFirstTap = matchMedia('(hover: none)').matches && active !== i;
+    if (touchFirstTap) { stopCycle(); setActive(i); return; }
+    const r = el.getBoundingClientRect();
+    const x = e.clientX || r.left + r.width / 2, y = e.clientY || r.top + r.height / 2;
+    openChapter(i, x, y, e.detail === 0);
+  });
+});
+hub.addEventListener('mouseleave', () => { clearTimeout(resume); resume = setTimeout(startCycle, 2500); });
+
+const chapter = document.getElementById('chapter');
+const ring = document.getElementById('ring');
+function actionsHtml(cta, href, hint, more) {
+  const btn = more
+    ? `<button class="btn" type="button" id="more-btn">${cta} <span aria-hidden="true">→</span></button>`
+    : href
+      ? `<a class="btn" href="${href}" target="_blank" rel="noopener">${cta} <span aria-hidden="true">→</span></a>`
+      : `<span class="btn off" aria-disabled="true">${cta}</span>`;
+  return `<div class="c-actions">${btn}${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+}
+function renderChapterBody(p, step) {
+  const cin = document.getElementById('c-in');
+  const back = `<button class="back" type="button" id="back">← ${step === 'about' ? 'Voltar' : 'Todos os caminhos'}</button>`;
+  if (step === 'about') {
+    const A = p.about;
+    cin.innerHTML = `${back}
+      <p class="eyebrow">${p.eyebrow}</p>
+      <h1 class="c-title" id="c-title">${A.title}</h1>
+      <p class="c-copy">${A.lede}</p>
+      <ol class="pillars">${A.pillars.map(([n, d], k) => `<li><span class="pn">${k + 1}</span><span><b>${n}</b>${d}</span></li>`).join('')}</ol>
+      <p class="c-close">${A.close}</p>
+      ${actionsHtml(A.cta, A.href, A.hint)}`;
+  } else {
+    cin.innerHTML = `${back}
+      <p class="eyebrow">${p.eyebrow}</p>
+      <h1 class="c-title" id="c-title">${p.cTitle}</h1>
+      <p class="c-copy">${p.copy}</p>
+      <div class="facts">${p.facts.map((f) => `<span>${f}</span>`).join('')}</div>
+      ${actionsHtml(p.cta, p.href, p.hint, p.more)}`;
+  }
+  chapter.scrollTop = 0;
+  document.getElementById('back').addEventListener('click', step === 'about' ? () => renderChapterBody(p, 'intro') : closeChapter);
+  document.getElementById('more-btn')?.addEventListener('click', () => renderChapterBody(p, 'about'));
+}
+function openChapter(i, x, y, viaKeyboard = false) {
+  const p = PATHS[i];
+  stopCycle();
+  document.documentElement.style.setProperty('--cx', x + 'px');
+  document.documentElement.style.setProperty('--cy', y + 'px');
+  document.getElementById('c-media').outerHTML = media(p).replace('class="media', 'id="c-media" class="media');
+  chapter.hidden = false;
+  renderChapterBody(p, 'intro');
+  playVideos(chapter);
+  ring.classList.remove('go'); ring.offsetWidth; if (!reduce) ring.classList.add('go');
+  requestAnimationFrame(() => requestAnimationFrame(() => chapter.classList.add('open')));
+  if (viaKeyboard) setTimeout(() => document.getElementById('back')?.focus({ preventScroll: true }), reduce ? 0 : 900);
+}
+function closeChapter() {
+  chapter.classList.remove('open');
+  const done = () => { chapter.hidden = true; startCycle(); portals[active]?.focus({ preventScroll: true }); };
+  if (reduce) done(); else setTimeout(done, 1000);
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !chapter.hidden) closeChapter(); });
+
+// opening
+const intro = document.getElementById('intro');
+let introTimer = null;
+function endIntro() { clearTimeout(introTimer); intro.classList.add('done'); startCycle(); }
+document.getElementById('skip').addEventListener('click', endIntro);
+playVideos(document);
+if (reduce) endIntro(); else introTimer = setTimeout(endIntro, 3900);
+
+// grain texture
+try {
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const g = c.getContext('2d'); const d = g.createImageData(160, 160);
+  for (let k = 0; k < d.data.length; k += 4) { const v = Math.random() * 255; d.data[k] = d.data[k + 1] = d.data[k + 2] = v; d.data[k + 3] = 255; }
+  g.putImageData(d, 0, 0);
+  document.getElementById('grain').style.backgroundImage = `url(${c.toDataURL()})`;
+} catch {}
+
+// cursor light
+const glow = document.getElementById('glow');
+addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  glow.classList.add('on');
+  glow.style.setProperty('--mx', e.clientX + 'px');
+  glow.style.setProperty('--my', e.clientY + 'px');
+});
+
+// deep link: #mentoria, #experiencia, #vip, #palestras
+const fromHash = PATHS.findIndex((p) => '#' + p.id === location.hash);
+if (fromHash >= 0) { endIntro(); setActive(fromHash); openChapter(fromHash, innerWidth / 2, innerHeight / 2); }
+</script>
+
 </html>
