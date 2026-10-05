@@ -136,6 +136,7 @@ function registrationRow(r) {
         ${r.status !== 'pago'
           ? `<button type="button" data-mark-paid="${r.id}" class="btn-primary" style="padding:6px 12px;font-size:11px;">Marcar como Paga</button>`
           : `<button type="button" data-mark-unpaid="${r.id}" class="btn-text" style="font-size:11px;">Desfazer pagamento</button>`}
+        ${r.status !== 'pago' ? `<button type="button" data-delete-reg="${r.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button>` : ''}
       </div>
     </div>
   `;
@@ -250,6 +251,20 @@ function render() {
   });
   content.querySelectorAll('[data-copy-prep]').forEach((btn) => {
     btn.addEventListener('click', () => copyText(prepMessage(registrations.find((x) => x.id === btn.dataset.copyPrep))));
+  });
+
+  // Removes test or duplicate sign-ups. Never offered for a paid one (undo
+  // the payment first), so a real attendee can't be lost by a stray click.
+  content.querySelectorAll('[data-delete-reg]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const r = registrations.find((x) => x.id === btn.dataset.deleteReg);
+      if (!r || r.status === 'pago') return;
+      if (!confirm(`Excluir a inscrição de ${r.full_name} (${r.email})? Isto não pode ser desfeito.`)) return;
+      const { error } = await supabase.from('event_registrations').delete().eq('id', r.id).neq('status', 'pago');
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast('Inscrição excluída.');
+      await refresh();
+    });
   });
 
   content.querySelectorAll('[data-mark-paid]').forEach((btn) => {
