@@ -6,7 +6,10 @@
 // (naymurta.com's event landing page — a separate static site) and
 // updated to 'pago' by sumup-webhook once SumUp confirms the charge. This
 // page only ever reads/manually adjusts them — never creates a real
-// SumUp checkout itself.
+// SumUp checkout itself. It also issues each paying participant's
+// personal invite code (event_invite_codes, guest price via
+// event-registration-create) and shows her answers to the preparation
+// form (event-prep, preparacao.html on the event site).
 import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { renderShell, card, toast, formatDateTime } from '../shared/ui.js';
@@ -24,10 +27,83 @@ let statusFilter = '';
 let search = '';
 let registrations = [];
 let manualPaymentLinkUrl = '';
+let invitePaymentLinkUrl = '';
+let inviteCodes = [];
 
-async function loadTenantManualLink() {
-  const { data } = await supabase.from('tenant_settings').select('event_manual_payment_link_url').eq('id', 1).maybeSingle();
-  return data?.event_manual_payment_link_url || '';
+const EVENT_SITE = 'https://perseaexperience.naymurta.com';
+const INVITE_PRICE = 'R$ 697,90';
+const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || '';
+const inviteUrl = (code) => `${EVENT_SITE}/?convite=${encodeURIComponent(code)}`;
+const prepUrl = (token) => `${EVENT_SITE}/preparacao.html?t=${token}`;
+const waLink = (phone, text) => `https://wa.me/55${String(phone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')}?text=${encodeURIComponent(text)}`;
+const inviteMessage = (r, code) => `Oi, ${firstName(r.full_name)}! Como você vai viver a Experiência PERSEA, você ganhou ${code.max_uses === 1 ? 'um convite' : `${code.max_uses} convites`} para levar alguém especial com um valor exclusivo de convidada: ${INVITE_PRICE} (em vez de R$ 997). É só enviar este link para quem você quer convidar: ${inviteUrl(code.code)}`;
+const prepMessage = (r) => `Oi, ${firstName(r.full_name)}! Que alegria ter você na Experiência PERSEA. Para prepararmos o seu dia, responda estas 5 perguntas rápidas (leva 1 minuto): ${prepUrl(r.prep_token)}`;
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Personal code from her first name, e.g. MARY-PERSEA, MARY2-PERSEA if taken.
+function suggestCode(r) {
+  const base = firstName(r.full_name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z]/g, '').toUpperCase() || 'CONVITE';
+  const taken = new Set(inviteCodes.map((c) => c.code));
+  for (let n = 1; ; n++) { const c = `${base}${n > 1 ? n : ''}-PERSEA`; if (!taken.has(c)) return c; }
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Mensagem copiada.'); }
+  catch { window.prompt('Copie a mensagem:', text); }
+}
+
+async function loadTenantLinks() {
+  const { data } = await supabase.from('tenant_settings').select('event_manual_payment_link_url, event_invite_payment_link_url').eq('id', 1).maybeSingle();
+  return [data?.event_manual_payment_link_url || '', data?.event_invite_payment_link_url || ''];
+}
+async function loadInviteCodes() {
+  const { data } = await supabase.from('event_invite_codes').select('*').order('created_at');
+  return data || [];
+}
+
+function inviteBlock(r) {
+  const code = inviteCodes.find((c) => c.inviter_registration_id === r.id);
+  if (!code) {
+    return r.status === 'pago'
+      ? `<button type="button" data-gen-invite="${r.id}" class="btn-ghost" style="padding:6px 12px;font-size:11px;">Gerar convite</button>`
+      : '';
+  }
+  const guests = registrations.filter((g) => g.invite_code === code.code);
+  return `
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-xs" style="color:var(--gold);letter-spacing:.08em;">${esc(code.code)}</span>
+      <span class="text-xs text-white/40">${guests.length} de
+        <input type="number" min="0" max="20" value="${code.max_uses}" data-invite-max="${code.id}" class="field text-xs" style="width:52px;padding:2px 6px;display:inline-block;" />
+        convites usados${code.active ? '' : ' · <span style="color:var(--terracotta);">desativado</span>'}</span>
+      <button type="button" data-copy-invite="${r.id}" class="btn-text" style="font-size:11px;">Copiar mensagem</button>
+      ${r.phone ? `<a href="${waLink(r.phone, inviteMessage(r, code))}" target="_blank" rel="noopener" class="btn-text" style="font-size:11px;">Enviar no WhatsApp</a>` : ''}
+      <button type="button" data-toggle-invite="${code.id}" class="btn-text" style="font-size:11px;">${code.active ? 'Desativar' : 'Reativar'}</button>
+    </div>
+    ${guests.length ? `<p class="text-xs text-white/30 mt-1">Convidadas: ${guests.map((g) => `${esc(g.full_name)} (${STATUS_LABEL[g.status] || g.status})`).join(', ')}</p>` : ''}`;
+}
+
+function prepBlock(r) {
+  if (!r.prep_submitted_at) {
+    return `
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs text-white/40">Formulário de preparação: pendente</span>
+        <button type="button" data-copy-prep="${r.id}" class="btn-text" style="font-size:11px;">Copiar link</button>
+        ${r.phone ? `<a href="${waLink(r.phone, prepMessage(r))}" target="_blank" rel="noopener" class="btn-text" style="font-size:11px;">Enviar no WhatsApp</a>` : ''}
+      </div>`;
+  }
+  const food = (r.prep_food_restrictions || []).join(', ') + (r.prep_food_note ? ` (${esc(r.prep_food_note)})` : '');
+  const item = (label, value) => `<div><p class="text-xs text-white/30">${label}</p><p class="text-sm">${value}</p></div>`;
+  return `
+    <div class="mt-1 p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
+      <p class="text-xs mb-2" style="color:var(--gold);">Preparação respondida ${formatDateTime(r.prep_submitted_at)}</p>
+      <div class="grid sm:grid-cols-2 gap-3">
+        ${item('Expectativas', esc((r.prep_expectations || []).join(' · ')) + (r.prep_expectations_note ? `<br><span class="text-white/50">"${esc(r.prep_expectations_note)}"</span>` : ''))}
+        ${item('Restrição alimentar', food || '—')}
+        ${item('Alergias', r.prep_allergies ? `<span style="color:var(--terracotta);">${esc(r.prep_allergies)}</span>` : 'Nenhuma')}
+        ${item('Faturamento mensal', `${esc(r.prep_revenue_current || '—')} → meta ${esc(r.prep_revenue_goal || '—')}`)}
+      </div>
+      <button type="button" data-copy-prep="${r.id}" class="btn-text mt-2" style="font-size:11px;">Copiar link do formulário</button>
+    </div>`;
 }
 
 async function loadRegistrations() {
@@ -51,6 +127,8 @@ function registrationRow(r) {
         <p class="text-xs text-white/30 break-words">${r.email} · ${r.phone || 'sem telefone'}${r.age ? ` · ${r.age} anos` : ''}</p>
         ${social ? `<p class="text-xs mt-1">${social}</p>` : ''}
         <p class="text-xs text-white/20 mt-1">${brl(r.amount_cents)} · inscrita ${formatDateTime(r.created_at)}${r.paid_at ? ` · paga ${formatDateTime(r.paid_at)}` : ''}</p>
+        ${r.invited_by_registration_id || r.invite_code ? `<p class="text-xs mt-1" style="color:var(--gold);">Convidada por ${esc(registrations.find((x) => x.id === r.invited_by_registration_id)?.full_name || 'participante')} · código ${esc(r.invite_code || '')}</p>` : ''}
+        ${r.status === 'pago' ? `<div class="mt-2 flex flex-col gap-2">${inviteBlock(r)}${prepBlock(r)}</div>` : ''}
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
@@ -79,16 +157,23 @@ function render() {
       <p class="text-white/40 text-sm mb-1">Eventos</p>
       <h1 class="text-3xl font-serif">PERSEA Experience</h1>
     </div>
-    <div class="grid sm:grid-cols-3 gap-4 mb-6">
+    <div class="grid sm:grid-cols-4 gap-4 mb-6">
       ${card(`<p class="text-xs text-white/30 mb-1">Interessadas</p><p class="text-2xl font-serif">${interessadas}</p>`)}
       ${card(`<p class="text-xs text-white/30 mb-1">Pagas</p><p class="text-2xl font-serif" style="color:var(--gold);">${pagas}</p>`)}
       ${card(`<p class="text-xs text-white/30 mb-1">Receita confirmada</p><p class="text-2xl font-serif" style="color:var(--gold);">${brl(receita)}</p>`)}
+      ${card(`<p class="text-xs text-white/30 mb-1">Preparação respondida</p><p class="text-2xl font-serif">${registrations.filter((r) => r.status === 'pago' && r.prep_submitted_at).length} <span class="text-sm text-white/30">de ${pagas}</span></p>`)}
     </div>
     ${card(`
       <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
       <p class="text-xs text-white/30 mb-4">Cole aqui um Link de Pagamento criado no app da SumUp (com parcelas e "Não repassar a taxa" configurados). Enquanto este campo estiver preenchido, toda nova inscrição é enviada para este link em vez de um checkout automático — isso significa que o pagamento não é confirmado sozinho: marque "Paga" manualmente aqui depois de conferir no seu app SumUp. Deixe em branco para voltar ao checkout automático (sem parcelamento).</p>
       <form id="manual-link-form" class="flex flex-wrap gap-2">
         <input name="manualLink" class="field text-sm" style="flex:1; min-width:260px;" value="${manualPaymentLinkUrl}" placeholder="https://pay.sumup.com/..." />
+        <button type="submit" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar</button>
+      </form>
+      <p class="text-sm text-white/50 mt-6 mb-2">Link de pagamento de convidadas (${INVITE_PRICE})</p>
+      <p class="text-xs text-white/30 mb-4">Quem chega por um convite válido é enviada para este link com o valor de convidada. Gere o convite de cada participante paga na lista abaixo.</p>
+      <form id="invite-link-form" class="flex flex-wrap gap-2">
+        <input name="inviteLink" class="field text-sm" style="flex:1; min-width:260px;" value="${invitePaymentLinkUrl}" placeholder="https://pay.sumup.com/..." />
         <button type="submit" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar</button>
       </form>
     `, 'mb-6')}
@@ -121,6 +206,52 @@ function render() {
     toast(url ? 'Link salvo — novas inscrições vão para ele.' : 'Link removido — voltando ao checkout automático.');
   });
 
+  content.querySelector('#invite-link-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = new FormData(e.target).get('inviteLink').trim();
+    const { error } = await supabase.from('tenant_settings').update({ event_invite_payment_link_url: url || null }).eq('id', 1);
+    if (error) { toast(error.message, { tone: 'error' }); return; }
+    invitePaymentLinkUrl = url;
+    toast(url ? 'Link de convidadas salvo.' : 'Link de convidadas removido — convites ficam indisponíveis.');
+  });
+  content.querySelectorAll('[data-gen-invite]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const r = registrations.find((x) => x.id === btn.dataset.genInvite);
+      btn.disabled = true;
+      const { error } = await supabase.from('event_invite_codes').insert({ event_slug: r.event_slug, code: suggestCode(r), inviter_registration_id: r.id, max_uses: 2 });
+      if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; return; }
+      toast('Convite criado.');
+      await refresh();
+    });
+  });
+  content.querySelectorAll('[data-copy-invite]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const r = registrations.find((x) => x.id === btn.dataset.copyInvite);
+      copyText(inviteMessage(r, inviteCodes.find((c) => c.inviter_registration_id === r.id)));
+    });
+  });
+  content.querySelectorAll('[data-invite-max]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const n = Math.max(0, Math.min(20, Number(input.value) || 0));
+      const { error } = await supabase.from('event_invite_codes').update({ max_uses: n }).eq('id', input.dataset.inviteMax);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast(`Limite atualizado: ${n} ${n === 1 ? 'convite' : 'convites'}.`);
+      await refresh();
+    });
+  });
+  content.querySelectorAll('[data-toggle-invite]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const code = inviteCodes.find((c) => c.id === btn.dataset.toggleInvite);
+      const { error } = await supabase.from('event_invite_codes').update({ active: !code.active }).eq('id', code.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast(code.active ? 'Convite desativado.' : 'Convite reativado.');
+      await refresh();
+    });
+  });
+  content.querySelectorAll('[data-copy-prep]').forEach((btn) => {
+    btn.addEventListener('click', () => copyText(prepMessage(registrations.find((x) => x.id === btn.dataset.copyPrep))));
+  });
+
   content.querySelectorAll('[data-mark-paid]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const { error } = await supabase.from('event_registrations').update({
@@ -144,7 +275,9 @@ function render() {
 }
 
 async function refresh() {
-  [registrations, manualPaymentLinkUrl] = await Promise.all([loadRegistrations(), loadTenantManualLink()]);
+  let links;
+  [registrations, links, inviteCodes] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes()]);
+  [manualPaymentLinkUrl, invitePaymentLinkUrl] = links;
   render();
 }
 

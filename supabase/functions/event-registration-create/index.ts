@@ -40,9 +40,29 @@ function isValidEmail(email: string): boolean {
 // Single source of truth for event pricing — add a row here for any
 // future event; the landing page and this function agree on the slug,
 // never on a price it sends.
-const EVENT_PRICES: Record<string, { amountCents: number; description: string }> = {
-  "persea-experience": { amountCents: 99700, description: "PERSEA Experience" },
+const EVENT_PRICES: Record<string, { amountCents: number; inviteAmountCents: number; description: string }> = {
+  "persea-experience": { amountCents: 99700, inviteAmountCents: 69790, description: "PERSEA Experience" },
 };
+
+// A personal invite code (event_invite_codes) unlocks the guest price and
+// the discounted SumUp link. Uses are counted as distinct registrations
+// carrying the code, so the same guest re-submitting never burns a second
+// use. Same rules as event-invite-check, which only previews them.
+// deno-lint-ignore no-explicit-any
+async function resolveInvite(admin: any, eventSlug: string, rawCode: string, email: string) {
+  const code = rawCode.trim().toUpperCase();
+  const { data: invite } = await admin.from("event_invite_codes")
+    .select("code, max_uses, active, inviter_registration_id, event_registrations!event_invite_codes_inviter_registration_id_fkey(email)")
+    .eq("event_slug", eventSlug).eq("code", code).maybeSingle();
+  if (!invite || !invite.active) return { error: "Código de convite inválido ou desativado." };
+  const inviterEmail = invite.event_registrations?.email?.toLowerCase();
+  if (inviterEmail && inviterEmail === email.toLowerCase()) return { error: "Este convite é para a pessoa que você convidar, não para você." };
+  const { data: used } = await admin.from("event_registrations").select("email").eq("event_slug", eventSlug).eq("invite_code", code);
+  const others = new Set((used || []).map((r: { email: string }) => r.email.toLowerCase()));
+  others.delete(email.toLowerCase());
+  if (others.size >= invite.max_uses) return { error: "Este convite já foi usado o número máximo de vezes." };
+  return { code, invitedBy: invite.inviter_registration_id as string | null };
+}
 
 const SUMUP_API_BASE = "https://api.sumup.com";
 
@@ -51,7 +71,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405, cors);
   try {
-    const { event_slug, name, email, whatsapp, age, instagram, linkedin } = await req.json();
+    const { event_slug, name, email, whatsapp, age, instagram, linkedin, invite_code } = await req.json();
     const event = EVENT_PRICES[event_slug];
     if (!event) return json({ error: "evento não encontrado" }, 400, cors);
 
@@ -80,6 +100,13 @@ Deno.serve(async (req) => {
       return json({ ok: true, already_paid: true }, 200, cors);
     }
 
+    let invite: { code: string; invitedBy: string | null } | null = null;
+    if (invite_code && String(invite_code).trim()) {
+      const result = await resolveInvite(admin, event_slug, String(invite_code).slice(0, 60), emailTrim);
+      if ("error" in result) return json({ error: result.error }, 400, cors);
+      invite = result;
+    }
+
     const reference = `event-${event_slug}-${crypto.randomUUID().slice(0, 8)}`;
     const SUMUP_API_KEY = Deno.env.get("SUMUP_API_KEY");
     const SUMUP_MERCHANT_CODE = Deno.env.get("SUMUP_MERCHANT_CODE");
@@ -101,10 +128,17 @@ Deno.serve(async (req) => {
     // own settings field. The tradeoff: sumup-webhook can't auto-confirm
     // payment against a shared link the way it does a real checkout_id,
     // so registrations stay 'interessada' until marked paid by hand.
-    const { data: tenantSettings } = await admin.from("tenant_settings").select("event_manual_payment_link_url").eq("id", 1).maybeSingle();
+    const { data: tenantSettings } = await admin.from("tenant_settings").select("event_manual_payment_link_url, event_invite_payment_link_url").eq("id", 1).maybeSingle();
     const manualLink = tenantSettings?.event_manual_payment_link_url?.trim();
+    const inviteLink = tenantSettings?.event_invite_payment_link_url?.trim();
 
-    if (manualLink) {
+    if (invite) {
+      // Guests always go to the discounted static link — the API checkout
+      // path below only knows the full price.
+      if (!inviteLink) return json({ error: "Convites indisponíveis no momento. Fale com a equipe da Nay." }, 503, cors);
+      provider = "manual_link";
+      hostedUrl = inviteLink;
+    } else if (manualLink) {
       provider = "manual_link";
       hostedUrl = manualLink;
     } else if (hasRealCredentials) {
@@ -146,7 +180,8 @@ Deno.serve(async (req) => {
     const row = {
       event_slug, full_name: fullName, email: emailTrim, phone,
       age: ageNum, instagram: instagramTrim, linkedin: linkedinTrim,
-      amount_cents: event.amountCents, currency: "BRL", status: "interessada",
+      amount_cents: invite ? event.inviteAmountCents : event.amountCents, currency: "BRL", status: "interessada",
+      invite_code: invite?.code ?? null, invited_by_registration_id: invite?.invitedBy ?? null,
       provider, sumup_checkout_id: sumupCheckoutId, sumup_checkout_reference: reference,
       sumup_link_url: hostedUrl, sumup_raw_status: rawStatus, updated_at: new Date().toISOString(),
     };
