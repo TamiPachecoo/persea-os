@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     if (invite) {
       // Guests always go to the discounted static link — the API checkout
       // path below only knows the full price.
-      if (!inviteLink) return json({ error: "Convites indisponíveis no momento. Fale com a equipe da Nay." }, 503, cors);
+      if (!inviteLink) return json({ error: "Convites indisponíveis no momento. Fale com a minha equipe." }, 503, cors);
       provider = "manual_link";
       hostedUrl = inviteLink;
     } else if (manualLink) {

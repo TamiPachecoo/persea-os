@@ -42,7 +42,7 @@ const waLink = (phone, text) => `https://wa.me/55${String(phone || '').replace(/
 const inviteMessage = (r, code) => [
   `Olá, ${firstName(r.full_name)}!`,
   '',
-  'Que alegria ter você na *Experiência PERSEA*.',
+  'Que alegria ter você na *PERSEA Experience*.',
   '',
   `Como participante, você recebeu ${code.max_uses === 1 ? '*um convite exclusivo*' : `*${code.max_uses} convites exclusivos*`} para levar alguém especial com você, com uma condição especial de convidada.`,
   '',
@@ -56,7 +56,7 @@ const inviteMessage = (r, code) => [
 const prepMessage = (r) => [
   `Olá, ${firstName(r.full_name)}!`,
   '',
-  'Estamos preparando cada detalhe da *Experiência PERSEA* para receber você.',
+  'Estamos preparando cada detalhe da *PERSEA Experience* para receber você.',
   '',
   'Para adaptarmos o espaço e o cardápio, precisamos saber se você tem alguma *alergia*, *restrição alimentar* ou *necessidade de acessibilidade*. Também queremos entender o que você espera viver neste dia.',
   '',
@@ -66,7 +66,7 @@ const prepMessage = (r) => [
   prepUrl(r.prep_token),
   '',
   'Com carinho,',
-  'Equipe Nay Murta',
+  'Nay',
 ].join('\n');
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
