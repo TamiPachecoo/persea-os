@@ -88,51 +88,63 @@ async function loadInviteCodes() {
   return data || [];
 }
 
+// The two things staff send each paid participant, as two labelled panels
+// so the guest invite and the preparation form can't be confused.
+const panel = (icon, title, status, body) => `
+  <div class="p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">${icon} ${title}</p>
+      ${status}
+    </div>
+    ${body}
+  </div>`;
+const pill = (text, done) => `<span class="badge ${done ? 'badge-completed' : 'badge-progress'}" style="font-size:10px;">${text}</span>`;
+const actionBtn = (attrs, label, primary = false) => `<button type="button" ${attrs} class="${primary ? 'btn-ghost' : 'btn-text'}" style="${primary ? 'padding:6px 12px;' : ''}font-size:11px;">${label}</button>`;
+const waBtn = (phone, text, label) => phone ? `<a href="${waLink(phone, text)}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">${label}</a>` : '';
+
 function inviteBlock(r) {
   const code = inviteCodes.find((c) => c.inviter_registration_id === r.id);
   if (!code) {
-    return r.status === 'pago'
-      ? `<button type="button" data-gen-invite="${r.id}" class="btn-ghost" style="padding:6px 12px;font-size:11px;">Gerar convite</button>`
-      : '';
+    return panel('✦', 'Convite para acompanhante', pill('Não gerado', false), `
+      <p class="text-xs text-white/40 mb-2">Link pessoal para ela convidar alguém com a condição especial de convidada.</p>
+      ${actionBtn(`data-gen-invite="${r.id}"`, 'Gerar convite', true)}`);
   }
   const guests = registrations.filter((g) => g.invite_code === code.code);
-  return `
+  return panel('✦', 'Convite para acompanhante',
+    code.active ? pill(`${guests.length} de ${code.max_uses} usados`, guests.length >= code.max_uses) : '<span class="badge badge-locked" style="font-size:10px;">Desativado</span>', `
+    <p class="text-xs text-white/40 mb-2">Código <span style="color:var(--gold);letter-spacing:.08em;">${esc(code.code)}</span> · limite de
+      <input type="number" min="0" max="20" value="${code.max_uses}" data-invite-max="${code.id}" class="field text-xs" style="width:52px;padding:2px 6px;display:inline-block;" /> acompanhantes</p>
     <div class="flex items-center gap-2 flex-wrap">
-      <span class="text-xs" style="color:var(--gold);letter-spacing:.08em;">${esc(code.code)}</span>
-      <span class="text-xs text-white/40">${guests.length} de
-        <input type="number" min="0" max="20" value="${code.max_uses}" data-invite-max="${code.id}" class="field text-xs" style="width:52px;padding:2px 6px;display:inline-block;" />
-        convites usados${code.active ? '' : ' · <span style="color:var(--terracotta);">desativado</span>'}</span>
-      <button type="button" data-copy-invite="${r.id}" class="btn-text" style="font-size:11px;">Copiar mensagem</button>
-      ${r.phone ? `<a href="${waLink(r.phone, inviteMessage(r, code))}" target="_blank" rel="noopener" class="btn-text" style="font-size:11px;">Enviar no WhatsApp</a>` : ''}
-      <button type="button" data-toggle-invite="${code.id}" class="btn-text" style="font-size:11px;">${code.active ? 'Desativar' : 'Reativar'}</button>
+      ${waBtn(r.phone, inviteMessage(r, code), 'Enviar convite no WhatsApp')}
+      ${actionBtn(`data-copy-invite="${r.id}"`, 'Copiar convite')}
+      ${actionBtn(`data-toggle-invite="${code.id}"`, code.active ? 'Desativar' : 'Reativar')}
     </div>
-    ${guests.length ? `<p class="text-xs text-white/30 mt-1">Convidadas: ${guests.map((g) => `${esc(g.full_name)} (${STATUS_LABEL[g.status] || g.status})`).join(', ')}</p>` : ''}`;
+    ${guests.length ? `<p class="text-xs text-white/30 mt-2">Acompanhantes: ${guests.map((g) => `${esc(g.full_name)} (${STATUS_LABEL[g.status] || g.status})`).join(', ')}</p>` : ''}`);
 }
 
 function prepBlock(r) {
+  const actions = `
+    <div class="flex items-center gap-2 flex-wrap ${r.prep_submitted_at ? 'mt-3' : ''}">
+      ${waBtn(r.phone, prepMessage(r), r.prep_submitted_at ? 'Reenviar formulário no WhatsApp' : 'Enviar formulário no WhatsApp')}
+      ${actionBtn(`data-copy-prep="${r.id}"`, 'Copiar formulário')}
+    </div>`;
   if (!r.prep_submitted_at) {
-    return `
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="text-xs text-white/40">Formulário de preparação: pendente</span>
-        <button type="button" data-copy-prep="${r.id}" class="btn-text" style="font-size:11px;">Copiar link</button>
-        ${r.phone ? `<a href="${waLink(r.phone, prepMessage(r))}" target="_blank" rel="noopener" class="btn-text" style="font-size:11px;">Enviar no WhatsApp</a>` : ''}
-      </div>`;
+    return panel('✎', 'Formulário de preparação', pill('Pendente', false), `
+      <p class="text-xs text-white/40 mb-2">Expectativas, alergias, restrições alimentares, acessibilidade e faturamento.</p>
+      ${actions}`);
   }
   const food = (r.prep_food_restrictions || []).join(', ') + (r.prep_food_note ? ` (${esc(r.prep_food_note)})` : '');
   const access = (r.prep_accessibility || []).filter((x) => x !== 'Não preciso');
   const item = (label, value) => `<div><p class="text-xs text-white/30">${label}</p><p class="text-sm">${value}</p></div>`;
-  return `
-    <div class="mt-1 p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
-      <p class="text-xs mb-2" style="color:var(--gold);">Preparação respondida ${formatDateTime(r.prep_submitted_at)}</p>
-      <div class="grid sm:grid-cols-2 gap-3">
-        ${item('Expectativas', esc((r.prep_expectations || []).join(' · ')) + (r.prep_expectations_note ? `<br><span class="text-white/50">"${esc(r.prep_expectations_note)}"</span>` : ''))}
-        ${item('Restrição alimentar', food || '—')}
-        ${item('Alergias', r.prep_allergies ? `<span style="color:var(--terracotta);">${esc(r.prep_allergies)}</span>` : 'Nenhuma')}
-        ${item('Acessibilidade', access.length ? `<span style="color:var(--terracotta);">${esc(access.join(', '))}${r.prep_accessibility_note ? ` (${esc(r.prep_accessibility_note)})` : ''}</span>` : (r.prep_accessibility ? 'Não precisa' : '—'))}
-        ${item('Faturamento mensal', `${esc(r.prep_revenue_current || '—')} → meta ${esc(r.prep_revenue_goal || '—')}`)}
-      </div>
-      <button type="button" data-copy-prep="${r.id}" class="btn-text mt-2" style="font-size:11px;">Copiar link do formulário</button>
-    </div>`;
+  return panel('✎', 'Formulário de preparação', pill(`Respondido ${formatDateTime(r.prep_submitted_at)}`, true), `
+    <div class="grid sm:grid-cols-2 gap-3">
+      ${item('Expectativas', esc((r.prep_expectations || []).join(' · ')) + (r.prep_expectations_note ? `<br><span class="text-white/50">"${esc(r.prep_expectations_note)}"</span>` : ''))}
+      ${item('Restrição alimentar', food || '—')}
+      ${item('Alergias', r.prep_allergies ? `<span style="color:var(--terracotta);">${esc(r.prep_allergies)}</span>` : 'Nenhuma')}
+      ${item('Acessibilidade', access.length ? `<span style="color:var(--terracotta);">${esc(access.join(', '))}${r.prep_accessibility_note ? ` (${esc(r.prep_accessibility_note)})` : ''}</span>` : (r.prep_accessibility ? 'Não precisa' : '—'))}
+      ${item('Faturamento mensal', `${esc(r.prep_revenue_current || '—')} → meta ${esc(r.prep_revenue_goal || '—')}`)}
+    </div>
+    ${actions}`);
 }
 
 async function loadRegistrations() {
@@ -157,7 +169,7 @@ function registrationRow(r) {
         ${social ? `<p class="text-xs mt-1">${social}</p>` : ''}
         <p class="text-xs text-white/20 mt-1">${brl(r.amount_cents)} · inscrita ${formatDateTime(r.created_at)}${r.paid_at ? ` · paga ${formatDateTime(r.paid_at)}` : ''}</p>
         ${r.invited_by_registration_id || r.invite_code ? `<p class="text-xs mt-1" style="color:var(--gold);">Convidada por ${esc(registrations.find((x) => x.id === r.invited_by_registration_id)?.full_name || 'participante')} · código ${esc(r.invite_code || '')}</p>` : ''}
-        ${r.status === 'pago' ? `<div class="mt-2 flex flex-col gap-2">${inviteBlock(r)}${prepBlock(r)}</div>` : ''}
+        ${r.status === 'pago' ? `<div class="mt-3 grid md:grid-cols-2 gap-3">${inviteBlock(r)}${prepBlock(r)}</div>` : ''}
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
