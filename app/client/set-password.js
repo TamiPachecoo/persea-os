@@ -21,6 +21,7 @@
 // format and are handled by the legacy fallback below so nothing already
 // in an inbox breaks.
 import { supabase } from '../shared/supabase-client.js';
+import { resetPasswordForEmail } from '../shared/supabase-auth.js';
 import { card, toast } from '../shared/ui.js';
 
 const content = document.getElementById('app-content');
@@ -37,8 +38,39 @@ async function waitForLegacySession(retries = 10) {
   return null;
 }
 
+// Access links expire (Supabase default: 1 hour), and an older email in the
+// inbox is always invalid once a newer one was sent. Rather than a dead end
+// that needs me to resend by hand, she can request a fresh link right here —
+// it goes through the same password-reset email, which lands back on this
+// page with a new token and also confirms her account.
 function renderInvalidLink() {
-  content.innerHTML = card(`<p class="text-sm" style="color:var(--terracotta);">Link inválido ou expirado. Peça para a Nay reenviar seu convite.</p>`);
+  content.innerHTML = card(`
+    <p class="text-sm mb-1" style="color:var(--gold);">Este link expirou</p>
+    <p class="text-sm text-white/60 mb-5">Por segurança, os links de acesso valem por pouco tempo. Digite o seu e-mail e eu envio um novo link agora mesmo.</p>
+    <form id="new-link-form" class="space-y-4">
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Seu e-mail</label>
+        <input type="email" name="email" required class="field" autocomplete="email" />
+      </div>
+      <button type="submit" class="btn-primary block w-full text-center" style="padding-top:11px;padding-bottom:11px;">Receber um novo link</button>
+    </form>
+  `);
+  document.getElementById('new-link-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const email = new FormData(e.target).get('email').trim();
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    const { error } = await resetPasswordForEmail(email);
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Receber um novo link';
+      toast(/rate|seconds|segundos/i.test(error.message) ? 'Aguarde um minuto e tente de novo.' : 'Não foi possível enviar agora. Tente de novo em instantes.', { tone: 'error' });
+      return;
+    }
+    content.innerHTML = card(`
+      <p class="text-sm mb-1" style="color:var(--gold);">Novo link enviado</p>
+      <p class="text-sm text-white/60">Enviei um novo link para <b style="color:var(--cream)">${email.replace(/[<>&"]/g, '')}</b>. Abra o e-mail e toque em "Criar minha senha" assim que receber, porque o link vale por pouco tempo. Se não aparecer em alguns minutos, olhe também a caixa de spam.</p>
+    `);
+  });
 }
 
 function renderForm() {
