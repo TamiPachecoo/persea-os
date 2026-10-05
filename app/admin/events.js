@@ -29,6 +29,7 @@ let registrations = [];
 let manualPaymentLinkUrl = '';
 let invitePaymentLinkUrl = '';
 let inviteCodes = [];
+let photoUrls = {}; // storage path → signed URL, for the preparation photos
 
 const EVENT_SITE = 'https://perseaexperience.naymurta.com';
 const INVITE_PRICE = 'R$ 697,90';
@@ -59,7 +60,9 @@ const prepMessage = (r) => [
   '',
   'Para adaptarmos o espaço e o cardápio, precisamos saber se você tem alguma *alergia*, *restrição alimentar* ou *necessidade de acessibilidade*. Também queremos entender o que você espera viver neste dia.',
   '',
-  'São 6 perguntas rápidas, leva cerca de 1 minuto:',
+  'São 6 perguntas rápidas e, se puder, algumas fotos para uma dinâmica muito especial do dia: uma *foto sua de criança* e fotos de *pessoas especiais para você*.',
+  '',
+  'Acesse aqui:',
   prepUrl(r.prep_token),
   '',
   'Com carinho,',
@@ -122,6 +125,20 @@ function inviteBlock(r) {
     ${guests.length ? `<p class="text-xs text-white/30 mt-2">Acompanhantes: ${guests.map((g) => `${esc(g.full_name)} (${STATUS_LABEL[g.status] || g.status})`).join(', ')}</p>` : ''}`);
 }
 
+// Childhood / special-people photos: thumbnails that open the full-size
+// original (for printing). Shown whether or not the form was submitted —
+// photos save on upload and may arrive before or after the answers.
+function photosHtml(r) {
+  const child = r.prep_child_photos || [], special = r.prep_special_photos || [];
+  const row = (label, list) => `
+    <div><p class="text-xs text-white/30 mb-1">${label} (${list.length})</p>
+      ${list.length ? `<div class="flex gap-2 flex-wrap">${list.map((ph) => photoUrls[ph.path]
+        ? `<a href="${photoUrls[ph.path]}" target="_blank" rel="noopener" title="Abrir em tamanho original"><img src="${photoUrls[ph.path]}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--line);"></a>`
+        : '<span class="text-xs text-white/30">foto</span>').join('')}</div>` : '<p class="text-xs text-white/20">Nenhuma ainda</p>'}
+    </div>`;
+  return `<div class="grid sm:grid-cols-2 gap-3 mt-3 pt-3" style="border-top:1px solid var(--line);">${row('Foto de criança', child)}${row('Pessoas especiais', special)}</div>`;
+}
+
 function prepBlock(r) {
   const actions = `
     <div class="flex items-center gap-2 flex-wrap ${r.prep_submitted_at ? 'mt-3' : ''}">
@@ -130,7 +147,8 @@ function prepBlock(r) {
     </div>`;
   if (!r.prep_submitted_at) {
     return panel('✎', 'Formulário de preparação', pill('Pendente', false), `
-      <p class="text-xs text-white/40 mb-2">Expectativas, alergias, restrições alimentares, acessibilidade e faturamento.</p>
+      <p class="text-xs text-white/40 mb-2">Expectativas, alergias, restrições alimentares, acessibilidade, faturamento e fotos.</p>
+      ${(r.prep_child_photos || []).length || (r.prep_special_photos || []).length ? photosHtml(r) : ''}
       ${actions}`);
   }
   const food = (r.prep_food_restrictions || []).join(', ') + (r.prep_food_note ? ` (${esc(r.prep_food_note)})` : '');
@@ -144,6 +162,7 @@ function prepBlock(r) {
       ${item('Acessibilidade', access.length ? `<span style="color:var(--terracotta);">${esc(access.join(', '))}${r.prep_accessibility_note ? ` (${esc(r.prep_accessibility_note)})` : ''}</span>` : (r.prep_accessibility ? 'Não precisa' : '—'))}
       ${item('Faturamento mensal', `${esc(r.prep_revenue_current || '—')} → meta ${esc(r.prep_revenue_goal || '—')}`)}
     </div>
+    ${photosHtml(r)}
     ${actions}`);
 }
 
@@ -334,6 +353,12 @@ async function refresh() {
   let links;
   [registrations, links, inviteCodes] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes()]);
   [manualPaymentLinkUrl, invitePaymentLinkUrl] = links;
+  const paths = registrations.flatMap((r) => [...(r.prep_child_photos || []), ...(r.prep_special_photos || [])].map((ph) => ph.path));
+  photoUrls = {};
+  if (paths.length) {
+    const { data } = await supabase.storage.from('event-prep-photos').createSignedUrls(paths, 3600);
+    (data || []).forEach((d) => { if (d.signedUrl) photoUrls[d.path] = d.signedUrl; });
+  }
   render();
 }
 

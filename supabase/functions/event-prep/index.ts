@@ -34,6 +34,21 @@ const FOOD = ["Nenhuma", "Vegetariana", "Vegana", "Sem glúten", "Sem lactose", 
 const ACCESS = ["Não preciso", "Cadeira de rodas ou mobilidade reduzida", "Acesso sem escadas", "Assento com apoio ou mais conforto", "Deficiência auditiva", "Deficiência visual", "Gestante", "Outra"];
 const REVENUE_NOW = ["Até R$ 5 mil", "R$ 5 mil a R$ 10 mil", "R$ 10 mil a R$ 20 mil", "R$ 20 mil a R$ 50 mil", "Acima de R$ 50 mil"];
 const REVENUE_GOAL = ["Até R$ 10 mil", "R$ 10 mil a R$ 20 mil", "R$ 20 mil a R$ 50 mil", "R$ 50 mil a R$ 100 mil", "Acima de R$ 100 mil"];
+// Photos for the event dynamic: childhood photo(s) and special people.
+const BUCKET = "event-prep-photos";
+const PHOTO_KINDS: Record<string, { column: string; max: number }> = {
+  child: { column: "prep_child_photos", max: 3 },
+  special: { column: "prep_special_photos", max: 3 },
+};
+const PHOTO_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif" };
+type Photo = { path: string };
+// deno-lint-ignore no-explicit-any
+async function withViewUrls(admin: any, photos: Photo[]) {
+  if (!photos.length) return [];
+  const { data } = await admin.storage.from(BUCKET).createSignedUrls(photos.map((p) => p.path), 3600);
+  return photos.map((p, i) => ({ ...p, url: data?.[i]?.signedUrl || null }));
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const clean = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max) || null;
 
@@ -48,7 +63,7 @@ Deno.serve(async (req) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: reg } = await admin.from("event_registrations")
-      .select("id, full_name, prep_submitted_at, prep_expectations, prep_expectations_note, prep_food_restrictions, prep_food_note, prep_allergies, prep_accessibility, prep_accessibility_note, prep_revenue_current, prep_revenue_goal")
+      .select("id, full_name, prep_submitted_at, prep_expectations, prep_expectations_note, prep_food_restrictions, prep_food_note, prep_allergies, prep_accessibility, prep_accessibility_note, prep_revenue_current, prep_revenue_goal, prep_child_photos, prep_special_photos")
       .eq("prep_token", token).maybeSingle();
     if (!reg) return json({ error: "Link inválido ou expirado." }, 404, cors);
 
@@ -59,9 +74,51 @@ Deno.serve(async (req) => {
         answers: {
           expectations: reg.prep_expectations || [], expectations_note: reg.prep_expectations_note || "",
           food: reg.prep_food_restrictions || [], food_note: reg.prep_food_note || "",
+          child_photos: await withViewUrls(admin, reg.prep_child_photos || []),
+          special_photos: await withViewUrls(admin, reg.prep_special_photos || []),
           allergies: reg.prep_allergies || "", accessibility: reg.prep_accessibility || [], accessibility_note: reg.prep_accessibility_note || "", revenue_current: reg.prep_revenue_current || "", revenue_goal: reg.prep_revenue_goal || "",
         },
       }, 200, cors);
+    }
+
+    // 1) a one-time signed upload slot inside her own folder; the browser
+    // uploads the file straight to Storage with it.
+    if (body.action === "photo_upload_url") {
+      const kind = PHOTO_KINDS[body.kind];
+      const ext = PHOTO_EXT[String(body.content_type || "")];
+      if (!kind || !ext) return json({ error: "Envie uma imagem (JPG, PNG, WEBP ou HEIC)." }, 400, cors);
+      if ((reg[kind.column] || []).length >= kind.max) return json({ error: `Limite de ${kind.max} fotos aqui.` }, 400, cors);
+      const path = `${reg.id}/${body.kind}-${crypto.randomUUID()}.${ext}`;
+      const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(path);
+      if (error) return json({ error: "Não foi possível preparar o envio da foto." }, 500, cors);
+      return json({ path, signed_url: data.signedUrl }, 200, cors);
+    }
+    // 2) once uploaded, attach it to her registration (only paths in her folder that really exist)
+    if (body.action === "photo_add") {
+      const kind = PHOTO_KINDS[body.kind];
+      const path = String(body.path || "");
+      if (!kind || !path.startsWith(`${reg.id}/${body.kind}-`)) return json({ error: "Foto inválida." }, 400, cors);
+      const list: Photo[] = reg[kind.column] || [];
+      if (list.length >= kind.max) return json({ error: `Limite de ${kind.max} fotos aqui.` }, 400, cors);
+      const folder = path.split("/")[0], name = path.split("/")[1];
+      const { data: found } = await admin.storage.from(BUCKET).list(folder, { search: name });
+      if (!found?.some((f: { name: string }) => f.name === name)) return json({ error: "A foto não chegou. Tente de novo." }, 400, cors);
+      const next = list.filter((p) => p.path !== path).concat({ path });
+      const { error } = await admin.from("event_registrations").update({ [kind.column]: next, updated_at: new Date().toISOString() }).eq("id", reg.id);
+      if (error) return json({ error: "Não foi possível salvar a foto." }, 500, cors);
+      return json({ ok: true, photos: await withViewUrls(admin, next) }, 200, cors);
+    }
+    // 3) remove one of her photos (and the file)
+    if (body.action === "photo_remove") {
+      const kind = PHOTO_KINDS[body.kind];
+      const path = String(body.path || "");
+      if (!kind) return json({ error: "Foto inválida." }, 400, cors);
+      const list: Photo[] = reg[kind.column] || [];
+      if (!list.some((p) => p.path === path)) return json({ error: "Foto não encontrada." }, 404, cors);
+      const next = list.filter((p) => p.path !== path);
+      await admin.storage.from(BUCKET).remove([path]);
+      await admin.from("event_registrations").update({ [kind.column]: next, updated_at: new Date().toISOString() }).eq("id", reg.id);
+      return json({ ok: true, photos: await withViewUrls(admin, next) }, 200, cors);
     }
 
     if (body.action !== "submit") return json({ error: "ação inválida" }, 400, cors);
