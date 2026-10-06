@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Poppins:wght@300;400;500&display=swap">
 <style>
+html,body{margin:0}
 /* Layout: a cinematic opening, then four full-height portals side by side (stacked on phones); choosing one opens its own full-screen chapter through a gold circular reveal. */
 :root{
   --ink:#0b0908;
@@ -39,6 +40,7 @@ a{color:inherit}
 .i-exp1{background-image:url("/portais/exp1.jpg")}
 .i-vip1{background-image:url("/portais/vip1.jpg")}
 .i-pal1{background-image:url("/portais/pal1.jpg")}
+.i-palw{background-image:url("/portais/palw.jpg")}
 .i-symbol{background-image:url("/portais/symbol.png")}
 .i-logo{background-image:url("/portais/logo.png")}
 
@@ -74,6 +76,8 @@ a{color:inherit}
 .media .poster.i-vip1{background-position:center 40%} /* keeps her face in frame on wide panels */
 .media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s ease}
 .media video.ready{opacity:1}
+.m-palestras video{object-position:center 22%}.m-palestras .poster{background-position:center 22%} /* stage clip is portrait, face near the top */
+.m-wide video,.m-wide .poster{object-position:center;background-position:center}
 
 /* portals */
 .hub{position:fixed;inset:0;display:flex;padding-top:0}
@@ -172,7 +176,7 @@ a{color:inherit}
 </style>
 
 <div class="intro" id="intro" aria-hidden="true">
-  <div class="media"><div class="layer poster i-pal1"></div><video muted loop playsinline preload="auto"><source src="/portais/videos/palestras.webm" type="video/webm"><source src="/portais/videos/palestras.mp4" type="video/mp4"></video></div>
+  <div class="media" id="intro-media"></div>
   <div class="intro-stack">
     <div class="sym i-symbol"></div>
     <div class="word i-logo"></div>
@@ -239,7 +243,7 @@ const PATHS = [
     copy:'Bastidores, reflexões e convites antecipados, direto no seu WhatsApp. A comunidade é gratuita e você sai quando quiser.',
     facts:['Comunidade do WhatsApp','Cadastro gratuito'],
     cta:'Entrar no grupo', href:'https://chat.whatsapp.com/C8ozxm3BHoh3CXZWPHuQs6?s=cl&p=i&mlu=0&ilr=4', hint:'Abre o WhatsApp. Cadastro gratuito.' },
-  { id:'palestras', a:'pal1', b:'pal2',
+  { id:'palestras', a:'pal1', b:'pal2', wide:'palw',
     eyebrow:'Palestras e Treinamentos', name:'Palestras e Treinamentos', meta:'Para empresas e eventos', title:'Palestras e Treinamentos',
     sub:'Imagem, presença e percepção de valor para lideranças e times.',
     cTitle:'Minha palestra <em>no seu palco.</em>',
@@ -250,7 +254,12 @@ const PATHS = [
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const hub = document.getElementById('hub');
-const media = (p) => `<div class="media ${p.bw ? 'bw' : ''}"><div class="layer poster i-${p.a}"></div><video muted loop playsinline preload="auto"><source src="/portais/videos/${p.id}.webm" type="video/webm"><source src="/portais/videos/${p.id}.mp4" type="video/mp4"></video></div>`;
+// Wide screens get a landscape cut when the path has one (the stage clip is filmed portrait).
+const isWide = () => innerWidth > 760 && innerWidth / innerHeight > 1;
+const media = (p, wide = false) => {
+  const w = wide && p.wide, src = `/portais/videos/${p.id}${w ? '-wide' : ''}`;
+  return `<div class="media m-${p.id} ${w ? 'm-wide' : ''} ${p.bw ? 'bw' : ''}"><div class="layer poster i-${w ? p.wide : p.a}"></div><video muted loop playsinline preload="auto"><source src="${src}.webm" type="video/webm"><source src="${src}.mp4" type="video/mp4"></video></div>`;
+};
 // Start every video in a container (muted autoplay is allowed everywhere); fade it in once frames arrive.
 function playVideos(root) {
   root.querySelectorAll('video').forEach((v) => {
@@ -343,7 +352,7 @@ function openChapter(i, x, y, viaKeyboard = false) {
   stopCycle();
   document.documentElement.style.setProperty('--cx', x + 'px');
   document.documentElement.style.setProperty('--cy', y + 'px');
-  document.getElementById('c-media').outerHTML = media(p).replace('class="media', 'id="c-media" class="media');
+  document.getElementById('c-media').outerHTML = media(p, isWide()).replace('class="media', 'id="c-media" class="media');
   chapter.hidden = false;
   renderChapterBody(p, 'intro');
   playVideos(chapter);
@@ -363,6 +372,7 @@ const intro = document.getElementById('intro');
 let introTimer = null;
 function endIntro() { clearTimeout(introTimer); intro.classList.add('done'); startCycle(); }
 document.getElementById('skip').addEventListener('click', endIntro);
+document.getElementById('intro-media').outerHTML = media(PATHS.find((p) => p.id === 'palestras'), isWide());
 playVideos(document);
 if (reduce) endIntro(); else introTimer = setTimeout(endIntro, 3900);
 
