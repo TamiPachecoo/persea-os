@@ -91,12 +91,13 @@ Deno.serve(async (req) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Already paid — nothing to charge again, just let her know.
+    // Already paid, or confirmed through the direct sign-up link
+    // (event-prep) — nothing to charge, just let her know.
     const { data: existingRows } = await admin.from("event_registrations").select("*")
       .eq("event_slug", event_slug).eq("email", emailTrim)
       .order("created_at", { ascending: false }).limit(1);
     const existing = existingRows?.[0] ?? null;
-    if (existing?.status === "pago") {
+    if (existing?.status === "pago" || existing?.status === "confirmada") {
       return json({ ok: true, already_paid: true }, 200, cors);
     }
 

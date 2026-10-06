@@ -10,6 +10,9 @@
 // personal invite code (event_invite_codes, guest price via
 // event-registration-create) and shows her answers to the preparation
 // form (event-prep, preparacao.html on the event site).
+// People who registered outside the system get the direct sign-up link
+// (preparacao.html?c=<code>): their details + the preparation form create
+// a 'confirmada' registration that shows up here once they finish.
 import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { renderShell, card, toast, formatDateTime } from '../shared/ui.js';
@@ -18,8 +21,8 @@ if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'events.html', title: 'Eventos' });
 const content = document.getElementById('app-content');
 
-const STATUS_LABEL = { interessada: 'Interessada', pago: 'Pago', falhou: 'Falhou', expirado: 'Expirado', cancelado: 'Cancelado' };
-const STATUS_CLASS = { interessada: 'badge-progress', pago: 'badge-completed', falhou: 'badge-locked', expirado: 'badge-locked', cancelado: 'badge-locked' };
+const STATUS_LABEL = { interessada: 'Interessada', pago: 'Pago', confirmada: 'Confirmada', falhou: 'Falhou', expirado: 'Expirado', cancelado: 'Cancelado' };
+const STATUS_CLASS = { interessada: 'badge-progress', pago: 'badge-completed', confirmada: 'badge-completed', falhou: 'badge-locked', expirado: 'badge-locked', cancelado: 'badge-locked' };
 const statusBadge = (s) => `<span class="badge ${STATUS_CLASS[s] || 'badge-locked'}">${STATUS_LABEL[s] || s}</span>`;
 const brl = (cents) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -29,6 +32,7 @@ let registrations = [];
 let manualPaymentLinkUrl = '';
 let invitePaymentLinkUrl = '';
 let inviteCodes = [];
+let directSignupCode = '';
 let photoUrls = {}; // storage path → signed URL, for the preparation photos
 
 const EVENT_SITE = 'https://perseaexperience.naymurta.com';
@@ -36,6 +40,13 @@ const INVITE_PRICE = 'R$ 697,90';
 const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || '';
 const inviteUrl = (code) => `${EVENT_SITE}/?convite=${encodeURIComponent(code)}`;
 const prepUrl = (token) => `${EVENT_SITE}/preparacao.html?t=${token}`;
+const directUrl = (code) => `${EVENT_SITE}/preparacao.html?c=${encodeURIComponent(code)}`;
+// Attending = paid on the event page, or confirmed through the direct link.
+const attending = (r) => r.status === 'pago' || r.status === 'confirmada';
+const isDirect = (r) => r.provider === 'cadastro_direto';
+// A direct sign-up only counts once she finishes the form; until then she
+// is listed apart, so the main list stays the real attendee list.
+const directInProgress = (r) => isDirect(r) && r.status === 'confirmada' && !r.prep_submitted_at;
 const waLink = (phone, text) => `https://wa.me/55${String(phone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')}?text=${encodeURIComponent(text)}`;
 // WhatsApp messages: *bold* and _italic_ are WhatsApp formatting; blank
 // lines keep each idea on its own so it reads as a note, not a block.
@@ -68,6 +79,22 @@ const prepMessage = (r) => [
   'Com carinho,',
   'Nay',
 ].join('\n');
+// Same message for everyone who registered outside the system (one shared link).
+const directMessage = (code) => [
+  'Olá!',
+  '',
+  'Estou preparando cada detalhe da *PERSEA Experience* para receber você.',
+  '',
+  'Para confirmar a sua presença e adaptarmos o espaço e o cardápio, preciso de alguns dados seus e de saber se você tem alguma *alergia*, *restrição alimentar* ou *necessidade de acessibilidade*.',
+  '',
+  'Leva poucos minutos e, se puder, envie também uma *foto sua de criança* e fotos de *pessoas especiais para você*, para uma dinâmica muito especial do dia.',
+  '',
+  'Acesse aqui:',
+  directUrl(code),
+  '',
+  'Com carinho,',
+  'Nay',
+].join('\n');
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Personal code from her first name, e.g. MARY-PERSEA, MARY2-PERSEA if taken.
@@ -83,8 +110,8 @@ async function copyText(text) {
 }
 
 async function loadTenantLinks() {
-  const { data } = await supabase.from('tenant_settings').select('event_manual_payment_link_url, event_invite_payment_link_url').eq('id', 1).maybeSingle();
-  return [data?.event_manual_payment_link_url || '', data?.event_invite_payment_link_url || ''];
+  const { data } = await supabase.from('tenant_settings').select('event_manual_payment_link_url, event_invite_payment_link_url, event_direct_signup_code').eq('id', 1).maybeSingle();
+  return [data?.event_manual_payment_link_url || '', data?.event_invite_payment_link_url || '', data?.event_direct_signup_code || ''];
 }
 async function loadInviteCodes() {
   const { data } = await supabase.from('event_invite_codes').select('*').order('created_at');
@@ -183,12 +210,13 @@ function registrationRow(r) {
         <div class="flex items-center gap-2 flex-wrap">
           <p class="font-medium break-words">${r.full_name}</p>
           ${statusBadge(r.status)}
+          ${isDirect(r) ? '<span class="badge badge-locked" style="font-size:10px;">Cadastro direto</span>' : ''}
         </div>
         <p class="text-xs text-white/30 break-words">${r.email} · ${r.phone || 'sem telefone'}${r.age ? ` · ${r.age} anos` : ''}</p>
         ${social ? `<p class="text-xs mt-1">${social}</p>` : ''}
-        <p class="text-xs text-white/20 mt-1">${brl(r.amount_cents)} · inscrita ${formatDateTime(r.created_at)}${r.paid_at ? ` · paga ${formatDateTime(r.paid_at)}` : ''}</p>
+        <p class="text-xs text-white/20 mt-1">${isDirect(r) && !r.paid_at ? 'Pelo link de cadastro direto' : brl(r.amount_cents)} · inscrita ${formatDateTime(r.created_at)}${r.paid_at ? ` · paga ${formatDateTime(r.paid_at)}` : ''}</p>
         ${r.invited_by_registration_id || r.invite_code ? `<p class="text-xs mt-1" style="color:var(--gold);">Convidada por ${esc(registrations.find((x) => x.id === r.invited_by_registration_id)?.full_name || 'participante')} · código ${esc(r.invite_code || '')}</p>` : ''}
-        ${r.status === 'pago' ? `<div class="mt-3 grid md:grid-cols-2 gap-3">${inviteBlock(r)}${prepBlock(r)}</div>` : ''}
+        ${attending(r) ? `<div class="mt-3 grid md:grid-cols-2 gap-3">${inviteBlock(r)}${prepBlock(r)}</div>` : ''}
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
@@ -205,9 +233,12 @@ function registrationRow(r) {
 function render() {
   const interessadas = registrations.filter((r) => r.status === 'interessada').length;
   const pagas = registrations.filter((r) => r.status === 'pago').length;
+  const confirmadas = registrations.filter((r) => r.status === 'confirmada' && !directInProgress(r)).length;
+  const inProgress = registrations.filter(directInProgress);
   const receita = registrations.filter((r) => r.status === 'pago').reduce((s, r) => s + r.amount_cents, 0);
 
   const filtered = registrations.filter((r) => {
+    if (directInProgress(r)) return false;
     const matchesSearch = !search || r.full_name.toLowerCase().includes(search.toLowerCase()) || r.email.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = !statusFilter || r.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -220,10 +251,25 @@ function render() {
     </div>
     <div class="grid sm:grid-cols-4 gap-4 mb-6">
       ${card(`<p class="text-xs text-white/30 mb-1">Interessadas</p><p class="text-2xl font-serif">${interessadas}</p>`)}
-      ${card(`<p class="text-xs text-white/30 mb-1">Pagas</p><p class="text-2xl font-serif" style="color:var(--gold);">${pagas}</p>`)}
+      ${card(`<p class="text-xs text-white/30 mb-1">Participantes</p><p class="text-2xl font-serif" style="color:var(--gold);">${pagas + confirmadas}</p><p class="text-xs text-white/30">${pagas} pagas${confirmadas ? ` · ${confirmadas} cadastro direto` : ''}</p>`)}
       ${card(`<p class="text-xs text-white/30 mb-1">Receita confirmada</p><p class="text-2xl font-serif" style="color:var(--gold);">${brl(receita)}</p>`)}
-      ${card(`<p class="text-xs text-white/30 mb-1">Preparação respondida</p><p class="text-2xl font-serif">${registrations.filter((r) => r.status === 'pago' && r.prep_submitted_at).length} <span class="text-sm text-white/30">de ${pagas}</span></p>`)}
+      ${card(`<p class="text-xs text-white/30 mb-1">Preparação respondida</p><p class="text-2xl font-serif">${registrations.filter((r) => attending(r) && r.prep_submitted_at).length} <span class="text-sm text-white/30">de ${pagas + confirmadas}</span></p>`)}
     </div>
+    ${card(`
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <p class="text-sm text-white/50">Link de cadastro direto</p>
+        <span class="text-xs text-white/30">para quem não se inscreveu pelo site</span>
+      </div>
+      <p class="text-xs text-white/30 mb-4">Um único link para todas as pessoas que vão ao evento mas não passaram pela página de inscrição. Ela preenche os dados (nome, e-mail, WhatsApp, Instagram/LinkedIn, idade) e o formulário de preparação; quando termina, aparece na lista abaixo como <b>Confirmada · Cadastro direto</b>. Se o mesmo e-mail já estiver inscrito, as respostas vão para a inscrição existente.</p>
+      ${directSignupCode ? `
+      <div class="flex flex-wrap gap-2 items-center">
+        <input readonly class="field text-sm" style="flex:1; min-width:260px;" value="${esc(directUrl(directSignupCode))}" onclick="this.select()" />
+        ${actionBtn('data-copy-direct-msg', 'Copiar mensagem', true)}
+        ${actionBtn('data-copy-direct-link', 'Copiar só o link')}
+        ${actionBtn('data-rotate-direct', 'Gerar novo link')}
+      </div>` : actionBtn('data-rotate-direct', 'Criar link', true)}
+      ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
+    `, 'mb-6')}
     ${card(`
       <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
       <p class="text-xs text-white/30 mb-4">Cole aqui um Link de Pagamento criado no app da SumUp (com parcelas e "Não repassar a taxa" configurados). Enquanto este campo estiver preenchido, toda nova inscrição é enviada para este link em vez de um checkout automático — isso significa que o pagamento não é confirmado sozinho: marque "Paga" manualmente aqui depois de conferir no seu app SumUp. Deixe em branco para voltar ao checkout automático (sem parcelamento).</p>
@@ -309,6 +355,18 @@ function render() {
       await refresh();
     });
   });
+  content.querySelector('[data-copy-direct-msg]')?.addEventListener('click', () => copyText(directMessage(directSignupCode)));
+  content.querySelector('[data-copy-direct-link]')?.addEventListener('click', () => copyText(directUrl(directSignupCode)));
+  // A new code switches the link off for anyone holding the old one.
+  content.querySelector('[data-rotate-direct]')?.addEventListener('click', async () => {
+    if (directSignupCode && !confirm('Gerar um novo link? O link atual deixa de funcionar para quem ainda não abriu.')) return;
+    const code = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const { error } = await supabase.from('tenant_settings').update({ event_direct_signup_code: code }).eq('id', 1);
+    if (error) { toast(error.message, { tone: 'error' }); return; }
+    directSignupCode = code;
+    toast('Novo link criado.');
+    render();
+  });
   content.querySelectorAll('[data-copy-prep]').forEach((btn) => {
     btn.addEventListener('click', () => copyText(prepMessage(registrations.find((x) => x.id === btn.dataset.copyPrep))));
   });
@@ -352,7 +410,7 @@ function render() {
 async function refresh() {
   let links;
   [registrations, links, inviteCodes] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes()]);
-  [manualPaymentLinkUrl, invitePaymentLinkUrl] = links;
+  [manualPaymentLinkUrl, invitePaymentLinkUrl, directSignupCode] = links;
   const paths = registrations.flatMap((r) => [...(r.prep_child_photos || []), ...(r.prep_special_photos || [])].map((ph) => ph.path));
   photoUrls = {};
   if (paths.length) {

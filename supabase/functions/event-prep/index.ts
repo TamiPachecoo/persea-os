@@ -3,6 +3,12 @@
 // unguessable per-registration prep_token is the only key: it reads back
 // her first name and any earlier answers, and saves new ones onto her own
 // event_registrations row, which staff see in the CRM's Eventos tab.
+//
+// Direct sign-up (preparacao.html?c=<code>): for attendees who never went
+// through the event page checkout. With the shared code from
+// tenant_settings.event_direct_signup_code she first sends her details;
+// that creates (or reuses, by e-mail) her registration as 'confirmada' and
+// hands back its prep_token, and the form continues exactly as above.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ALLOWED_ORIGINS = [
@@ -49,6 +55,16 @@ async function withViewUrls(admin: any, photos: Photo[]) {
   return photos.map((p, i) => ({ ...p, url: data?.[i]?.signedUrl || null }));
 }
 
+const EVENT_SLUG = "persea-experience";
+const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+// deno-lint-ignore no-explicit-any
+async function signupCodeOk(admin: any, code: unknown) {
+  const c = String(code || "").trim();
+  if (!c || c.length > 64) return false;
+  const { data } = await admin.from("tenant_settings").select("event_direct_signup_code").eq("id", 1).maybeSingle();
+  return !!data?.event_direct_signup_code && data.event_direct_signup_code === c;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const clean = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max) || null;
 
@@ -58,10 +74,49 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405, cors);
   try {
     const body = await req.json();
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    if (body.action === "signup_check") {
+      return (await signupCodeOk(admin, body.code)) ? json({ ok: true }, 200, cors) : json({ error: "Link inválido." }, 404, cors);
+    }
+    if (body.action === "signup") {
+      if (!(await signupCodeOk(admin, body.code))) return json({ error: "Link inválido." }, 404, cors);
+      const p = body.person || {};
+      const fullName = clean(p.name, 120), email = clean(p.email, 200)?.toLowerCase() || null, phone = clean(p.whatsapp, 40);
+      const instagram = clean(p.instagram, 100), linkedin = clean(p.linkedin, 200);
+      const age = p.age === undefined || p.age === null || p.age === "" ? null : Number(p.age);
+      if (!fullName || fullName.split(/\s+/).length < 2) return json({ error: "Escreva seu nome completo." }, 400, cors);
+      if (!email || !isEmail(email)) return json({ error: "Confira o seu e-mail." }, 400, cors);
+      if (!phone || phone.replace(/\D/g, "").length < 10) return json({ error: "Confira o seu WhatsApp com DDD." }, 400, cors);
+      if (!instagram && !linkedin) return json({ error: "Informe seu Instagram ou LinkedIn." }, 400, cors);
+      if (age !== null && (!Number.isInteger(age) || age < 14 || age > 110)) return json({ error: "Confira a sua idade." }, 400, cors);
+
+      // Same e-mail already registered (paid on the event page, or started
+      // this form before): continue on that registration instead of a duplicate.
+      const { data: existing } = await admin.from("event_registrations")
+        .select("id, status, prep_token, prep_submitted_at, phone, instagram, linkedin, age")
+        .eq("event_slug", EVENT_SLUG).ilike("email", email.replace(/[\\%_]/g, (m) => `\\${m}`)) // case-insensitive exact match
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (existing?.prep_submitted_at) return json({ error: "Já recebi as suas respostas com este e-mail. Até o dia 24!" }, 409, cors);
+      if (existing) {
+        const { error } = await admin.from("event_registrations").update({
+          phone: existing.phone || phone, instagram: existing.instagram || instagram, linkedin: existing.linkedin || linkedin, age: existing.age ?? age,
+          ...(existing.status === "pago" ? {} : { status: "confirmada", provider: "cadastro_direto", full_name: fullName }),
+          updated_at: new Date().toISOString(),
+        }).eq("id", existing.id);
+        if (error) return json({ error: "Não foi possível salvar agora." }, 500, cors);
+        return json({ ok: true, token: existing.prep_token }, 200, cors);
+      }
+      const { data: created, error } = await admin.from("event_registrations").insert({
+        event_slug: EVENT_SLUG, full_name: fullName, email, phone, instagram, linkedin, age,
+        amount_cents: 0, currency: "BRL", status: "confirmada", provider: "cadastro_direto",
+      }).select("prep_token").single();
+      if (error) return json({ error: "Não foi possível salvar agora." }, 500, cors);
+      return json({ ok: true, token: created.prep_token }, 200, cors);
+    }
+
     const token = String(body.token || "");
     if (!UUID.test(token)) return json({ error: "Link inválido." }, 400, cors);
-
-    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: reg } = await admin.from("event_registrations")
       .select("id, full_name, prep_submitted_at, prep_expectations, prep_expectations_note, prep_food_restrictions, prep_food_note, prep_allergies, prep_accessibility, prep_accessibility_note, prep_revenue_current, prep_revenue_goal, prep_child_photos, prep_special_photos")
       .eq("prep_token", token).maybeSingle();
