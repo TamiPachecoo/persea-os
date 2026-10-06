@@ -258,17 +258,30 @@ const hub = document.getElementById('hub');
 const isWide = () => innerWidth > 760 && innerWidth / innerHeight > 1;
 const media = (p, wide = false) => {
   const w = wide && p.wide, src = `/portais/videos/${p.id}${w ? '-wide' : ''}`;
-  return `<div class="media m-${p.id} ${w ? 'm-wide' : ''} ${p.bw ? 'bw' : ''}"><div class="layer poster i-${w ? p.wide : p.a}"></div><video muted loop playsinline preload="auto"><source src="${src}.webm" type="video/webm"><source src="${src}.mp4" type="video/mp4"></video></div>`;
+  return `<div class="media m-${p.id} ${w ? 'm-wide' : ''} ${p.bw ? 'bw' : ''}"><div class="layer poster i-${w ? p.wide : p.a}"></div><video muted loop playsinline preload="auto"><source src="${src}.mp4" type="video/mp4"><source src="${src}.webm" type="video/webm"></video></div>`;
 };
-// Start every video in a container (muted autoplay is allowed everywhere); fade it in once frames arrive.
+// Fade each video in once frames arrive. Only the video on screen plays (see syncVideos):
+// decoding five at once makes slower computers drop frames.
 function playVideos(root) {
   root.querySelectorAll('video').forEach((v) => {
     v.muted = true;
     const show = () => v.classList.add('ready');
     if (v.readyState >= 3) show(); else v.addEventListener('canplay', show, { once: true });
-    if (!reduce) v.play().catch(() => {});
+  });
+  syncVideos();
+}
+function syncVideos() {
+  const intro = document.getElementById('intro'), chapter = document.getElementById('chapter');
+  let live;
+  if (chapter && !chapter.hidden) live = chapter.querySelector('video');
+  else if (intro && !intro.classList.contains('done')) live = intro.querySelector('video');
+  else live = document.querySelector('.portal.active video');
+  document.querySelectorAll('video').forEach((v) => {
+    if (v === live && !reduce && !document.hidden) { if (v.paused) v.play().catch(() => {}); }
+    else if (!v.paused) v.pause();
   });
 }
+document.addEventListener('visibilitychange', () => syncVideos());
 
 hub.innerHTML = PATHS.map((p, i) => `
   <button class="portal" type="button" data-i="${i}" aria-label="${p.name}: ${p.meta}">
@@ -286,6 +299,7 @@ function setActive(i) {
   active = i;
   hub.classList.toggle('has-active', i >= 0);
   portals.forEach((el, n) => el.classList.toggle('active', n === i));
+  syncVideos();
   // restart the progress tick
   portals.forEach((el) => { const t = el.querySelector('.tick'); t.style.animation = 'none'; t.offsetWidth; t.style.animation = ''; });
 }
@@ -362,7 +376,7 @@ function openChapter(i, x, y, viaKeyboard = false) {
 }
 function closeChapter() {
   chapter.classList.remove('open');
-  const done = () => { chapter.hidden = true; startCycle(); portals[active]?.focus({ preventScroll: true }); };
+  const done = () => { chapter.hidden = true; syncVideos(); startCycle(); portals[active]?.focus({ preventScroll: true }); };
   if (reduce) done(); else setTimeout(done, 1000);
 }
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && !chapter.hidden) closeChapter(); });
@@ -370,7 +384,7 @@ addEventListener('keydown', (e) => { if (e.key === 'Escape' && !chapter.hidden) 
 // opening
 const intro = document.getElementById('intro');
 let introTimer = null;
-function endIntro() { clearTimeout(introTimer); intro.classList.add('done'); startCycle(); }
+function endIntro() { clearTimeout(introTimer); intro.classList.add('done'); syncVideos(); startCycle(); }
 document.getElementById('skip').addEventListener('click', endIntro);
 document.getElementById('intro-media').outerHTML = media(PATHS.find((p) => p.id === 'palestras'), isWide());
 playVideos(document);
