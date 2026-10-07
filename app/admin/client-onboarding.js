@@ -1373,7 +1373,7 @@ const ENC_FILE_LABEL = { recording: '🎥 Gravação', transcript: '📝 Transcr
 
 async function loadEncontros() {
   const [{ data: meetings }, { artifacts: mine }, { artifacts: unlinked }] = await Promise.all([
-    supabase.from('agenda_items').select('id, title, type, status, item_date, online_link, assigned_to, shared_notes, shared_links, shared_updated_at').eq('related_student_id', clientId)
+    supabase.from('agenda_items').select('id, title, type, status, item_date, online_link, assigned_to, shared_notes, shared_links, shared_files, shared_updated_at').eq('related_student_id', clientId)
       .in('type', ENC_MEETING_TYPES).order('item_date', { ascending: false }),
     loadArtifactsForClient(clientId),
     loadUnlinkedArtifacts(),
@@ -1386,7 +1386,14 @@ async function loadEncontros() {
     const key = sessionKeyFor(a.name);
     if (!sessions.has(key)) sessions.set(key, { key, mine: !!a.client_id });
   });
-  return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()] };
+  // Signed links (1h) for every shared photo/document, to preview and open.
+  const filePaths = (meetings || []).flatMap((m) => (m.shared_files || []).map((f) => f.path));
+  const fileUrls = {};
+  if (filePaths.length) {
+    const { data } = await supabase.storage.from(SHARED_BUCKET).createSignedUrls(filePaths, 3600);
+    (data || []).forEach((d) => { if (d.signedUrl) fileUrls[d.path] = d.signedUrl; });
+  }
+  return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()], fileUrls };
 }
 
 function encontroFileRow(a, pastMeetings = null) {
@@ -1427,6 +1434,38 @@ function sessionPickerHtml(meetingId, sessions) {
 // meeting (admin always; the assistant only on her own meetings — same
 // rule as agenda_items' RLS).
 const canEditMeeting = (m) => !isAssistant || m.assigned_to === 'assistant';
+// Photos and documents for the meeting: private bucket, one folder per
+// student and meeting (<client>/<meeting>/...), the student can only read
+// her own folder (see migration meeting_shared_files).
+const SHARED_BUCKET = 'client-shared-files';
+const SHARED_MAX_MB = 25;
+const isImageFile = (f) => /^image\//.test(f.type || '') || /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name || '');
+function sharedFilesHtml(m, fileUrls, editable) {
+  const files = Array.isArray(m.shared_files) ? m.shared_files : [];
+  const tile = (f) => {
+    const url = fileUrls[f.path];
+    const preview = isImageFile(f) && url
+      ? `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;">`
+      : `<span class="text-xs text-white/50 px-2 text-center break-all">📄 ${escHtml(f.name)}</span>`;
+    return `
+      <div style="position:relative;width:96px;">
+        <a ${url ? externalLinkAttrs(url) : ''} title="${escHtml(f.name)}" style="display:flex;align-items:center;justify-content:center;width:96px;height:96px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:rgba(255,255,255,.03);">${preview}</a>
+        <p class="text-xs text-white/40 mt-1 truncate" title="${escHtml(f.name)}">${escHtml(f.name)}</p>
+        ${editable ? `<button type="button" data-remove-file="${escHtml(f.path)}" data-meeting="${m.id}" aria-label="Remover" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;font-size:13px;line-height:22px;">×</button>` : ''}
+      </div>`;
+  };
+  return `
+    <p class="text-xs text-white/40 mt-4 mb-2">Fotos e documentos</p>
+    <div class="flex flex-wrap gap-3 items-start">
+      ${files.map(tile).join('')}
+      ${editable ? `
+        <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:96px;height:96px;border:1px dashed var(--gold);border-radius:6px;cursor:pointer;color:var(--gold);font-size:11px;text-align:center;" data-upload-label="${m.id}">
+          <span style="font-size:22px;line-height:1;">+</span>Enviar arquivo
+          <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.key,.pages,.numbers" data-upload-files="${m.id}" style="display:none;" />
+        </label>` : ''}
+    </div>
+    ${!files.length && !editable ? '<p class="text-xs text-white/20">Nenhum arquivo.</p>' : ''}`;
+}
 function sharedLinkInputs(link = {}) {
   return `
     <div class="flex gap-2 flex-wrap mb-2" data-shared-link-row>
@@ -1435,19 +1474,20 @@ function sharedLinkInputs(link = {}) {
       <button type="button" class="btn-text" data-remove-link>Remover</button>
     </div>`;
 }
-function sharedNotesHtml(m) {
+function sharedNotesHtml(m, fileUrls = {}) {
   const links = Array.isArray(m.shared_links) ? m.shared_links : [];
   if (!canEditMeeting(m)) {
-    if (!m.shared_notes && !links.length) return '';
+    if (!m.shared_notes && !links.length && !(m.shared_files || []).length) return '';
     return `
       <div class="pt-3 mt-3" style="border-top:1px solid var(--line);">
         <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
         ${m.shared_notes ? `<p class="text-sm" style="white-space:pre-line;">${escHtml(m.shared_notes)}</p>` : ''}
         ${links.map((l) => `<a ${externalLinkAttrs(l.url)} class="btn-text block mt-1">${escHtml(l.label || l.url)} ↗</a>`).join('')}
+        ${(m.shared_files || []).length ? sharedFilesHtml(m, fileUrls, false) : ''}
       </div>`;
   }
   return `
-    <form class="pt-3 mt-3" style="border-top:1px solid var(--line);" data-shared-form="${m.id}">
+    <form class="mt-3 rounded" style="padding:16px 18px;border:1px solid var(--gold);background:rgba(201,169,110,.06);" data-shared-form="${m.id}">
       <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
         <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
         <span class="text-xs text-white/30">${m.shared_updated_at ? `Atualizado ${formatDateTime(m.shared_updated_at)} · ` : ''}ela vê isto na página Encontros</span>
@@ -1455,9 +1495,11 @@ function sharedNotesHtml(m) {
       <textarea class="field text-sm" rows="4" data-shared-notes placeholder="O que vocês combinaram, o que você vai enviar, os próximos passos dela…">${escHtml(m.shared_notes || '')}</textarea>
       <p class="text-xs text-white/40 mt-3 mb-2">Links e materiais</p>
       <div data-shared-links>${links.map(sharedLinkInputs).join('')}</div>
-      <div class="flex items-center justify-between gap-2 flex-wrap mt-1">
-        <button type="button" class="btn-text" data-add-link>+ Adicionar link</button>
-        <button type="submit" class="btn-primary" style="padding:7px 16px;font-size:12px;">Salvar e compartilhar</button>
+      <button type="button" class="btn-text" data-add-link>+ Adicionar link</button>
+      ${sharedFilesHtml(m, fileUrls, true)}
+      <p class="text-xs text-white/20 mt-1">Fotos e documentos são enviados na hora e ela já pode abrir. Até ${SHARED_MAX_MB} MB por arquivo.</p>
+      <div class="flex justify-end mt-3">
+        <button type="submit" class="btn-primary" style="padding:7px 16px;font-size:12px;">Salvar anotações e links</button>
       </div>
     </form>`;
 }
@@ -1466,7 +1508,7 @@ function isPastMeeting(m) {
   return m.status !== 'cancelled' && new Date(m.item_date) <= new Date();
 }
 
-function encontrosTabHtml({ meetings, artifacts, sessions }) {
+function encontrosTabHtml({ meetings, artifacts, sessions, fileUrls }) {
   const unassigned = artifacts.filter((a) => !a.agenda_item_id);
   const pastMeetings = meetings.filter(isPastMeeting);
   return `
@@ -1489,16 +1531,57 @@ function encontrosTabHtml({ meetings, artifacts, sessions }) {
             ${!isAssistant ? `<a href="agenda.html?item=${m.id}" class="btn-text">Editar</a>` : ''}
           </div>
         </div>
+        ${sharedNotesHtml(m, fileUrls)}
         <div class="pt-3 mt-2" style="border-top:1px solid var(--line);">
           ${files.length ? files.map((a) => encontroFileRow(a)).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">Encontro ainda não realizado.</p>'}
         </div>
-        ${sharedNotesHtml(m)}
       `, 'mb-4');
     }).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado com ela ainda.</p>', 'mb-6')}
   `;
 }
 
 function wireEncontrosTab(encontros) {
+  const meetingById = new Map(encontros.meetings.map((m) => [m.id, m]));
+  content.querySelectorAll('[data-upload-files]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const m = meetingById.get(input.dataset.uploadFiles);
+      const chosen = [...input.files];
+      if (!chosen.length) return;
+      const tooBig = chosen.find((f) => f.size > SHARED_MAX_MB * 1024 * 1024);
+      if (tooBig) { toast(`${tooBig.name} passa de ${SHARED_MAX_MB} MB.`, { tone: 'error' }); input.value = ''; return; }
+      const label = content.querySelector(`[data-upload-label="${m.id}"]`);
+      label.style.opacity = '.5'; label.style.pointerEvents = 'none'; label.firstElementChild.textContent = '…';
+      const added = [];
+      for (const f of chosen) {
+        const ext = (f.name.match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
+        const path = `${clientId}/${m.id}/${crypto.randomUUID()}${ext}`;
+        const { error } = await supabase.storage.from(SHARED_BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
+        if (error) { toast(`Não foi possível enviar ${f.name}.`, { tone: 'error' }); continue; }
+        added.push({ path, name: f.name.slice(0, 200), type: f.type || '', size: f.size });
+      }
+      if (added.length) {
+        const { data: fresh } = await supabase.from('agenda_items').select('shared_files').eq('id', m.id).maybeSingle();
+        const { error } = await supabase.from('agenda_items').update({
+          shared_files: [...(fresh?.shared_files || []), ...added], shared_updated_at: new Date().toISOString(),
+        }).eq('id', m.id);
+        if (error) toast('Arquivo enviado, mas não foi possível anexar ao encontro.', { tone: 'error' });
+        else toast(added.length === 1 ? 'Arquivo compartilhado — ela já pode abrir.' : `${added.length} arquivos compartilhados.`);
+      }
+      render();
+    });
+  });
+  content.querySelectorAll('[data-remove-file]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Remover este arquivo? Ela deixa de ver.')) return;
+      const path = btn.dataset.removeFile;
+      const { data: fresh } = await supabase.from('agenda_items').select('shared_files').eq('id', btn.dataset.meeting).maybeSingle();
+      const { error } = await supabase.from('agenda_items').update({ shared_files: (fresh?.shared_files || []).filter((f) => f.path !== path) }).eq('id', btn.dataset.meeting);
+      if (error) { toast('Erro ao remover.', { tone: 'error' }); return; }
+      await supabase.storage.from(SHARED_BUCKET).remove([path]);
+      toast('Arquivo removido.');
+      render();
+    });
+  });
   content.querySelectorAll('[data-shared-form]').forEach((form) => {
     const list = form.querySelector('[data-shared-links]');
     form.querySelector('[data-add-link]').addEventListener('click', () => {

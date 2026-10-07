@@ -111,14 +111,30 @@ function recordingShapeFor(it, recordingRow, driveArtifacts) {
 // "Combinados do encontro": notes and links Nay shared about this meeting
 // (written in her client workspace, agenda_items.shared_notes/shared_links).
 const escText = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+// Photos/documents Nay shared (private bucket client-shared-files, read via
+// short-lived signed links made in render()).
+let sharedFileUrls = {};
+const isImageFile = (f) => /^image\//.test(f.type || '') || /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name || '');
+function sharedFilesBlock(files) {
+  if (!files.length) return '';
+  return `<div class="flex flex-wrap gap-3 mt-3">${files.map((f) => {
+    const url = sharedFileUrls[f.path];
+    if (!url) return '';
+    return isImageFile(f)
+      ? `<a ${externalLinkAttrs(url)} title="${escText(f.name)}" style="display:block;width:110px;height:110px;border-radius:6px;overflow:hidden;border:1px solid var(--line);"><img src="${url}" alt="${escText(f.name)}" style="width:100%;height:100%;object-fit:cover;"></a>`
+      : `<a ${externalLinkAttrs(url)} class="btn-ghost" style="padding:7px 14px;font-size:12px;">📄 ${escText(f.name)} ↗</a>`;
+  }).join('')}</div>`;
+}
 function sharedNotesBlock(it) {
   const links = (Array.isArray(it.shared_links) ? it.shared_links : []).filter((l) => isValidHttpUrl(l.url));
-  if (!it.shared_notes && !links.length) return '';
+  const files = Array.isArray(it.shared_files) ? it.shared_files : [];
+  if (!it.shared_notes && !links.length && !files.length) return '';
   return `
     <div class="mt-4 pt-4" style="border-top:1px solid var(--line);">
       <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
       ${it.shared_notes ? `<p class="text-sm" style="white-space:pre-line;line-height:1.65;">${escText(it.shared_notes)}</p>` : ''}
       ${links.length ? `<div class="flex flex-wrap gap-2 mt-3">${links.map((l) => `<a ${externalLinkAttrs(l.url)} class="btn-ghost" style="padding:7px 14px;font-size:12px;">${escText(l.label || 'Abrir link')} ↗</a>`).join('')}</div>` : ''}
+      ${sharedFilesBlock(files)}
     </div>`;
 }
 
@@ -343,6 +359,12 @@ async function render() {
     renderEncounterRequestsCardReal(),
   ]);
   const recordingByAgendaId = new Map((recordingRows || []).map((r) => [r.agenda_item_id, r]));
+  const sharedPaths = items.flatMap((it) => (it.shared_files || []).map((f) => f.path));
+  sharedFileUrls = {};
+  if (sharedPaths.length) {
+    const { data: signed } = await supabase.storage.from('client-shared-files').createSignedUrls(sharedPaths, 3600);
+    (signed || []).forEach((d) => { if (d.signedUrl) sharedFileUrls[d.path] = d.signedUrl; });
+  }
   const driveArtifacts = driveArtifactsRaw || [];
 
   const now = new Date();
