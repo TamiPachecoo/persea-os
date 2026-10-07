@@ -13,6 +13,8 @@
 // People who registered outside the system get the direct sign-up link
 // (preparacao.html?c=<code>): their details + the preparation form create
 // a 'confirmada' registration that shows up here once they finish.
+// The mentee results survey (naymurta.com/resultados, mentee-results Edge
+// Function → mentee_results) is listed here too, at the bottom.
 import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { renderShell, card, toast, formatDateTime } from '../shared/ui.js';
@@ -33,6 +35,7 @@ let manualPaymentLinkUrl = '';
 let invitePaymentLinkUrl = '';
 let inviteCodes = [];
 let directSignupCode = '';
+let menteeResults = [];
 let photoUrls = {}; // storage path → signed URL, for the preparation photos
 
 const EVENT_SITE = 'https://perseaexperience.naymurta.com';
@@ -91,6 +94,20 @@ const directMessage = (code) => [
   '',
   'Acesse aqui:',
   directUrl(code),
+  '',
+  'Com carinho,',
+  'Nay',
+].join('\n');
+const RESULTS_URL = 'https://naymurta.com/resultados/';
+const resultsMessage = () => [
+  'Olá!',
+  '',
+  'Quero muito saber o que mudou para você desde que começamos o *PERSEA*.',
+  '',
+  'Preparei 6 perguntas rápidas sobre os seus resultados: faturamento, primeira venda, autoconfiança, visibilidade e percepção de valor. As suas respostas me ajudam a mostrar, com números reais, o que essa jornada é capaz de fazer.',
+  '',
+  'Responda aqui:',
+  RESULTS_URL,
   '',
   'Com carinho,',
   'Nay',
@@ -191,6 +208,51 @@ function prepBlock(r) {
     </div>
     ${photosHtml(r)}
     ${actions}`);
+}
+
+async function loadMenteeResults() {
+  const { data } = await supabase.from('mentee_results').select('*').order('created_at', { ascending: false });
+  return data || [];
+}
+
+// One card: the link to send, the totals across everyone, then each answer.
+function resultsCard() {
+  const n = menteeResults.length;
+  const avg = (k) => n ? (menteeResults.reduce((s, r) => s + r[k], 0) / n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '—';
+  const total = menteeResults.reduce((s, r) => s + Number(r.revenue_cents), 0);
+  const shift = (label, k) => `<div><p class="text-xs text-white/30 mb-1">${label}</p><p class="text-lg font-serif">${avg(`${k}_before`)} <span class="text-white/30">→</span> <span style="color:var(--gold);">${avg(`${k}_after`)}</span></p></div>`;
+  const scorePair = (label, r, k) => `<p class="text-sm"><span class="text-white/40">${label}:</span> ${r[`${k}_before`]} → <span style="color:var(--gold);">${r[`${k}_after`]}</span></p>`;
+  const item = (r) => `
+    <details class="py-3">
+      <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
+        <span class="font-medium">${esc(r.full_name)}</span>
+        <span class="text-xs text-white/40">${brl(Number(r.revenue_cents))} · ${esc(r.first_sale)} · ${formatDateTime(r.created_at)}</span>
+      </summary>
+      <div class="mt-3 grid sm:grid-cols-3 gap-2">
+        ${scorePair('Autoconfiança', r, 'confidence')}${scorePair('Visibilidade', r, 'visibility')}${scorePair('Percepção de valor', r, 'value')}
+      </div>
+      ${r.opportunities ? `<p class="text-xs text-white/30 mt-3">Oportunidades</p><p class="text-sm" style="white-space:pre-line;">${esc(r.opportunities)}</p>` : ''}
+      <p class="text-xs text-white/30 mt-3">A principal mudança</p><p class="text-sm" style="white-space:pre-line;">${esc(r.transformation)}</p>
+      <div class="mt-3">${actionBtn(`data-delete-result="${r.id}"`, 'Excluir resposta')}</div>
+    </details>`;
+  return card(`
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-sm text-white/50">Resultados das mentoradas</p>
+      <span class="text-xs text-white/30">${n} ${n === 1 ? 'resposta' : 'respostas'}</span>
+    </div>
+    <p class="text-xs text-white/30 mb-4">Formulário independente para as mentoradas contarem os resultados: faturamento, primeira venda e notas de antes e de hoje (0 a 10).</p>
+    <div class="flex flex-wrap gap-2 items-center mb-2">
+      <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${RESULTS_URL}" onclick="this.select()" />
+      ${actionBtn('data-copy-results-msg', 'Copiar mensagem', true)}
+      ${actionBtn('data-copy-results-link', 'Copiar só o link')}
+    </div>
+    ${n ? `
+    <div class="grid sm:grid-cols-4 gap-4 mt-6 mb-2">
+      <div><p class="text-xs text-white/30 mb-1">Faturamento somado</p><p class="text-lg font-serif" style="color:var(--gold);">${brl(total)}</p></div>
+      ${shift('Autoconfiança (média)', 'confidence')}${shift('Visibilidade (média)', 'visibility')}${shift('Percepção de valor (média)', 'value')}
+    </div>
+    <div class="divide-y" style="border-color:var(--line);">${menteeResults.map(item).join('')}</div>` : '<p class="text-sm text-white/20 py-4">Nenhuma resposta ainda.</p>'}
+  `, 'mt-6');
 }
 
 async function loadRegistrations() {
@@ -300,6 +362,7 @@ function render() {
         ${filtered.length ? filtered.map(registrationRow).join('') : '<p class="text-sm text-white/20 py-6">Nenhuma inscrição encontrada.</p>'}
       </div>
     `)}
+    ${resultsCard()}
   `;
 
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
@@ -367,6 +430,18 @@ function render() {
     toast('Novo link criado.');
     render();
   });
+  content.querySelector('[data-copy-results-msg]')?.addEventListener('click', () => copyText(resultsMessage()));
+  content.querySelector('[data-copy-results-link]')?.addEventListener('click', () => copyText(RESULTS_URL));
+  content.querySelectorAll('[data-delete-result]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const r = menteeResults.find((x) => x.id === btn.dataset.deleteResult);
+      if (!r || !confirm(`Excluir a resposta de ${r.full_name}? Isto não pode ser desfeito.`)) return;
+      const { error } = await supabase.from('mentee_results').delete().eq('id', r.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast('Resposta excluída.');
+      await refresh();
+    });
+  });
   content.querySelectorAll('[data-copy-prep]').forEach((btn) => {
     btn.addEventListener('click', () => copyText(prepMessage(registrations.find((x) => x.id === btn.dataset.copyPrep))));
   });
@@ -409,7 +484,7 @@ function render() {
 
 async function refresh() {
   let links;
-  [registrations, links, inviteCodes] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes()]);
+  [registrations, links, inviteCodes, menteeResults] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults()]);
   [manualPaymentLinkUrl, invitePaymentLinkUrl, directSignupCode] = links;
   const paths = registrations.flatMap((r) => [...(r.prep_child_photos || []), ...(r.prep_special_photos || [])].map((ph) => ph.path));
   photoUrls = {};
