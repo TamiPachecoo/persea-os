@@ -1,0 +1,202 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Seus resultados · Mentoria PERSEA</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* Same look as /aplicacao, laid out as one scrolling page: six short blocks. */
+:root{--ink:#0b0908;--cream:#f2ece0;--gold:#dcc7a8;--muted:#a89a8c;--line:rgba(242,236,224,.16);--line-strong:rgba(242,236,224,.38)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--cream);font-family:Poppins,system-ui,sans-serif;font-weight:300;-webkit-font-smoothing:antialiased}
+.bg{position:fixed;inset:0;background:url('../app/shared/assets/nay-cover-portrait.jpg') center 18%/cover no-repeat;filter:grayscale(1) brightness(.4) contrast(1.05);z-index:0}
+.bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,9,8,.6),rgba(11,9,8,.85) 35%,rgba(11,9,8,.96))}
+main{position:relative;z-index:1;max-width:600px;margin:0 auto;padding:calc(28px + env(safe-area-inset-top,0px)) 20px calc(48px + env(safe-area-inset-bottom,0px))}
+.logo{display:block;width:140px;aspect-ratio:397/102;background:url('../app/shared/assets/persea-logo.png') left center/contain no-repeat;margin-bottom:40px}
+h1,h2{font-family:Poppins,system-ui,sans-serif;font-weight:400;margin:0;text-wrap:balance}
+h1{font-size:clamp(28px,6.4vw,36px);line-height:1.2}
+h2{font-size:clamp(19px,4.6vw,23px);line-height:1.35}
+h1 em,h2 em{font-family:'Playfair Display',Georgia,serif;font-style:italic;color:var(--gold)}
+.lede{font-size:14px;line-height:1.7;color:rgba(242,236,224,.78);margin:14px 0 0}
+.q{border-top:1px solid var(--line);padding:34px 0 4px;display:flex;flex-direction:column;gap:14px}
+.q:first-of-type{margin-top:36px}
+.num{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);font-weight:500;margin:0}
+.help{font-size:12.5px;color:var(--muted);margin:-4px 0 0;line-height:1.55}
+.opts{display:flex;flex-direction:column;gap:9px}
+.opt{display:flex;gap:12px;align-items:center;width:100%;text-align:left;border:1px solid var(--line-strong);border-radius:6px;padding:13px 14px;background:rgba(11,9,8,.4);color:var(--cream);font:inherit;font-size:14px;cursor:pointer;transition:border-color .2s,background .2s}
+.opt:hover{border-color:var(--gold)}
+.opt .l{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:1px solid var(--line-strong)}
+.opt[aria-pressed="true"]{border-color:var(--gold);background:rgba(220,199,168,.13)}
+.opt[aria-pressed="true"] .l{background:var(--gold);border-color:var(--gold);box-shadow:inset 0 0 0 4px var(--ink)}
+.pair{display:flex;flex-direction:column;gap:16px}
+.row-l{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.row-l b{font-weight:500;letter-spacing:0;font-size:15px;color:var(--gold);text-transform:none;font-variant-numeric:tabular-nums}
+.scale{display:grid;grid-template-columns:repeat(11,1fr);gap:4px}
+.scale button{border:1px solid var(--line-strong);border-radius:5px;padding:11px 0;background:rgba(11,9,8,.4);color:var(--cream);font:inherit;font-size:13.5px;cursor:pointer;font-variant-numeric:tabular-nums;min-width:0}
+.scale button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:var(--ink);font-weight:500}
+.scale.after button[aria-pressed="true"]{box-shadow:0 0 0 1px var(--gold)}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:500}
+label.f.long{font-size:15px;letter-spacing:0;text-transform:none;color:var(--cream);font-weight:400;line-height:1.45;gap:10px}
+.field{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line-strong);color:var(--cream);font:inherit;font-size:16px;padding:8px 0;letter-spacing:0;text-transform:none;font-weight:300}
+.field::placeholder{color:rgba(242,236,224,.35)}
+.field:focus{outline:none;border-color:var(--gold)}
+textarea.field{resize:vertical;min-height:110px;line-height:1.55}
+.money{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line-strong)}
+.money:focus-within{border-color:var(--gold)}
+.money b{font-weight:400;font-size:22px;color:var(--gold)}
+.money .field{border:0;font-size:24px;font-variant-numeric:tabular-nums}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.actions{margin-top:36px;display:flex;flex-direction:column;gap:12px}
+.btn{background:var(--cream);color:var(--ink);border:0;border-radius:4px;padding:15px 26px;font:500 13px Poppins,system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.btn[disabled]{opacity:.55;cursor:default}
+.err{color:#e59a86;font-size:13px;margin:0;min-height:1em;text-align:center}
+.done{padding-top:20vh}
+[hidden]{display:none!important}
+:focus-visible{outline:1px solid var(--gold);outline-offset:3px}
+</style></head><body>
+<div class="bg" aria-hidden="true"></div>
+<main>
+  <a class="logo" href="/" aria-label="PERSEA"></a>
+
+  <form id="form" novalidate>
+    <h1>Os seus <em>resultados</em> com o PERSEA</h1>
+    <p class="lede">Quero ouvir de você o que mudou desde que começamos. São 6 perguntas rápidas, e as suas respostas me ajudam a mostrar, com números reais, o que essa jornada é capaz de fazer.</p>
+
+    <section class="q">
+      <label class="f">Seu nome<input class="field" id="f-name" autocomplete="name" maxlength="200" required></label>
+      <div class="hp" aria-hidden="true"><input id="f-website" tabindex="-1" autocomplete="off"></div>
+    </section>
+
+    <section class="q">
+      <p class="num">1 · Faturamento</p>
+      <h2>Desde o início da mentoria, qual foi o <em>faturamento total</em> que você gerou a partir das mudanças, estratégias ou ações realizadas durante o PERSEA?</h2>
+      <div class="money"><b>R$</b><input class="field" id="f-revenue" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Faturamento total em reais"></div>
+      <p class="help">Um valor aproximado já ajuda.</p>
+    </section>
+
+    <section class="q">
+      <p class="num">2 · Primeira venda</p>
+      <h2>Quanto tempo depois do início da mentoria você realizou sua <em>primeira venda</em> ou fechou um novo negócio?</h2>
+      <div class="opts" data-one="first_sale">
+        <button type="button" class="opt" aria-pressed="false"><span class="l"></span>Na primeira semana</button>
+        <button type="button" class="opt" aria-pressed="false"><span class="l"></span>No primeiro mês</button>
+        <button type="button" class="opt" aria-pressed="false"><span class="l"></span>Entre 1 e 3 meses</button>
+        <button type="button" class="opt" aria-pressed="false"><span class="l"></span>Entre 3 e 6 meses</button>
+        <button type="button" class="opt" aria-pressed="false"><span class="l"></span>Mais de 6 meses</button>
+      </div>
+    </section>
+
+    <section class="q">
+      <p class="num">3 · Autoconfiança</p>
+      <h2>De 0 a 10, quanto você acredita que sua <em>autoconfiança profissional</em> aumentou desde o início do PERSEA?</h2>
+      <div class="pair" data-pair="confidence"></div>
+    </section>
+
+    <section class="q">
+      <p class="num">4 · Visibilidade e influência</p>
+      <h2>De 0 a 10, quanto você acredita que sua <em>visibilidade e influência</em> profissional aumentaram desde o início do PERSEA?</h2>
+      <div class="pair" data-pair="visibility"></div>
+      <label class="f long" style="margin-top:14px">Depois do PERSEA, você passou a receber mais convites, indicações, parcerias, clientes, participações em eventos ou outras oportunidades profissionais? Quais?
+        <textarea class="field" id="f-opportunities" maxlength="2000" placeholder="Conte quais…"></textarea></label>
+    </section>
+
+    <section class="q">
+      <p class="num">5 · Percepção de valor</p>
+      <h2>De 0 a 10, quanto você acredita que aumentou a <em>percepção de valor</em> sobre o seu trabalho?</h2>
+      <div class="pair" data-pair="value"></div>
+    </section>
+
+    <section class="q">
+      <p class="num">6 · A transformação</p>
+      <h2>Qual foi a <em>principal mudança</em> que o PERSEA provocou na sua vida profissional e que você consegue perceber hoje na prática?</h2>
+      <textarea class="field" id="f-transformation" maxlength="3000" placeholder="Escreva com as suas palavras…"></textarea>
+    </section>
+
+    <div class="actions">
+      <button class="btn" type="submit" id="send">Enviar</button>
+      <p class="err" id="err" role="alert"></p>
+    </div>
+  </form>
+
+  <section class="done" id="done" hidden>
+    <h1>Obrigada, <em id="done-name">querida</em>.</h1>
+    <p class="lede">Suas respostas chegaram para mim. Cada resultado seu é também uma conquista minha, e eu fico muito feliz de fazer parte dessa história.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  const ENDPOINT = 'https://bletlyuptkppacjcbcvw.supabase.co/functions/v1/mentee-results';
+  const KEY = 'sb_publishable_37D7JJzhUDCUwtHtYA4gjw_jiSXDMxu';
+  const $ = (id) => document.getElementById(id);
+  const answers = {};
+
+  // single-choice options
+  document.querySelectorAll('[data-one]').forEach((g) => {
+    const opts = [...g.querySelectorAll('.opt')];
+    opts.forEach((o) => o.addEventListener('click', () => {
+      opts.forEach((x) => x.setAttribute('aria-pressed', String(x === o)));
+      answers[g.dataset.one] = o.textContent.trim();
+    }));
+  });
+
+  // before/after 0–10 scales
+  document.querySelectorAll('[data-pair]').forEach((pair) => {
+    const key = pair.dataset.pair;
+    pair.innerHTML = [['before', 'Antes do PERSEA'], ['after', 'Hoje']].map(([when, label]) => `
+      <div><p class="row-l"><span>${label}</span><b id="v-${key}_${when}">– /10</b></p>
+        <div class="scale ${when}" data-key="${key}_${when}" role="group" aria-label="${label}">
+          ${Array.from({ length: 11 }, (_, n) => `<button type="button" aria-pressed="false">${n}</button>`).join('')}
+        </div></div>`).join('');
+    pair.querySelectorAll('.scale').forEach((s) => {
+      const btns = [...s.querySelectorAll('button')];
+      btns.forEach((b) => b.addEventListener('click', () => {
+        btns.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        answers[s.dataset.key] = Number(b.textContent);
+        $(`v-${s.dataset.key}`).textContent = `${b.textContent} /10`;
+      }));
+    });
+  });
+
+  // revenue: whole reais, shown with thousand separators (R$ 25.000)
+  const rev = $('f-revenue');
+  rev.addEventListener('input', () => {
+    const digits = rev.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 10);
+    rev.value = digits ? Number(digits).toLocaleString('pt-BR') : '';
+  });
+
+  $('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('err'); err.textContent = '';
+    const name = $('f-name').value.trim();
+    const digits = rev.value.replace(/\D/g, '');
+    const body = {
+      name, website: $('f-website').value,
+      revenue_cents: digits ? Number(digits) * 100 : NaN,
+      first_sale: answers.first_sale,
+      confidence_before: answers.confidence_before, confidence_after: answers.confidence_after,
+      visibility_before: answers.visibility_before, visibility_after: answers.visibility_after,
+      value_before: answers.value_before, value_after: answers.value_after,
+      opportunities: $('f-opportunities').value.trim(), transformation: $('f-transformation').value.trim(),
+    };
+    const fail = (msg, el) => { err.textContent = msg; el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    if (name.length < 2) return fail('Escreva o seu nome.', $('f-name'));
+    if (!digits) return fail('Informe o faturamento (pode ser 0).', rev);
+    if (!body.first_sale) return fail('Responda quando foi a sua primeira venda.', document.querySelector('[data-one]'));
+    for (const k of ['confidence', 'visibility', 'value']) {
+      if (body[`${k}_before`] === undefined || body[`${k}_after`] === undefined) return fail('Marque as notas de antes e de hoje.', document.querySelector(`[data-pair="${k}"]`));
+    }
+    if (!body.transformation) return fail('Conte qual foi a principal mudança.', $('f-transformation'));
+    const btn = $('send'); btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+      const res = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY }, body: JSON.stringify(body) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || d.error) throw new Error(d.error);
+      $('done-name').textContent = name.split(/\s+/)[0];
+      $('form').hidden = true; $('done').hidden = false; window.scrollTo(0, 0);
+    } catch (x) {
+      err.textContent = x.message || 'Não foi possível enviar agora. Tente de novo em instantes.';
+    } finally { btn.disabled = false; btn.textContent = 'Enviar'; }
+  });
+})();
+</script>
+</body></html>
