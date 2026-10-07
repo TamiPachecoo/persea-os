@@ -16,9 +16,10 @@
 // which ones) — this function only decides which id a well-behaved page
 // asks for, it is not itself a security boundary.
 import { MockDB, getActiveClientId } from './mock-db.js';
-import { requireProfile } from './supabase-auth.js';
+import { requireProfile, getCurrentProfile } from './supabase-auth.js';
 import { supabase } from './supabase-client.js';
 import { isProductionEnvironment } from './environment.js';
+import { setShellClient } from './ui.js';
 
 // Production Data Migration — Batch 1: pages converted off MockDB onto real
 // Supabase tables (see each page's own comments for exactly which tables).
@@ -35,7 +36,7 @@ import { isProductionEnvironment } from './environment.js';
 // staff-only — Nay's own log, not a client journal). Production Migration:
 // Playbook + Quiz + Notes reported this gap rather than inventing schema —
 // see client/notes.js's own header comment.
-const PRODUCTION_READY_PAGES = new Set(['encontros', 'pitch', 'questionnaire', 'onboarding', 'images', 'homework', 'activity', 'activity-guide', 'content-activity', 'content', 'financial', 'business-survey', 'brand-direction', 'value-analysis', 'arquetipos', 'arquetipos-resultado', 'playbook', 'quiz', 'program']);
+const PRODUCTION_READY_PAGES = new Set(['contract', 'encontros', 'pitch', 'questionnaire', 'onboarding', 'images', 'homework', 'activity', 'activity-guide', 'content-activity', 'content', 'financial', 'business-survey', 'brand-direction', 'value-analysis', 'arquetipos', 'arquetipos-resultado', 'playbook', 'quiz', 'program']);
 
 function renderNotice(message, detail) {
   document.body.innerHTML = `
@@ -74,7 +75,31 @@ function renderAccessPendingGate(clientId) {
   });
 }
 
-// Returns { clientId, mode: 'demo' | 'production', profile, client } —
+// "Ver como cliente": Nay (admin) or the assistant opens any client page as
+// a specific student, from the client workspace's button
+// (client/program.html?ver_como=<client id>). The id is kept per browser
+// tab in sessionStorage, so every page she navigates to in that tab stays
+// in the student's view, and her own staff tabs are untouched. Staff
+// already read/write every client table through their *_staff_all /
+// *_admin_* RLS policies — this only tells the page which client to load;
+// it grants nothing RLS doesn't already allow.
+const VIEW_AS_KEY = 'persea_view_as_client';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function readViewAsId() {
+  const fromUrl = new URLSearchParams(location.search).get('ver_como');
+  try {
+    if (fromUrl && UUID_RE.test(fromUrl)) sessionStorage.setItem(VIEW_AS_KEY, fromUrl);
+    return sessionStorage.getItem(VIEW_AS_KEY);
+  } catch {
+    return fromUrl && UUID_RE.test(fromUrl) ? fromUrl : null;
+  }
+}
+export function exitViewAs() {
+  try { sessionStorage.removeItem(VIEW_AS_KEY); } catch { /* storage blocked: nothing to clear */ }
+}
+const STAFF_HOME = { admin: '/admin/crm.html', assistant: '/assistant/clients.html' };
+
+// Returns { clientId, mode: 'demo' | 'production', profile, client, viewAs } —
 // profile is null in demo (no real session involved there); client is the
 // MockDB shape in demo, or the real `clients` row (via a scoped Supabase
 // query, protected by clients_self_read RLS) in production. Returns null
@@ -104,6 +129,24 @@ export async function getCurrentClientContext(loginPath = '../login.html', { pag
       return null;
     }
     return { clientId, mode: 'demo', profile: null, client };
+  }
+
+  // Staff on a client page: show it as the student she chose, or send her
+  // back to her own area. Never sign her out (requireProfile would, on a
+  // role mismatch — that is what bounced Nay to the login screen when she
+  // opened a student's questionnaire during a meeting).
+  const current = await getCurrentProfile();
+  if (current && STAFF_HOME[current.role]) {
+    const viewAsId = readViewAsId();
+    if (!viewAsId) { location.href = STAFF_HOME[current.role]; return null; }
+    const { data: viewed } = await supabase.from('clients').select('*').eq('id', viewAsId).maybeSingle();
+    if (!viewed) { exitViewAs(); location.href = STAFF_HOME[current.role]; return null; }
+    if (!page || !PRODUCTION_READY_PAGES.has(page)) {
+      renderNotice('Esta área ainda não está disponível para clientes.', 'Volte e escolha outra página no menu.');
+      return null;
+    }
+    setShellClient(viewed, { viewAs: true });
+    return { clientId: viewed.id, mode: 'production', profile: current, client: viewed, viewAs: true };
   }
 
   const profile = await requireProfile('client', loginPath);
@@ -143,5 +186,6 @@ export async function getCurrentClientContext(loginPath = '../login.html', { pag
     return null;
   }
 
-  return { clientId, mode: 'production', profile, client };
+  setShellClient(client);
+  return { clientId, mode: 'production', profile, client, viewAs: false };
 }

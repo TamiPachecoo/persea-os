@@ -24,7 +24,7 @@ import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import {
   renderShell, card, toast, openModal, formatDateTime, formatDate, brl, isValidHttpUrl, externalLinkAttrs, functionErrorMessage, initialsAvatar,
-  boardEmptyState, mountPinterestBoard,
+  boardEmptyState, mountPinterestBoard, phaseColor, phaseChip,
 } from '../shared/ui.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { loadActiveObligations } from '../shared/financial-model.js';
@@ -108,6 +108,7 @@ const CONTRACT_STATUS_LABEL = {
 const ALL_TABS = [
   ['jornada', 'Jornada'],
   ['encontros', 'Encontros'],
+  ['questionarios', 'Questionários'],
   ['financeiro', 'Financeiro'],
   ['direcao-marca', 'Direção de Marca'],
   ['pesquisa', 'Precificação & Valor'],
@@ -525,7 +526,7 @@ async function programSummaryCard(client, state) {
     </div>
     <div class="grid sm:grid-cols-2 gap-4 text-sm mb-5">
       <div><p class="text-xs text-white/30">Plano</p><p>${client.program_slug?.startsWith('persea') ? (TIER_NAME[client.tier] || programDef.name) : programDef.name}</p></div>
-      <div><p class="text-xs text-white/30">Fase atual</p><p>Fase ${(client.phase_index || 0) + 1}</p></div>
+      <div><p class="text-xs text-white/30">Fase atual</p><p class="mt-1">${phaseChip(client.phase_index || 0)}</p></div>
       <div><p class="text-xs text-white/30">Atividades</p><p>${progress.completedCount} de ${progress.totalIncluded} concluídas (${progress.pct}%)</p></div>
       <div><p class="text-xs text-white/30">Próxima ação da cliente</p><p>${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia'}</p></div>
       <div class="sm:col-span-2"><p class="text-xs text-white/30">Próximo encontro</p><p>${nextMeeting ? `${nextMeeting.title || 'Encontro agendado'} — ${formatDateTime(nextMeeting.item_date)}` : 'Não agendado'}</p></div>
@@ -745,11 +746,12 @@ function profileHeaderCard(c, status) {
         </div>
         <p class="text-xs text-white/30 mt-0.5">${c.email || 'sem e-mail'}${c.program_slug?.startsWith('persea') ? ` · ${TIER_LABEL[c.tier] || c.tier}` : ''}${c.program_slug ? ` · ${PROGRAM_LABEL_BY_SLUG[c.program_slug] || c.program_slug}` : ''}</p>
         ${socialLinksRow(c)}
+        <a href="/client/program.html?ver_como=${c.id}" target="_blank" rel="noopener" class="btn-ghost inline-block mt-3" style="padding:7px 14px;font-size:12px;">Ver o app como ${c.full_name.split(' ')[0]} ↗</a>
         <form id="photo-form" class="flex items-center gap-2 mt-3 flex-wrap">
           <input name="photo_url" class="field text-sm" style="max-width:340px;" placeholder="Link da foto de perfil" value="${c.photo_url || ''}" />
           <button type="submit" class="btn-ghost">Salvar</button>
         </form>
-        <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar — precisa ser um link direto para a imagem, não uma página.</p>
+        <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar (para você e para ela, no topo do app dela) — precisa ser um link direto para a imagem, não uma página.</p>
         <form id="social-links-form" class="flex items-center gap-2 mt-2 flex-wrap">
           <input name="instagram_url" class="field text-sm" style="max-width:260px;" placeholder="Link do Instagram" value="${c.instagram_url || ''}" />
           <input name="linkedin_url" class="field text-sm" style="max-width:260px;" placeholder="Link do LinkedIn" value="${c.linkedin_url || ''}" />
@@ -861,7 +863,7 @@ function encounterRow(e) {
 // not a second mechanism. Slugs without a dedicated staff-editable tab
 // today (brand-extraction, activity-guide, initial-images, pitch, content,
 // business) just show their status, no link — an honest gap, not hidden.
-const ACTIVITY_TAB_LINK = { 'brand-direction': 'direcao-marca', 'business-survey': 'pesquisa', 'archetype-test': 'arquetipos' };
+const ACTIVITY_TAB_LINK = { 'brand-extraction': 'questionarios', 'brand-direction': 'direcao-marca', 'business-survey': 'pesquisa', 'archetype-test': 'arquetipos' };
 
 function phaseActivityRow(a) {
   const tabKey = ACTIVITY_TAB_LINK[a.slug];
@@ -893,9 +895,9 @@ function phaseBreakdownCard(state, journey) {
     <p class="text-sm text-white/50 mb-1">Fases do Programa</p>
     <p class="text-xs text-white/20 mb-4">Clique em uma fase para ver os encontros, atividades e materiais dela.</p>
     ${state.phases.map((phase) => `
-      <details class="mb-1" ${phase.status === 'current' ? 'open' : ''}>
-        <summary class="text-sm cursor-pointer py-2 flex items-center gap-3 flex-wrap" style="list-style:none;">
-          <span class="font-medium">Fase ${phase.id + 1}</span>
+      <details class="mb-2 rounded" ${phase.status === 'current' ? 'open' : ''} style="border-left:5px solid ${phaseColor(phase.id)};background:${phaseColor(phase.id)}${phase.status === 'current' ? '26' : '12'};padding:0 14px;">
+        <summary class="text-sm cursor-pointer py-3 flex items-center gap-3 flex-wrap" style="list-style:none;">
+          <span class="badge" style="background:${phaseColor(phase.id)};color:#16100a;border-color:${phaseColor(phase.id)};font-weight:600;">Fase ${phase.id + 1}</span>
           ${phase.description ? `<span class="text-xs text-white/30">${phase.description}</span>` : ''}
           <span class="badge ${PHASE_STATUS_CLASS[phase.status]}">${PHASE_STATUS_LABEL[phase.status]}</span>
         </summary>
@@ -1371,7 +1373,7 @@ const ENC_FILE_LABEL = { recording: '🎥 Gravação', transcript: '📝 Transcr
 
 async function loadEncontros() {
   const [{ data: meetings }, { artifacts: mine }, { artifacts: unlinked }] = await Promise.all([
-    supabase.from('agenda_items').select('id, title, type, status, item_date, online_link').eq('related_student_id', clientId)
+    supabase.from('agenda_items').select('id, title, type, status, item_date, online_link, assigned_to, shared_notes, shared_links, shared_updated_at').eq('related_student_id', clientId)
       .in('type', ENC_MEETING_TYPES).order('item_date', { ascending: false }),
     loadArtifactsForClient(clientId),
     loadUnlinkedArtifacts(),
@@ -1419,6 +1421,47 @@ function sessionPickerHtml(meetingId, sessions) {
   `;
 }
 
+// "Combinados do encontro": notes + links Nay shares with the student about
+// one meeting (what they agreed, what each will do, materials mentioned).
+// She sees them on her Encontros page. Editable by whoever can write the
+// meeting (admin always; the assistant only on her own meetings — same
+// rule as agenda_items' RLS).
+const canEditMeeting = (m) => !isAssistant || m.assigned_to === 'assistant';
+function sharedLinkInputs(link = {}) {
+  return `
+    <div class="flex gap-2 flex-wrap mb-2" data-shared-link-row>
+      <input class="field text-sm" style="flex:1 1 160px;" placeholder="Nome (ex.: Planilha de preços)" value="${escHtml(link.label || '')}" data-link-label />
+      <input class="field text-sm" style="flex:2 1 220px;" placeholder="https://…" value="${escHtml(link.url || '')}" data-link-url />
+      <button type="button" class="btn-text" data-remove-link>Remover</button>
+    </div>`;
+}
+function sharedNotesHtml(m) {
+  const links = Array.isArray(m.shared_links) ? m.shared_links : [];
+  if (!canEditMeeting(m)) {
+    if (!m.shared_notes && !links.length) return '';
+    return `
+      <div class="pt-3 mt-3" style="border-top:1px solid var(--line);">
+        <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
+        ${m.shared_notes ? `<p class="text-sm" style="white-space:pre-line;">${escHtml(m.shared_notes)}</p>` : ''}
+        ${links.map((l) => `<a ${externalLinkAttrs(l.url)} class="btn-text block mt-1">${escHtml(l.label || l.url)} ↗</a>`).join('')}
+      </div>`;
+  }
+  return `
+    <form class="pt-3 mt-3" style="border-top:1px solid var(--line);" data-shared-form="${m.id}">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
+        <span class="text-xs text-white/30">${m.shared_updated_at ? `Atualizado ${formatDateTime(m.shared_updated_at)} · ` : ''}ela vê isto na página Encontros</span>
+      </div>
+      <textarea class="field text-sm" rows="4" data-shared-notes placeholder="O que vocês combinaram, o que você vai enviar, os próximos passos dela…">${escHtml(m.shared_notes || '')}</textarea>
+      <p class="text-xs text-white/40 mt-3 mb-2">Links e materiais</p>
+      <div data-shared-links>${links.map(sharedLinkInputs).join('')}</div>
+      <div class="flex items-center justify-between gap-2 flex-wrap mt-1">
+        <button type="button" class="btn-text" data-add-link>+ Adicionar link</button>
+        <button type="submit" class="btn-primary" style="padding:7px 16px;font-size:12px;">Salvar e compartilhar</button>
+      </div>
+    </form>`;
+}
+
 function isPastMeeting(m) {
   return m.status !== 'cancelled' && new Date(m.item_date) <= new Date();
 }
@@ -1449,12 +1492,38 @@ function encontrosTabHtml({ meetings, artifacts, sessions }) {
         <div class="pt-3 mt-2" style="border-top:1px solid var(--line);">
           ${files.length ? files.map((a) => encontroFileRow(a)).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">Encontro ainda não realizado.</p>'}
         </div>
+        ${sharedNotesHtml(m)}
       `, 'mb-4');
     }).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado com ela ainda.</p>', 'mb-6')}
   `;
 }
 
 function wireEncontrosTab(encontros) {
+  content.querySelectorAll('[data-shared-form]').forEach((form) => {
+    const list = form.querySelector('[data-shared-links]');
+    form.querySelector('[data-add-link]').addEventListener('click', () => {
+      list.insertAdjacentHTML('beforeend', sharedLinkInputs());
+      list.lastElementChild.querySelector('[data-link-label]').focus();
+    });
+    list.addEventListener('click', (e) => { if (e.target.closest('[data-remove-link]')) e.target.closest('[data-shared-link-row]').remove(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const links = [...list.querySelectorAll('[data-shared-link-row]')]
+        .map((row) => ({ label: row.querySelector('[data-link-label]').value.trim(), url: row.querySelector('[data-link-url]').value.trim() }))
+        .filter((l) => l.url);
+      const bad = links.find((l) => !isValidHttpUrl(l.url));
+      if (bad) { toast(`Link inválido: ${bad.url} — comece com https://`, { tone: 'error' }); return; }
+      const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+      const { error } = await supabase.from('agenda_items').update({
+        shared_notes: form.querySelector('[data-shared-notes]').value.trim() || null,
+        shared_links: links, shared_updated_at: new Date().toISOString(),
+      }).eq('id', form.dataset.sharedForm);
+      btn.disabled = false;
+      if (error) { toast('Erro ao salvar.', { tone: 'error' }); return; }
+      toast('Salvo — ela já vê na página Encontros.');
+      render();
+    });
+  });
   content.querySelectorAll('[data-enc-unlink]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!confirm('Desvincular este arquivo? Ele volta para a lista de gravações não vinculadas.')) return;
@@ -1500,6 +1569,64 @@ function wireEncontrosTab(encontros) {
   });
 }
 
+// Questionários: every questionnaire the student answers, in one place.
+// Extração de Marca's answers are shown in full here (it had no staff view
+// in this workspace before — the only one was the legacy MockDB page);
+// the others already have their own tab, so this lists their status with
+// a jump to that tab, plus a link to open the page exactly as she sees it.
+async function loadExtraction() {
+  const { data: q } = await supabase.from('questionnaires').select('*').eq('client_id', clientId).maybeSingle();
+  if (!q) return null;
+  const { data: questions } = await supabase.from('questionnaire_questions').select('*').eq('questionnaire_id', q.id).order('sort_order');
+  return { ...q, questions: questions || [] };
+}
+
+const viewAsLink = (page, label = 'Ver como ela vê ↗') => `<a href="/client/${page}?ver_como=${clientId}" target="_blank" rel="noopener" class="btn-text">${label}</a>`;
+const escHtml = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+function questionnairesTabHtml({ extraction, archetypeState, surveyState, valueAssessment }) {
+  const answered = extraction?.questions.filter((x) => String(x.answer ?? '').trim()).length || 0;
+  const extractionBody = !extraction
+    ? '<p class="text-xs" style="color:var(--muted);">Ela ainda não abriu a Extração de Marca.</p>'
+    : `<div class="space-y-4">${extraction.questions.map((x) => `
+        <div class="pb-4 border-b border-white/5 last:border-0 last:pb-0">
+          <p class="text-xs text-white/40 mb-1">${escHtml(x.question_text)}</p>
+          <p class="text-sm" style="white-space:pre-line;">${String(x.answer ?? '').trim() ? escHtml(x.answer) : '<span class="text-white/20">Sem resposta</span>'}</p>
+        </div>`).join('')}</div>`;
+  const statusPill = (text, done) => `<span class="badge ${done ? 'badge-completed' : 'badge-progress'}" style="font-size:10px;">${text}</span>`;
+  const archetypeStatus = archetypeState.status === 'completed' ? statusPill('Concluído', true)
+    : archetypeState.status === 'in_progress' ? statusPill(`${archetypeState.answered} de ${archetypeState.total}`, false) : statusPill('Não iniciado', false);
+  const surveyStatus = surveyState.survey?.status === 'submitted' ? statusPill('Enviado', true) : surveyState.survey ? statusPill('Em andamento', false) : statusPill('Não iniciado', false);
+  const otherRow = (title, status, tabKey, page) => `
+    <div class="flex items-center justify-between gap-3 flex-wrap py-3">
+      <div class="flex items-center gap-2 flex-wrap"><p class="text-sm">${title}</p>${status}</div>
+      <div class="flex items-center gap-3 flex-wrap">
+        ${tabKey ? `<button type="button" data-tab="${tabKey}" class="btn-text">Ver respostas →</button>` : ''}
+        ${viewAsLink(page)}
+      </div>
+    </div>`;
+  return `
+    ${card(`
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-4">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm text-white/50">Extração de Marca</p>
+          ${extraction ? statusPill(extraction.status === 'submitted' ? 'Enviada' : `${answered} de ${extraction.questions.length} respondidas`, extraction.status === 'submitted') : statusPill('Não iniciada', false)}
+        </div>
+        ${viewAsLink('questionnaire.html')}
+      </div>
+      ${extractionBody}
+    `, 'mb-6')}
+    ${card(`
+      <p class="text-sm text-white/50 mb-1">Outros questionários</p>
+      <div class="divide-y" style="border-color:var(--line);">
+        ${otherRow('Teste de Arquétipos', archetypeStatus, 'arquetipos', 'arquetipos.html')}
+        ${otherRow('Questionário de Negócios', surveyStatus, isAssistant ? null : 'pesquisa', 'business-survey.html')}
+        ${!isAssistant ? otherRow('Análise de Valor', valueAssessment ? statusPill('Iniciada', !!valueAssessment.publishedDeliverable) : statusPill('Não iniciada', false), 'pesquisa', 'value-analysis.html') : ''}
+      </div>
+    `, 'mb-6')}
+  `;
+}
+
 function tabBarHtml() {
   return `
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
@@ -1526,6 +1653,7 @@ async function render() {
   ]);
   const programSummaryHtml = await programSummaryCard(client, state);
   const encontros = activeTab === 'encontros' ? await loadEncontros() : null;
+  const extraction = activeTab === 'questionarios' ? await loadExtraction() : null;
 
   const status = deriveClientStatus({
     accessStatus: client.access_status,
@@ -1544,6 +1672,7 @@ async function render() {
       ${phaseBreakdownCard(state, journey)}
     `,
     encontros: encontros ? encontrosTabHtml(encontros) : '',
+    questionarios: questionnairesTabHtml({ extraction, archetypeState, surveyState, valueAssessment }),
     financeiro: `
       ${!partyInfo?.submitted ? registrationLinkCard({ tokenActive, latestToken }) : ''}
       ${partyInfo?.submitted ? partyInfoSummary(partyInfo) : ''}

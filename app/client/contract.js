@@ -6,11 +6,14 @@
 // reported live on the admin/assistant contract page ("I'm locked in
 // here"). Fixed the same way: render the real shell.
 import { supabase } from '../shared/supabase-client.js';
-import { requireProfile } from '../shared/supabase-auth.js';
+import { getCurrentClientContext } from '../shared/client-context.js';
 import { card, renderShell } from '../shared/ui.js';
 
-const profile = await requireProfile('client');
-if (!profile) throw new Error('not authorized');
+// Through the shared client context (not requireProfile directly) so staff
+// "Ver como cliente" sees the student's contract instead of being signed out.
+const ctx = await getCurrentClientContext('../login.html', { page: 'contract' });
+if (!ctx) throw new Error('not authorized');
+const profile = { client_id: ctx.clientId };
 document.body.innerHTML = renderShell({ role: 'client', title: 'Seu Contrato' });
 const content = document.getElementById('app-content');
 

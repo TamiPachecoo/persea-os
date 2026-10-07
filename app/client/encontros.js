@@ -108,6 +108,20 @@ function recordingShapeFor(it, recordingRow, driveArtifacts) {
   return { lifecycleStatus, recording: lifecycleStatus === 'finalizada' ? { recordingStatus: 'sem_gravacao' } : null };
 }
 
+// "Combinados do encontro": notes and links Nay shared about this meeting
+// (written in her client workspace, agenda_items.shared_notes/shared_links).
+const escText = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function sharedNotesBlock(it) {
+  const links = (Array.isArray(it.shared_links) ? it.shared_links : []).filter((l) => isValidHttpUrl(l.url));
+  if (!it.shared_notes && !links.length) return '';
+  return `
+    <div class="mt-4 pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
+      ${it.shared_notes ? `<p class="text-sm" style="white-space:pre-line;line-height:1.65;">${escText(it.shared_notes)}</p>` : ''}
+      ${links.length ? `<div class="flex flex-wrap gap-2 mt-3">${links.map((l) => `<a ${externalLinkAttrs(l.url)} class="btn-ghost" style="padding:7px 14px;font-size:12px;">${escText(l.label || 'Abrir link')} ↗</a>`).join('')}</div>` : ''}
+    </div>`;
+}
+
 function meetingCard(it, recordingByAgendaId, driveArtifacts) {
   const linkOk = it.status === 'upcoming' && isValidHttpUrl(it.online_link);
   const meetingShape = recordingShapeFor(it, recordingByAgendaId.get(it.id), driveArtifacts);
@@ -123,6 +137,7 @@ function meetingCard(it, recordingByAgendaId, driveArtifacts) {
     ${it.topic ? `<p class="text-sm text-white/50 mb-4 max-w-xl break-words">${it.topic}</p>` : '<div class="mb-4"></div>'}
     ${linkOk ? `<a ${externalLinkAttrs(it.online_link)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Entrar na Reunião ↗</a>` : ''}
     ${meetingShape.recording ? `<div class="mt-4 pt-4" style="border-top:1px solid var(--line);">${renderClientRecordingBlock(meetingShape)}</div>` : ''}
+    ${sharedNotesBlock(it)}
   `, 'mb-5');
 }
 

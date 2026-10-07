@@ -206,7 +206,7 @@ const MOBILE_NAV_CONFIG = {
   admin: {
     tabs: [
       ['agenda.html', 'Agenda', MOBILE_TAB_ICON.calendar],
-      ['crm.html', 'CRM', MOBILE_TAB_ICON.people],
+      ['crm.html', 'Clientes', MOBILE_TAB_ICON.people],
       ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
     ],
     mais: [
@@ -314,7 +314,7 @@ function onboardingGateBanner(active) {
 // (clients awaiting info -> CRM, overdue payments -> Financeiro).
 const ADMIN_NAV = [
   ['agenda.html', 'Agenda'],
-  ['crm.html', 'CRM'],
+  ['crm.html', 'Clientes'],
   ['content.html', 'Conteúdos'],
   ['assistente.html', 'Assistente'],
   ['events.html', 'Eventos'],
@@ -398,6 +398,41 @@ const ROLE_DIR = { admin: '/admin/', assistant: '/assistant/', client: '/client/
 // renderShell({..., title: '...'}) call sites need editing; it's just
 // inert now. The browser tab title is unaffected — that's each page's own
 // <title> tag in its .html file's <head>, unrelated to this.
+// The client a client page is showing, set by shared/client-context.js
+// before the page calls renderShell (every client page resolves its client
+// first). Drives the student's own photo in the header, and the "Ver como
+// cliente" banner when staff are viewing as her.
+let shellClient = null;
+let shellViewAs = false;
+export function setShellClient(client, { viewAs = false } = {}) { shellClient = client; shellViewAs = viewAs; }
+export function isViewingAsClient() { return shellViewAs; }
+
+function shellAvatar(c, size = 32) {
+  if (!c) return '';
+  const photo = isValidHttpUrl(c.photo_url)
+    ? `<span style="width:${size}px;height:${size}px;position:relative;display:inline-block;flex-shrink:0;">
+        <img src="${c.photo_url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+        <span style="display:none;">${initialsAvatar(c.full_name, size)}</span>
+      </span>`
+    : initialsAvatar(c.full_name, size);
+  const first = String(c.full_name || '').trim().split(/\s+/)[0];
+  return `<span class="flex items-center gap-2" title="${String(c.full_name || '').replace(/"/g, '&quot;')}">${photo}<span class="hidden sm:inline text-sm" style="color:var(--cream);">${first}</span></span>`;
+}
+
+function viewAsBanner(c) {
+  return `
+    <div class="view-as-banner" style="position:sticky;top:0;z-index:60;background:var(--gold);color:#16100a;font-size:12.5px;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;text-align:center;">
+      <span>Você está vendo o app como <b>${c.full_name}</b>. O que você alterar aqui fica salvo na conta dela.</span>
+      <a href="/admin/client-onboarding.html?id=${c.id}" id="exit-view-as" style="color:#16100a;text-decoration:underline;font-weight:600;">Sair da visualização</a>
+    </div>`;
+}
+// Leaving the view clears this tab's "ver como" choice (same key as
+// shared/client-context.js) before going back to her client page.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#exit-view-as')) return;
+  try { sessionStorage.removeItem('persea_view_as_client'); } catch { /* nothing stored */ }
+});
+
 export function renderShell({ role, active, tenantName = 'PERSEA', title, program }) {
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
   const dir = ROLE_DIR[role] || '';
@@ -410,6 +445,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title, progra
     <div class="grain"></div>
     ${renderParticles(role === 'client' ? 14 : 8)}
     <div class="app-shell">
+      ${role === 'client' && shellViewAs && shellClient ? viewAsBanner(shellClient) : ''}
       <header class="app-header">
         <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div class="flex items-center gap-8">
@@ -418,8 +454,10 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title, progra
           </div>
           <div class="flex items-center gap-4">
             ${role === 'client' && isNonProduction() ? renderClientSwitcher() : ''}
-            <span class="text-[10px] uppercase tracking-[.2em]" style="color:var(--muted);">Visão ${ROLE_LABEL[role] || role}</span>
-            <a href="../index.html" id="logout-link" class="btn-text">Sair</a>
+            ${role === 'client' && shellClient
+              ? shellAvatar(shellClient)
+              : `<span class="text-[10px] uppercase tracking-[.2em]" style="color:var(--muted);">Visão ${ROLE_LABEL[role] || role}</span>`}
+            ${role === 'client' && shellViewAs ? '' : '<a href="../index.html" id="logout-link" class="btn-text">Sair</a>'}
           </div>
         </div>
       </header>
@@ -449,6 +487,12 @@ document.addEventListener('click', (e) => {
   const link = e.target.closest('#logout-link, .mobile-logout-link');
   if (!link) return;
   e.preventDefault();
+  // Viewing as a student, "Sair" leaves the view, not Nay's own session.
+  if (shellViewAs && shellClient) {
+    try { sessionStorage.removeItem('persea_view_as_client'); } catch { /* nothing stored */ }
+    location.href = `/admin/client-onboarding.html?id=${shellClient.id}`;
+    return;
+  }
   signOut().finally(() => { location.href = link.href; });
 });
 
@@ -613,6 +657,16 @@ export function badgeFromMaps(value, labelMap, classMap) {
 
 // Deterministic (same name -> same tone) initials avatar — stands in for a
 // client photo, since no real photo upload exists in this prototype.
+// One color per program phase (Fase 1 = index 0), so the journey reads at a
+// glance in Clientes (list chip) and in each client's Jornada tab. Muted
+// tones that sit on the dark theme; a program with more phases wraps around.
+export const PHASE_COLORS = ['#c9a96e', '#c4785c', '#8fae8b', '#7fa3c4', '#a88bc0', '#c98aa0', '#d1a04f', '#6fb0a6'];
+export const phaseColor = (index) => PHASE_COLORS[((index % PHASE_COLORS.length) + PHASE_COLORS.length) % PHASE_COLORS.length];
+export function phaseChip(index, label = `Fase ${index + 1}`) {
+  const c = phaseColor(index);
+  return `<span class="badge" style="background:${c};color:#16100a;border-color:${c};font-weight:600;">${label}</span>`;
+}
+
 export function initialsAvatar(fullName, size = 36) {
   const initials = (fullName || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
   return `<div class="avatar-initials" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;">${initials}</div>`;
@@ -1142,6 +1196,7 @@ const MOOD_EMOJIS = [
 // itself. Kept UI-only: callers decide what to do with the chosen value
 // (ui.js has no data-layer dependency).
 export function showMoodPrompt({ label, onSelect }) {
+  if (shellViewAs) return; // staff viewing as the student: never log a mood on her behalf
   document.querySelectorAll('.mood-prompt').forEach((el) => el.remove());
   const el = document.createElement('div');
   el.className = 'mood-prompt';

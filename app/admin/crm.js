@@ -10,7 +10,7 @@ import {
   LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL, VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL,
   PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_LABEL_BY_SLUG, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink, isProductionEnvironment } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink, isProductionEnvironment, phaseChip, phaseColor } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
@@ -68,13 +68,14 @@ function productionClientRow(c) {
   const tierLabel = isPersea ? (c.tier === 'premium' ? 'Premium' : 'Essential') : null;
   const nextActionLabel = c._status.nextAction ? NEXT_ACTION_LABEL[c._status.nextAction] : null;
   return `
-    <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2">
+    <a href="client-onboarding.html?id=${c.id}" class="flex items-center justify-between py-3 hover:bg-white/5 -mx-2 px-2 rounded-lg transition-colors flex-wrap gap-2" style="${c.phase_index != null && c._teamNextStep ? `border-left:3px solid ${phaseColor(c.phase_index)};padding-left:12px;` : ''}">
       <div class="min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <p class="font-medium">${c.full_name}</p>
+          ${c.phase_index != null && c._teamNextStep ? phaseChip(c.phase_index) : ''}
           ${c.is_demo ? '<span class="badge" style="background:rgba(196,90,60,.15); color:var(--terracotta); border-color:var(--terracotta);">Demo</span>' : ''}
         </div>
-        <p class="text-xs text-white/30">${c.email || 'sem e-mail'}${tierLabel ? ` · ${tierLabel}` : ''}${c.phase_index != null && c._teamNextStep ? ` · Fase ${c.phase_index + 1}` : ''}</p>
+        <p class="text-xs text-white/30">${c.email || 'sem e-mail'}${tierLabel ? ` · ${tierLabel}` : ''}</p>
         ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
       <!-- Real gap found live on mobile: this block itself never wrapped
@@ -310,7 +311,7 @@ function renderRealLeadsSection(leads) {
 async function renderProductionCRM() {
   const header = `
     <div class="mb-8">
-      <p class="text-white/40 text-sm mb-1">CRM</p>
+      <p class="text-white/40 text-sm mb-1">Clientes</p>
       <h1 class="text-3xl font-serif">Clientes &amp; Leads</h1>
     </div>
     <div class="flex gap-1 mb-8 border-b border-white/10">
@@ -394,7 +395,7 @@ const STAGE_CLASS = {
 const stageBadge = (stage) => `<span class="badge ${STAGE_CLASS[stage] || 'badge-locked'}">${LEAD_STAGE_LABEL[stage] || stage}</span>`;
 
 if (!(await requireProfile('admin'))) throw new Error('not authorized');
-document.body.innerHTML = renderShell({ role: 'admin', active: 'crm.html', title: 'CRM' });
+document.body.innerHTML = renderShell({ role: 'admin', active: 'crm.html', title: 'Clientes' });
 const content = document.getElementById('app-content');
 
 let section = new URLSearchParams(location.search).get('section') === 'leads' ? 'leads' : 'clients';
@@ -711,7 +712,7 @@ function openDynamicModal() {
 function render() {
   content.innerHTML = `
     <div class="mb-8">
-      <p class="text-white/40 text-sm mb-1">CRM</p>
+      <p class="text-white/40 text-sm mb-1">Clientes</p>
       <h1 class="text-3xl font-serif">Clientes &amp; Leads</h1>
     </div>
     <div class="flex gap-1 mb-8 border-b border-white/10">
