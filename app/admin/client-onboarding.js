@@ -926,7 +926,7 @@ function phaseBreakdownCard(state, journey) {
 // derives the amount/client server-side from the payment line itself —
 // see that function's own header) and sumup-verify (the existing manual
 // reconciliation path) — no new payment infrastructure.
-const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito' };
+const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito', boleto: 'Boleto', transferencia: 'Transferência' };
 
 async function loadFinanceiro(contract) {
   if (!contract) return null;
