@@ -46,11 +46,13 @@ function render() {
         <button type="submit" class="btn-primary block w-full text-center" style="padding-top:11px;padding-bottom:11px;">Entrar</button>
       </form>
     `)}
-    <button id="to-forgot" class="btn-text mt-4 underline block mx-auto">Esqueci minha senha</button>
-    <button id="to-signup" class="btn-text mt-3 underline block mx-auto">Primeiro acesso? Criar sua senha</button>
-  ` : mode === 'forgot' ? `
+    <button id="to-first" class="btn-text mt-4 underline block mx-auto">Primeiro acesso? Criar minha senha</button>
+    <button id="to-forgot" class="btn-text mt-3 underline block mx-auto">Esqueci minha senha</button>
+  ` : mode === 'forgot' || mode === 'first' ? `
     ${card(`
-      <p class="text-xs mb-4" style="color:var(--muted); line-height:1.6;">Digite o e-mail da sua conta. Vamos enviar um link para você criar uma nova senha.</p>
+      <p class="text-xs mb-4" style="color:var(--muted); line-height:1.6;">${mode === 'first'
+        ? 'Digite o e-mail que a Nay cadastrou para você. Enviamos um link para você criar a sua senha. Se você recebeu um link pelo WhatsApp, pode usar ele direto.'
+        : 'Digite o e-mail da sua conta. Vamos enviar um link para você criar uma nova senha.'}</p>
       <form id="forgot-form" class="space-y-4">
         <div>
           <label class="text-xs text-white/40 block mb-1">E-mail</label>
@@ -78,7 +80,12 @@ function render() {
     <button id="to-signin" class="btn-text mt-6 underline block mx-auto">Já tem senha? Entrar</button>
   `;
 
-  document.getElementById('to-signup')?.addEventListener('click', () => { mode = 'signup'; render(); });
+  // "Primeiro acesso" used to open a self sign-up form (signUp), which on an
+  // already-invited e-mail only re-sent Supabase's confirmation e-mail and
+  // cancelled her invite link (real incident: the assistant's first access).
+  // Everyone with access already has an account created by Nay's invite, so
+  // first access is now the same "send me a link" flow as a forgotten password.
+  document.getElementById('to-first')?.addEventListener('click', () => { mode = 'first'; render(); });
   document.getElementById('to-signin')?.addEventListener('click', () => { mode = 'signin'; render(); });
   document.getElementById('to-forgot')?.addEventListener('click', () => { mode = 'forgot'; render(); });
   document.getElementById('to-signin-2')?.addEventListener('click', () => { mode = 'signin'; render(); });
@@ -92,7 +99,7 @@ function render() {
     // here avoids leaking which addresses have accounts.
     if (error) { toast(error.message, { tone: 'error' }); return; }
     content.innerHTML = card(`
-      <p class="text-sm" style="color:var(--gold);">Se esse e-mail tiver uma conta, enviamos um link para redefinir a senha. Confira sua caixa de entrada (${email}).</p>
+      <p class="text-sm" style="color:var(--gold);">Se esse e-mail tiver acesso ao Persea, enviamos agora um link para você criar a sua senha. Confira a caixa de entrada de ${String(email).replace(/[<>&"]/g, '')} (e também o spam). O link vale por pouco tempo, então abra assim que chegar.</p>
     `);
   });
 
@@ -100,7 +107,13 @@ function render() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const { error } = await signInWithPassword(fd.get('email'), fd.get('password'));
-    if (error) { toast(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message, { tone: 'error' }); return; }
+    if (error) {
+      const msg = error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos. Ainda não criou a sua senha? Toque em "Primeiro acesso".'
+        : /not confirmed/i.test(error.message) ? 'Seu acesso ainda não foi ativado. Toque em "Primeiro acesso" para receber o link e criar a sua senha.'
+        : error.message;
+      toast(msg, { tone: 'error' });
+      return;
+    }
     const profile = await getCurrentProfile();
     if (!profile) {
       toast('Login feito, mas seu acesso ainda não foi vinculado a um perfil — fale com a Nay.', { tone: 'error' });
