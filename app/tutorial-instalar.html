@@ -166,6 +166,37 @@
   footer .wa-btn:hover{ background:var(--gold); }
   footer .wa-btn svg{ width:15px; height:15px; flex-shrink:0; }
 
+  /* Computador: drawn browser window, install dialog and taskbar — same
+     "illustration, not screenshot" approach as the phone mockups above. */
+  .tabs{ flex-wrap:wrap; }
+  .tab{ min-width:120px; }
+  .win{ background:#1b1815; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .win-top{ display:flex; align-items:center; gap:7px; padding:9px 12px; background:#14110f; }
+  .win-dot{ width:9px; height:9px; border-radius:50%; background:rgba(242,236,224,.16); }
+  .win-tab{ margin-left:10px; padding:5px 12px; border-radius:8px 8px 0 0; background:#1b1815; font-size:11px; color:var(--cream); display:flex; align-items:center; gap:6px; }
+  .win-tab img, .dlg-app img, .dock-app img{ border-radius:4px; display:block; }
+  .win-bar{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); }
+  .win-url{ flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#0f0d0b; border-radius:999px; padding:7px 12px; font-size:12px; color:var(--muted); min-width:0; }
+  .win-url span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .win-ic{ width:18px; height:18px; color:var(--muted); position:relative; flex-shrink:0; }
+  .win-ic svg{ width:100%; height:100%; }
+  .win-ic.active{ color:var(--terracotta); }
+  .win-ic.active::after{ content:''; position:absolute; inset:-7px; border:1.5px solid var(--terracotta); border-radius:50%; animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse{ 50%{ transform:scale(1.15); opacity:.55; } }
+  .win-body{ height:86px; display:flex; align-items:center; justify-content:center; color:rgba(242,236,224,.25); font-size:11px; letter-spacing:.24em; text-transform:uppercase; position:relative; }
+  .dlg{ position:absolute; top:-6px; right:14px; width:min(250px,78%); background:#24201c; border:1px solid var(--terracotta-soft); border-radius:12px; padding:14px; box-shadow:0 14px 30px rgba(0,0,0,.45); text-transform:none; letter-spacing:0; }
+  .dlg p{ margin:0 0 10px; font-size:13px; color:var(--cream); }
+  .dlg-app{ display:flex; align-items:center; gap:10px; font-size:12px; color:var(--cream); margin-bottom:12px; }
+  .dlg-app small{ display:block; color:var(--muted); font-size:10.5px; }
+  .dlg-btns{ display:flex; justify-content:flex-end; gap:8px; }
+  .dlg-btns span{ font-size:11.5px; padding:6px 12px; border-radius:999px; color:var(--muted); border:1px solid var(--line); }
+  .dlg-btns span.go{ background:var(--terracotta); color:var(--bg); border-color:var(--terracotta); font-weight:500; box-shadow:0 0 0 3px rgba(184,134,58,.3); }
+  .dock{ display:flex; align-items:center; justify-content:center; gap:12px; margin-top:12px; padding:9px 14px; background:#14110f; border-radius:12px; }
+  .dock-app{ width:30px; height:30px; border-radius:8px; background:var(--line); position:relative; display:flex; align-items:center; justify-content:center; }
+  .dock-app.active{ box-shadow:0 0 0 2px var(--terracotta); }
+  .dock-app.active::after{ content:''; position:absolute; bottom:-6px; width:4px; height:4px; border-radius:50%; background:var(--terracotta); }
+  .tip{ margin-top:12px; font-size:12.5px; line-height:1.7; color:var(--muted); }
+  .tip strong{ color:var(--cream); font-weight:500; }
   ::selection{ background:var(--terracotta-soft); color:var(--bg); }
 </style>
 </head>
@@ -176,13 +207,14 @@
 
   <header>
     <p class="wordmark serif">Persea</p>
-    <h1>Instale o PERSEA na<br>tela inicial do celular</h1>
-    <p>Em poucos toques, o PERSEA fica com um ícone no seu celular, como um aplicativo. Você abre direto, sem precisar digitar o endereço no navegador.</p>
+    <h1>Instale o PERSEA no<br>celular ou no computador</h1>
+    <p>Em poucos passos, o PERSEA fica com um ícone próprio, como um aplicativo. Você abre direto, sem precisar digitar o endereço no navegador.</p>
   </header>
 
   <div class="tabs">
     <button type="button" class="tab active" data-tab="ios">iPhone (Safari)</button>
     <button type="button" class="tab" data-tab="android">Android (Chrome)</button>
+    <button type="button" class="tab" data-tab="pc">Computador</button>
   </div>
 
   <div class="panel active" id="panel-ios">
@@ -288,6 +320,85 @@
     </div>
   </div>
 
+  <div class="panel" id="panel-pc">
+    <div class="warning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <p>Use o <strong>Google Chrome</strong> ou o <strong>Microsoft Edge</strong>, no Windows ou no Mac. Leva menos de um minuto.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>Abra o PERSEA no navegador</h3>
+        <p>Acesse <span style="font-family:ui-monospace,monospace;color:var(--gold);">app.naymurta.com</span> no Chrome ou no Edge.</p>
+        <div class="mock">
+          <div class="win">
+            <div class="win-top"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span><span class="win-tab"><img src="shared/assets/icons/icon-192.png" alt="" width="12" height="12">PERSEA</span></div>
+            <div class="win-bar">
+              <div class="win-url"><span>app.naymurta.com</span><span style="display:flex;gap:10px;align-items:center;"><span class="win-ic "><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M12 6v6M9.5 9.5 12 12l2.5-2.5"/></svg></span><span class="win-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span></span></div>
+              <span class="win-ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
+            </div>
+            <div class="win-body">PERSEA</div>
+          </div>
+          <p class="mock-caption">O endereço aparece na barra do topo</p>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>Clique no ícone de instalar</h3>
+        <p>No fim da barra de endereço, à direita, aparece um pequeno <strong style="color:var(--cream);">monitor com uma seta</strong>. Clique nele.</p>
+        <div class="mock">
+          <div class="win">
+            <div class="win-top"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span><span class="win-tab"><img src="shared/assets/icons/icon-192.png" alt="" width="12" height="12">PERSEA</span></div>
+            <div class="win-bar">
+              <div class="win-url"><span>app.naymurta.com</span><span style="display:flex;gap:10px;align-items:center;"><span class="win-ic active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M12 6v6M9.5 9.5 12 12l2.5-2.5"/></svg></span><span class="win-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span></span></div>
+              <span class="win-ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
+            </div>
+            <div class="win-body">PERSEA</div>
+          </div>
+          <p class="mock-caption">Ícone de instalar, no fim da barra de endereço</p>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>Confirme em "Instalar"</h3>
+        <p>Uma janelinha pergunta se você quer instalar o PERSEA. Clique em <strong style="color:var(--cream);">"Instalar"</strong>.</p>
+        <div class="mock">
+          <div class="win">
+            <div class="win-top"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span><span class="win-tab"><img src="shared/assets/icons/icon-192.png" alt="" width="12" height="12">PERSEA</span></div>
+            <div class="win-bar">
+              <div class="win-url"><span>app.naymurta.com</span><span style="display:flex;gap:10px;align-items:center;"><span class="win-ic active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M12 6v6M9.5 9.5 12 12l2.5-2.5"/></svg></span><span class="win-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></span></span></div>
+              <span class="win-ic"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
+            </div>
+            <div class="win-body" style="height:168px;align-items:flex-start;"><div class="dlg" style="top:10px;"><p>Instalar app?</p><div class="dlg-app"><img src="shared/assets/icons/icon-192.png" alt="" width="30" height="30"><div>PERSEA<small>app.naymurta.com</small></div></div><div class="dlg-btns"><span>Cancelar</span><span class="go">Instalar</span></div></div></div>
+          </div>
+          <p class="mock-caption">Janela de confirmação do navegador</p>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div>
+        <h3>Pronto: o PERSEA tem o seu próprio ícone</h3>
+        <p>Ele abre numa janela só dele e fica na sua área de trabalho e no menu de aplicativos. Para deixar sempre à mão, fixe na barra de tarefas.</p>
+        <div class="mock">
+          <div class="dock">
+            <span class="dock-app"></span><span class="dock-app"></span><span class="dock-app active"><img src="shared/assets/icons/icon-192.png" alt="" width="22" height="22"></span><span class="dock-app"></span><span class="dock-app"></span>
+          </div>
+          <p class="mock-caption">O ícone do PERSEA na barra de tarefas (Windows) ou no Dock (Mac)</p>
+        </div>
+        <p class="tip"><strong>Windows:</strong> clique com o botão direito no ícone do PERSEA na barra de tarefas e escolha <strong>"Fixar na barra de tarefas"</strong>.<br><strong>Mac:</strong> clique com o botão direito no ícone do Dock, depois <strong>Opções → "Manter no Dock"</strong>.</p>
+      </div>
+    </div>
+    <p class="note"><strong>Não apareceu o ícone de instalar?</strong><br>
+      No <strong>Chrome</strong>: clique nos três pontinhos (⋮) no canto superior direito → <strong>"Transmitir, salvar e compartilhar"</strong> → <strong>"Instalar página como app"</strong>.<br>
+      No <strong>Edge</strong>: clique em (…) → <strong>"Aplicativos"</strong> → <strong>"Instalar este site como um aplicativo"</strong>.<br>
+      No <strong>Safari do Mac</strong>: menu <strong>Arquivo</strong> → <strong>"Adicionar ao Dock"</strong>.</p>
+  </div>
+
   <p class="note">Depois de instalado, o PERSEA abre em tela cheia, como um aplicativo de verdade, sem a barra de endereço do navegador.</p>
 
   <footer>
@@ -302,6 +413,16 @@
 </div>
 
 <script>
+  // Open on the right tab for the device: computer, iPhone or Android (?aba=pc|ios|android forces one).
+  (function () {
+    const forced = new URLSearchParams(location.search).get('aba');
+    const ua = navigator.userAgent;
+    const tab = ['pc', 'ios', 'android'].includes(forced) ? forced
+      : /android/i.test(ua) ? 'android'
+      : /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'ios' : 'pc';
+    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + tab));
+  })();
   document.querySelectorAll('.tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
