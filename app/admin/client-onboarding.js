@@ -107,6 +107,7 @@ const CONTRACT_STATUS_LABEL = {
 // RLS policy exists for it at all — see this file's own header comment).
 const ALL_TABS = [
   ['jornada', 'Jornada'],
+  ['mensagens', 'Mensagens'],
   ['encontros', 'Encontros'],
   ['questionarios', 'Questionários'],
   ['financeiro', 'Financeiro'],
@@ -1714,6 +1715,148 @@ function questionnairesTabHtml({ extraction, archetypeState, surveyState, valueA
   `;
 }
 
+// ===== Mensagens =============================================================
+// Ready-made messages the team sends a client (welcome, meeting scheduled /
+// reminder, next installment, payment received), filled with her real data,
+// editable, sent through WhatsApp or e-mail on the sender's own device. Each
+// send is recorded in client_message_log (staff-only) so Nay and the
+// assistant can see what already went out. Nay signs as herself; the
+// assistant introduces herself as part of Nay's team.
+let msgState = { kind: 'welcome', meetingId: '', lineId: '', draft: null };
+const MSG_KINDS = [
+  ['welcome', 'Boas-vindas'], ['meeting', 'Encontro agendado'], ['reminder', 'Lembrete de encontro'],
+  ['installment', 'Próxima parcela'], ['paid', 'Pagamento recebido'], ['free', 'Mensagem livre'],
+];
+const MSG_KIND_LABEL = Object.fromEntries(MSG_KINDS);
+const fmtDayLong = (iso) => new Date(iso).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtHour = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dueDay = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
+
+async function loadMessagesData() {
+  const [{ data: meetings }, { data: log }] = await Promise.all([
+    supabase.from('agenda_items').select('id, title, item_date, online_link, status').eq('related_student_id', clientId)
+      .eq('status', 'upcoming').gte('item_date', new Date(Date.now() - 2 * 3600e3).toISOString()).order('item_date'),
+    supabase.from('client_message_log').select('*').eq('client_id', clientId).order('created_at', { ascending: false }).limit(15),
+  ]);
+  return { meetings: meetings || [], log: log || [] };
+}
+
+function buildMessage(kind, { client, partyInfo, finState, meetings }) {
+  const first = (partyInfo?.social_name || client.full_name || '').trim().split(/\s+/)[0];
+  const isNay = profile.role === 'admin';
+  const senderFirst = String(profile.full_name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] || 'Equipe PERSEA';
+  const hello = isNay ? `Olá, ${first}!` : `Olá, ${first}! Aqui é a ${senderFirst}, da equipe da Nay.`;
+  const sign = isNay ? 'Com carinho,\nNay' : `Com carinho,\n${senderFirst} · Equipe PERSEA`;
+  const meeting = meetings.find((m) => m.id === msgState.meetingId) || meetings[0];
+  const lines = finState?.lines || [];
+  const openLines = lines.filter((l) => l.outstanding_cents > 0);
+  const line = openLines.find((l) => l.id === msgState.lineId) || openLines[0];
+  const meetingText = (m) => `*${m.title}*, ${fmtDayLong(m.item_date)}, às *${fmtHour(m.item_date)}*`;
+  switch (kind) {
+    case 'welcome': {
+      const access = ['created', 'active'].includes(client.access_status)
+        ? `Seu acesso ao app já está liberado: entre em *app.naymurta.com* com o seu e-mail (${client.email}). Se ainda não criou a sua senha, use o link que chegou no seu e-mail ou toque em "Primeiro acesso".`
+        : 'Nos próximos dias você recebe o seu acesso ao app *PERSEA*, onde vai acompanhar toda a sua jornada: encontros, materiais e atividades.';
+      return [hello, '', `Seja muito bem-vinda à *Mentoria PERSEA*! ${isNay ? 'Estou muito feliz' : 'A Nay e toda a equipe estão muito felizes'} por começar essa jornada com você.`, '', access, '', 'Para ter o app sempre à mão no celular ou no computador: app.naymurta.com/tutorial-instalar.html', '', 'Qualquer dúvida, é só chamar por aqui.', '', sign].join('\n');
+    }
+    case 'meeting':
+      if (!meeting) return null;
+      return [hello, '', `Seu encontro está confirmado: ${meetingText(meeting)}.`, ...(isValidHttpUrl(meeting.online_link) ? ['', `Link da reunião: ${meeting.online_link}`] : []), '', 'Todos os detalhes também ficam na página *Encontros* do app.', '', 'Até lá!', '', sign].join('\n');
+    case 'reminder': {
+      if (!meeting) return null;
+      const d = new Date(meeting.item_date), today = new Date(), tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
+      const when = d.toDateString() === today.toDateString() ? 'hoje' : d.toDateString() === tomorrow.toDateString() ? 'amanhã' : fmtDayLong(meeting.item_date);
+      return [hello, '', `Passando para lembrar ${isNay ? 'do nosso encontro' : 'do seu encontro com a Nay'} *${meeting.title}*, ${when}, às *${fmtHour(meeting.item_date)}*.`, ...(isValidHttpUrl(meeting.online_link) ? ['', `Link da reunião: ${meeting.online_link}`] : []), '', isNay ? 'Te espero!' : 'A Nay te espera!', '', sign].join('\n');
+    }
+    case 'installment': {
+      if (!line) return null;
+      const pay = finState.paymentByLine?.get(line.id);
+      const extra = [];
+      if (pay && pay.status === 'pending' && isValidHttpUrl(pay.sumup_link_url)) extra.push(`Link para pagamento: ${pay.sumup_link_url}`);
+      else if (line.method === 'pix' && finState.pixKey) extra.push(`Chave PIX: ${finState.pixKey}`);
+      if (['transferencia', 'pix'].includes(line.method)) extra.push('Depois de pagar, é só me enviar o comprovante por aqui.');
+      const overdue = line.due_date < new Date().toISOString().slice(0, 10);
+      return [hello, '', overdue
+        ? `Passando para lembrar da parcela de *${brlCents(line.outstanding_cents)}* que venceu em *${dueDay(line.due_date)}* (${FIN_METHOD_LABEL[line.method] || 'forma combinada'}).`
+        : `Passando para lembrar da sua próxima parcela: *${brlCents(line.outstanding_cents)}*, com vencimento em *${dueDay(line.due_date)}* (${FIN_METHOD_LABEL[line.method] || 'forma combinada'}).`,
+      ...(extra.length ? ['', ...extra] : []), '', 'Qualquer dúvida, estou à disposição.', '', sign].join('\n');
+    }
+    case 'paid':
+      return [hello, '', 'Confirmamos o recebimento do seu pagamento. Muito obrigada! 💛', '', 'Você acompanha todas as parcelas na página *Financeiro* do app.', '', sign].join('\n');
+    default:
+      return [hello, '', '', sign].join('\n');
+  }
+}
+
+function messagesTabHtml(ctx, data) {
+  const { client, partyInfo, finState } = ctx;
+  const phone = (partyInfo?.whatsapp || '').replace(/\D/g, '');
+  const openLines = (finState?.lines || []).filter((l) => l.outstanding_cents > 0);
+  const needsMeeting = ['meeting', 'reminder'].includes(msgState.kind);
+  const generated = buildMessage(msgState.kind, { ...ctx, meetings: data.meetings });
+  const body = msgState.draft ?? generated ?? '';
+  const missing = needsMeeting && !data.meetings.length ? 'Ela não tem nenhum encontro agendado. Agende em Agenda e volte aqui.'
+    : msgState.kind === 'installment' && !openLines.length ? 'Nenhuma parcela em aberto para ela.' : '';
+  return `
+    ${card(`
+      <p class="text-sm text-white/50 mb-1">Enviar mensagem para ${escHtml(client.full_name.split(' ')[0])}</p>
+      <p class="text-xs text-white/30 mb-4">Escolha o tipo: a mensagem já vem preenchida com os dados dela. Ajuste o que quiser e envie pelo WhatsApp ou e-mail.</p>
+      <div class="flex flex-wrap gap-2 mb-4">
+        ${MSG_KINDS.map(([k, l]) => `<button type="button" data-msg-kind="${k}" class="${msgState.kind === k ? 'btn-primary' : 'btn-ghost'}" style="padding:7px 14px;font-size:12px;">${l}</button>`).join('')}
+      </div>
+      ${needsMeeting && data.meetings.length > 1 ? `<select data-msg-meeting class="field text-sm mb-3">${data.meetings.map((m) => `<option value="${m.id}" ${m.id === msgState.meetingId ? 'selected' : ''}>${escHtml(m.title)} · ${formatDateTime(m.item_date)}</option>`).join('')}</select>` : ''}
+      ${msgState.kind === 'installment' && openLines.length > 1 ? `<select data-msg-line class="field text-sm mb-3">${openLines.map((l) => `<option value="${l.id}" ${l.id === msgState.lineId ? 'selected' : ''}>${brlCents(l.outstanding_cents)} · vence ${formatDate(l.due_date)}</option>`).join('')}</select>` : ''}
+      ${missing ? `<p class="text-sm" style="color:var(--muted);">${missing}</p>` : `
+      <textarea data-msg-body class="field text-sm" rows="12" style="line-height:1.6;">${escHtml(body)}</textarea>
+      <div class="flex items-center gap-2 flex-wrap mt-3">
+        ${phone ? '<button type="button" data-msg-send="whatsapp" class="btn-primary" style="padding:8px 16px;font-size:12px;">Enviar no WhatsApp</button>' : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro dela.</span>'}
+        ${client.email ? '<button type="button" data-msg-send="email" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Enviar por e-mail</button>' : ''}
+        <button type="button" data-msg-send="copy" class="btn-text">Copiar</button>
+        ${msgState.draft !== null ? '<button type="button" data-msg-reset class="btn-text">Restaurar texto original</button>' : ''}
+      </div>
+      <p class="text-xs text-white/20 mt-2">Para: ${phone ? `WhatsApp ${escHtml(partyInfo.whatsapp)}` : ''}${phone && client.email ? ' · ' : ''}${client.email ? escHtml(client.email) : ''}</p>`}
+    `, 'mb-6')}
+    ${card(`
+      <p class="text-sm text-white/50 mb-3">Mensagens enviadas</p>
+      ${data.log.length ? data.log.map((m) => `
+        <details class="py-2 border-b border-white/5 last:border-0">
+          <summary class="cursor-pointer text-sm flex items-center justify-between gap-3 flex-wrap">
+            <span>${MSG_KIND_LABEL[m.kind] || m.kind} <span class="text-xs text-white/30">· ${m.channel === 'whatsapp' ? 'WhatsApp' : m.channel === 'email' ? 'E-mail' : 'Copiada'}</span></span>
+            <span class="text-xs text-white/30">${escHtml(m.sent_by_name || '')} · ${formatDateTime(m.created_at)}</span>
+          </summary>
+          <p class="text-xs text-white/50 mt-2" style="white-space:pre-line;">${escHtml(m.body)}</p>
+        </details>`).join('') : '<p class="text-xs text-white/30">Nenhuma mensagem registrada ainda.</p>'}
+    `, 'mb-6')}
+  `;
+}
+
+function wireMessagesTab(ctx) {
+  content.querySelectorAll('[data-msg-kind]').forEach((b) => b.addEventListener('click', () => { msgState = { ...msgState, kind: b.dataset.msgKind, draft: null }; render(); }));
+  content.querySelector('[data-msg-meeting]')?.addEventListener('change', (e) => { msgState = { ...msgState, meetingId: e.target.value, draft: null }; render(); });
+  content.querySelector('[data-msg-line]')?.addEventListener('change', (e) => { msgState = { ...msgState, lineId: e.target.value, draft: null }; render(); });
+  content.querySelector('[data-msg-reset]')?.addEventListener('click', () => { msgState = { ...msgState, draft: null }; render(); });
+  const area = content.querySelector('[data-msg-body]');
+  area?.addEventListener('input', () => { msgState.draft = area.value; });
+  content.querySelectorAll('[data-msg-send]').forEach((b) => b.addEventListener('click', async () => {
+    const text = area.value.trim();
+    if (!text) { toast('A mensagem está vazia.', { tone: 'error' }); return; }
+    const channel = b.dataset.msgSend;
+    if (channel === 'whatsapp') {
+      const digits = (ctx.partyInfo?.whatsapp || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+      window.open(`https://wa.me/55${digits}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    } else if (channel === 'email') {
+      location.href = `mailto:${ctx.client.email}?subject=${encodeURIComponent(`${MSG_KIND_LABEL[msgState.kind] === 'Mensagem livre' ? 'PERSEA' : MSG_KIND_LABEL[msgState.kind]} · PERSEA`)}&body=${encodeURIComponent(text.replace(/\*/g, ''))}`;
+    } else {
+      try { await navigator.clipboard.writeText(text); toast('Mensagem copiada.'); } catch { window.prompt('Copie a mensagem:', text); }
+    }
+    const { error } = await supabase.from('client_message_log').insert({
+      client_id: clientId, kind: msgState.kind, channel, body: text, sent_by: profile.id, sent_by_name: String(profile.full_name || '').replace(/\(.*?\)/g, '').trim() || null,
+    });
+    if (!error) { msgState = { ...msgState, draft: null }; setTimeout(render, 400); }
+  }));
+}
+
 function tabBarHtml() {
   return `
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
@@ -1741,6 +1884,7 @@ async function render() {
   const programSummaryHtml = await programSummaryCard(client, state);
   const encontros = activeTab === 'encontros' ? await loadEncontros() : null;
   const extraction = activeTab === 'questionarios' ? await loadExtraction() : null;
+  const messagesData = activeTab === 'mensagens' ? await loadMessagesData() : null;
 
   const status = deriveClientStatus({
     accessStatus: client.access_status,
@@ -1760,6 +1904,7 @@ async function render() {
     `,
     encontros: encontros ? encontrosTabHtml(encontros) : '',
     questionarios: questionnairesTabHtml({ extraction, archetypeState, surveyState, valueAssessment }),
+    mensagens: messagesData ? messagesTabHtml({ client, partyInfo, finState }, messagesData) : '',
     financeiro: `
       ${!partyInfo?.submitted ? registrationLinkCard({ tokenActive, latestToken }) : ''}
       ${partyInfo?.submitted ? partyInfoSummary(partyInfo) : ''}
@@ -1827,6 +1972,7 @@ async function render() {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });
   if (encontros) wireEncontrosTab(encontros);
+  if (messagesData) wireMessagesTab({ client, partyInfo, finState });
   if (activeTab === 'direcao-marca' && isAssistant && isValidHttpUrl(brandState.bdRow?.pinterest_url)) {
     mountPinterestBoard(document.getElementById('bd-board-area'), brandState.bdRow.pinterest_url);
   }
