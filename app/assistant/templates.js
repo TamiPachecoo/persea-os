@@ -5,7 +5,8 @@
 // implied but never actually had a home for — she opens the right
 // template, duplicates it in Canva, and uploads what she builds straight
 // onto that client's own profile (see client-workspace.js's review queue).
-import { MockDB, TEMPLATE_CATEGORIES } from '../shared/mock-db.js';
+import { TEMPLATE_CATEGORIES } from '../shared/mock-db.js';
+import { loadTemplateLibrary } from '../shared/template-model.js';
 import { renderShell, card, isValidHttpUrl, externalLinkAttrs } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 
@@ -49,8 +50,9 @@ function singleLinksCard(cats, library) {
   `, 'mb-6');
 }
 
-function render() {
-  const library = MockDB.getTemplateLibrary();
+async function render() {
+  let library = {};
+  try { library = await loadTemplateLibrary(); } catch { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar os templates agora. Atualize a página em instantes.</p>'); return; }
   const grouped = TEMPLATE_CATEGORIES.filter((c) => !c.single);
   const single = TEMPLATE_CATEGORIES.filter((c) => c.single);
   content.innerHTML = `

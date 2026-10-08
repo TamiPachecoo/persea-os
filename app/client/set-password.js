@@ -21,7 +21,7 @@
 // format and are handled by the legacy fallback below so nothing already
 // in an inbox breaks.
 import { supabase } from '../shared/supabase-client.js';
-import { resetPasswordForEmail } from '../shared/supabase-auth.js';
+import { resetPasswordForEmail, getCurrentProfile } from '../shared/supabase-auth.js';
 import { card, toast } from '../shared/ui.js';
 
 const content = document.getElementById('app-content');
@@ -105,7 +105,10 @@ function renderForm() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) { submitBtn.disabled = false; toast(error.message, { tone: 'error' }); return; }
     toast('Senha criada!');
-    location.href = 'program.html'; // Painel removed — Minha Jornada is her landing page now
+    // Same page serves students and the team (invite-staff links land here
+    // too) — send each to her own home.
+    const profile = await getCurrentProfile();
+    location.href = { admin: '/admin/agenda.html', assistant: '/assistant/agenda.html' }[profile?.role] || 'program.html';
   });
 }
 

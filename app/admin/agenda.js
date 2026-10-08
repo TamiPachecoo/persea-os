@@ -1049,6 +1049,19 @@ async function openAgendaModalReal(itemId) {
             <button type="button" id="generate-meet-link" class="btn-ghost mt-2" style="padding:6px 12px; font-size:12px;">Gerar link do Meet</button>
           ` : ''}
         </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Responsável</label>
+            <select name="assignedTo" class="field">
+              <option value="nay" ${item.assigned_to !== 'assistant' ? 'selected' : ''}>Nay</option>
+              <option value="assistant" ${item.assigned_to === 'assistant' ? 'selected' : ''}>Assistente</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Instruções para a assistente <span class="text-white/20">(ela vê na Agenda dela)</span></label>
+            <input name="assigneeNotes" class="field" value="${(item.assignee_notes || '').replace(/"/g, '&quot;')}" placeholder="O que ela precisa fazer" />
+          </div>
+        </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Notas de Preparação <span class="text-white/20">(interno)</span></label>
           <textarea name="prepNotes" rows="2" class="field">${item.prep_notes || ''}</textarea>
@@ -1146,6 +1159,7 @@ async function openAgendaModalReal(itemId) {
       related_student_id: fd.get('relatedStudentId') || null, topic: fd.get('topic') || null,
       online_link: (fd.get('onlineLink') || '').trim() || null,
       prep_notes: fd.get('prepNotes') || null, general_notes: fd.get('generalNotes') || null,
+      assigned_to: fd.get('assignedTo') || 'nay', assignee_notes: (fd.get('assigneeNotes') || '').trim() || null,
     };
     const { error } = await supabase.from('agenda_items').update(payload).eq('id', itemId);
     if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar Alterações'; return; }

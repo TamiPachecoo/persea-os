@@ -11,6 +11,7 @@ import {
 import { renderShell, card, formatDateTime, toast, openModal, functionErrorMessage } from '../shared/ui.js';
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
+import { isProductionEnvironment } from '../shared/environment.js';
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
@@ -492,10 +493,234 @@ async function render() {
   });
 }
 
-render();
+// ===== Production agenda ===================================================
+// The MockDB agenda above lived only in this browser: items she created
+// never reached Nay, and Nay's real meetings never reached her. In
+// production this reads and writes the real agenda_items table instead —
+// the items Nay assigns to her (Responsável = Assistente, with Nay's
+// instructions in assignee_notes) plus the ones she creates for herself.
+// RLS: she reads every item, and can only create/edit items assigned to
+// 'assistant' (agenda_items_assistant_write).
+let realItems = [];
+let realClients = new Map();
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+async function loadReal() {
+  const [{ data: items }, { data: clients }] = await Promise.all([
+    supabase.from('agenda_items').select('*').eq('assigned_to', 'assistant').order('item_date'),
+    supabase.from('clients').select('id, full_name').eq('is_demo', false).order('full_name'),
+  ]);
+  realItems = items || [];
+  realClients = new Map((clients || []).map((c) => [c.id, c.full_name]));
+}
+
+function realRow(it) {
+  const client = realClients.get(it.related_student_id);
+  return `
+    <button type="button" data-real-item="${it.id}" class="w-full text-left py-3 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-2 px-2 rounded-lg">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <p class="text-sm font-medium">${AGENDA_TYPE_ICON[it.type] || ''} ${esc(it.title)}</p>
+        <span class="text-xs text-white/40">${formatDateTime(it.item_date)}</span>
+      </div>
+      ${client || it.assignee_notes ? `<p class="text-xs mt-1" style="color:var(--muted);">${client ? `Cliente: ${esc(client)}` : ''}${client && it.assignee_notes ? ' · ' : ''}${it.assignee_notes ? `<span style="color:var(--gold);">Nay pediu: ${esc(it.assignee_notes)}</span>` : ''}</p>` : ''}
+    </button>`;
+}
+
+function realSection(title, items, empty, tone = '') {
+  return card(`
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm" style="${tone}">${title}</p>
+      <span class="text-xs" style="color:var(--muted);">${items.length}</span>
+    </div>
+    ${items.length ? items.map(realRow).join('') : `<p class="text-xs text-white/30 py-2">${empty}</p>`}
+  `, 'mb-6');
+}
+
+function realCalendar() {
+  const year = viewDate.getFullYear(), month = viewDate.getMonth();
+  const days = monthGridDays(year, month);
+  const byDay = {};
+  realItems.filter((it) => filters.showCompleted || it.status === 'upcoming').forEach((it) => {
+    const key = dateKey(new Date(it.item_date)); (byDay[key] || (byDay[key] = [])).push(it);
+  });
+  const todayKey = dateKey(new Date());
+  return card(`
+    <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <button type="button" id="cal-prev" class="btn-ghost" style="padding:6px 12px;" aria-label="Mês anterior">‹</button>
+        <p class="text-lg font-serif capitalize" style="min-width:180px;">${viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</p>
+        <button type="button" id="cal-next" class="btn-ghost" style="padding:6px 12px;" aria-label="Próximo mês">›</button>
+      </div>
+      <div class="flex items-center gap-4">
+        <label class="flex items-center gap-2 text-xs" style="color:var(--muted);"><input type="checkbox" id="filter-completed" ${filters.showCompleted ? 'checked' : ''}/> Mostrar concluídos</label>
+        <button type="button" id="cal-today" class="btn-text">Hoje</button>
+      </div>
+    </div>
+    <div class="cal-grid">
+      ${WEEKDAY_LABELS.map((l) => `<div class="cal-weekday">${l}</div>`).join('')}
+      ${days.map((d) => {
+        const key = dateKey(d); const items = byDay[key] || [];
+        return `
+          <div class="cal-cell ${d.getMonth() === month ? '' : 'cal-cell-other-month'} ${key === todayKey ? 'cal-cell-today' : ''}" data-cal-day="${key}">
+            <p class="cal-day-num">${d.getDate()}</p>
+            <div class="cal-chips">
+              ${items.slice(0, MAX_CHIPS_PER_DAY).map((it) => `<button type="button" data-real-item="${it.id}" class="cal-chip ${it.status !== 'upcoming' ? 'cal-chip-done' : ''}"><span class="cal-chip-time">${formatTime(it.item_date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${esc(it.title)}</button>`).join('')}
+              ${items.length > MAX_CHIPS_PER_DAY ? `<span class="cal-more">+${items.length - MAX_CHIPS_PER_DAY} mais</span>` : ''}
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+  `, 'mb-8');
+}
+
+// First-visit welcome: what each menu item is for, in one line each, and
+// three first steps — so day one isn't "everything at once". Closing it is
+// remembered on this device; "Ver o guia de boas-vindas" brings it back.
+const WELCOME_KEY = 'persea_assistant_welcome_closed';
+const welcomeClosed = () => { try { return localStorage.getItem(WELCOME_KEY) === '1'; } catch { return false; } };
+function welcomeCard() {
+  const row = (name, text) => `<div class="flex gap-3 py-2"><p class="text-sm" style="min-width:96px;color:var(--gold);">${name}</p><p class="text-sm text-white/60">${text}</p></div>`;
+  return card(`
+    <p class="eyebrow mb-2">Bem-vinda à equipe PERSEA</p>
+    <h2 class="font-serif text-2xl mb-2">Comece por aqui</h2>
+    <p class="text-sm text-white/50 mb-5 max-w-2xl">Você não precisa aprender tudo hoje. Este é o mapa do sistema. Cada item do menu tem uma função só:</p>
+    <div class="mb-6" style="border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+      ${row('Agenda', 'O que a Nay pediu para você e as suas tarefas. É aqui que o seu dia começa.')}
+      ${row('Clientes', 'As alunas ativas. Clique em uma para ver a jornada, os encontros e os materiais dela.')}
+      ${row('Cadastros', 'Alunas novas entrando: contrato, liberação do acesso ao app e à Hubla.')}
+      ${row('Templates', 'Os modelos do Canva para cada entrega. Abra, duplique e adapte.')}
+      ${row('Financeiro', 'Anexar a nota fiscal de um pagamento. Ela aparece para a aluna.')}
+    </div>
+    <p class="text-xs uppercase mb-3" style="color:var(--muted);letter-spacing:.12em;">Seus três primeiros passos</p>
+    <ol class="text-sm text-white/70 space-y-2 mb-6" style="list-style:decimal;padding-left:20px;">
+      <li>Veja abaixo o que está para <b>hoje</b> e para os próximos dias.</li>
+      <li>Abra <a href="clients.html" style="color:var(--gold);">Clientes</a> e conheça a página de uma aluna, aba por aba.</li>
+      <li>Instale o PERSEA no seu computador e no celular: <a href="/tutorial-instalar.html" target="_blank" rel="noopener" style="color:var(--gold);">veja como (1 minuto)</a>.</li>
+    </ol>
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-xs text-white/30">Ficou com dúvida? Fale com a Nay. Nada que você clicar aqui apaga algo sem pedir confirmação.</p>
+      <button type="button" id="close-welcome" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Entendi, vamos começar</button>
+    </div>
+  `, 'mb-8');
+}
+
+async function renderReal() {
+  await loadReal();
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endToday = new Date(startToday); endToday.setDate(endToday.getDate() + 1);
+  const end7 = new Date(startToday); end7.setDate(end7.getDate() + 8);
+  const open = realItems.filter((it) => it.status === 'upcoming');
+  const at = (it) => new Date(it.item_date);
+  const overdue = open.filter((it) => at(it) < startToday);
+  const today = open.filter((it) => at(it) >= startToday && at(it) < endToday);
+  const week = open.filter((it) => at(it) >= endToday && at(it) < end7);
+  content.innerHTML = `
+    <div class="mb-8 flex items-end justify-between gap-4 flex-wrap">
+      <div>
+        <p class="text-white/40 text-sm mb-1">Agenda</p>
+        <h1 class="text-3xl font-serif">Sua Agenda</h1>
+        <p class="text-sm text-white/40 mt-2 max-w-xl">Aqui aparece tudo o que a Nay atribuiu a você e as tarefas que você mesma criar. Clique em um item para ver os detalhes e marcar como concluído.</p>
+      </div>
+      <button id="real-new-item" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Nova tarefa</button>
+    </div>
+    ${welcomeClosed() ? '' : welcomeCard()}
+    ${overdue.length ? realSection('⚠ Atrasados', overdue, '', 'color:var(--terracotta);') : ''}
+    ${realSection('Hoje', today, 'Nada para hoje.')}
+    ${realSection('Próximos 7 dias', week, 'Nada nos próximos 7 dias.')}
+    ${realCalendar()}
+    ${welcomeClosed() ? '<button type="button" id="open-welcome" class="btn-text">Ver o guia de boas-vindas</button>' : ''}
+  `;
+  content.querySelector('#close-welcome')?.addEventListener('click', () => { try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* storage blocked */ } renderReal(); window.scrollTo(0, 0); });
+  content.querySelector('#open-welcome')?.addEventListener('click', () => { try { localStorage.removeItem(WELCOME_KEY); } catch { /* storage blocked */ } renderReal(); window.scrollTo(0, 0); });
+  content.querySelector('#real-new-item').addEventListener('click', () => openRealModal(null));
+  content.querySelectorAll('[data-real-item]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openRealModal(b.dataset.realItem); }));
+  content.querySelectorAll('[data-cal-day]').forEach((cell) => cell.addEventListener('click', (e) => { if (!e.target.closest('[data-real-item]')) openRealModal(null, cell.dataset.calDay); }));
+  content.querySelector('#cal-prev').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() - 1); renderReal(); });
+  content.querySelector('#cal-next').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() + 1); renderReal(); });
+  content.querySelector('#cal-today').addEventListener('click', () => { viewDate = new Date(); viewDate.setDate(1); viewDate.setHours(0, 0, 0, 0); renderReal(); });
+  content.querySelector('#filter-completed').addEventListener('change', (e) => { filters.showCompleted = e.target.checked; renderReal(); });
+}
+
+function localInputValue(iso) {
+  const d = new Date(iso);
+  return `${dateKey(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function openRealModal(itemId, defaultDayKey) {
+  const it = itemId ? realItems.find((x) => x.id === itemId) : null;
+  const isNew = !it;
+  const data = it || { title: '', type: 'admin_task', item_date: `${defaultDayKey || dateKey(new Date())}T09:00:00`, status: 'upcoming', related_student_id: null, general_notes: '' };
+  const client = realClients.get(data.related_student_id);
+  const { el, close } = openModal({
+    title: isNew ? 'Nova tarefa' : esc(data.title),
+    bodyHtml: `
+      ${!isNew && data.assignee_notes ? `<div class="mb-4 p-3 rounded" style="background:rgba(201,169,110,.08);border:1px solid var(--line);"><p class="text-xs uppercase mb-1" style="color:var(--gold);letter-spacing:.12em;">Instruções da Nay</p><p class="text-sm" style="white-space:pre-line;">${esc(data.assignee_notes)}</p></div>` : ''}
+      ${!isNew && data.online_link ? `<a href="${esc(data.online_link)}" target="_blank" rel="noopener" class="btn-ghost inline-block mb-4">Entrar na reunião ↗</a>` : ''}
+      <form id="real-agenda-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Título</label>
+          <input name="title" class="field" value="${esc(data.title)}" required />
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Tipo</label>
+            <select name="type" class="field">${AGENDA_TYPES.map((t) => `<option value="${t}" ${data.type === t ? 'selected' : ''}>${AGENDA_TYPE_LABEL[t]}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Data e hora</label>
+            <input name="date" type="datetime-local" class="field" value="${localInputValue(data.item_date)}" required />
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Cliente <span class="text-white/20">(opcional)</span></label>
+            <select name="client" class="field"><option value="">— Nenhuma —</option>${[...realClients].map(([id, name]) => `<option value="${id}" ${data.related_student_id === id ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label class="text-xs text-white/40 block mb-1">Situação</label>
+            <select name="status" class="field">${AGENDA_STATUSES.map((st) => `<option value="${st}" ${data.status === st ? 'selected' : ''}>${AGENDA_STATUS_LABEL[st]}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Suas anotações</label>
+          <textarea name="notes" rows="3" class="field">${esc(data.general_notes || '')}</textarea>
+        </div>
+        <div class="flex justify-between items-center pt-2 gap-3 flex-wrap">
+          ${!isNew && data.status === 'upcoming' ? '<button type="button" id="real-done" class="btn-ghost">✓ Marcar como concluído</button>' : '<span></span>'}
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${isNew ? 'Criar tarefa' : 'Salvar'}</button>
+        </div>
+      </form>
+    `,
+  });
+  const save = async (patch) => {
+    const { error } = isNew
+      ? await supabase.from('agenda_items').insert({ ...patch, assigned_to: 'assistant' })
+      : await supabase.from('agenda_items').update(patch).eq('id', itemId);
+    if (error) { toast('Não foi possível salvar agora. Tente de novo.', { tone: 'error' }); return false; }
+    close(); toast(isNew ? 'Tarefa criada.' : 'Salvo.'); renderReal(); return true;
+  };
+  el.querySelector('#real-done')?.addEventListener('click', () => save({ status: 'completed' }));
+  el.querySelector('#real-agenda-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const btn = e.target.querySelector('[type=submit]'); btn.disabled = true;
+    const ok = await save({
+      title: (fd.get('title') || '').trim(), type: fd.get('type'), item_date: new Date(fd.get('date')).toISOString(),
+      related_student_id: fd.get('client') || null, status: fd.get('status'), general_notes: (fd.get('notes') || '').trim() || null,
+    });
+    if (!ok) btn.disabled = false;
+  });
+}
 
 const deepLinkItemId = new URLSearchParams(location.search).get('item');
-if (deepLinkItemId) openAgendaModal(deepLinkItemId);
+if (isProductionEnvironment()) {
+  await renderReal();
+  if (deepLinkItemId && realItems.some((x) => x.id === deepLinkItemId)) openRealModal(deepLinkItemId);
+} else {
+  render();
+  if (deepLinkItemId) openAgendaModal(deepLinkItemId);
+}
 
 // google-calendar-callback redirects back here with ?calendar=connected|
 // denied|error(&reason=...) — surface it once, then scrub the URL so a

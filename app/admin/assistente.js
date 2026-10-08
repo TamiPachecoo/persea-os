@@ -3,8 +3,10 @@
 // Nay curates for her to build from, and Revisões, what she's built and is
 // waiting on Nay to approve before it reaches a client. Same before/after
 // of the assistant's actual work, now in one place instead of two.
+import { loadTemplateLibrary, saveTemplateLink } from '../shared/template-model.js';
 import { MockDB, TEMPLATE_CATEGORIES, CONTENT_REVIEW_STATUS_LABEL, IMAGE_GUIDE_LABEL } from '../shared/mock-db.js';
 import {
+  isProductionEnvironment, functionErrorMessage,
   renderShell, card, toast, isValidHttpUrl, externalLinkAttrs, formatDateTime, formatDate, brl, openModal, isValidAssetSrc, assetLinkAttrs,
 } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
@@ -15,8 +17,70 @@ if (!(await requireProfile('admin'))) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'assistente.html', title: 'Assistente' });
 const content = document.getElementById('app-content');
 
-const SECTIONS = ['revisoes', 'templates', 'hubla', 'financeiro'];
-let section = SECTIONS.includes(new URLSearchParams(location.search).get('section')) ? new URLSearchParams(location.search).get('section') : 'revisoes';
+// Revisões still runs on MockDB (demo content only), so it is not offered
+// in production; there the assistant's deliverables live on each client's
+// page (Projeto de Imagem tab).
+const SECTIONS = isProductionEnvironment() ? ['acesso', 'templates', 'hubla', 'financeiro'] : ['acesso', 'revisoes', 'templates', 'hubla', 'financeiro'];
+let section = SECTIONS.includes(new URLSearchParams(location.search).get('section')) ? new URLSearchParams(location.search).get('section') : 'acesso';
+
+// --- Acesso: the assistant's login --------------------------------------
+// invite-staff creates her account (role assistant) and returns a one-time
+// link where she creates her own password; Nay sends it on WhatsApp.
+async function loadStaff() {
+  const { data } = await supabase.from('profiles').select('id, full_name, email, role').eq('role', 'assistant').order('full_name');
+  return data || [];
+}
+const escA = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const accessMessage = (name, url) => [
+  `Oi, ${String(name).trim().split(/\s+/)[0]}! Que alegria ter você na equipe PERSEA.`,
+  '',
+  'Este é o seu acesso ao sistema. Abra o link, crie a sua senha e pronto:',
+  url,
+  '',
+  'Depois, é só entrar em app.naymurta.com com o seu e-mail e essa senha.',
+  '',
+  'Nay',
+].join('\n');
+function renderAccessSection(staff) {
+  return `
+    ${card(`
+      <p class="text-sm text-white/50 mb-1">Dar acesso à assistente</p>
+      <p class="text-xs text-white/30 mb-4">Ela recebe um link para criar a própria senha. Nenhum e-mail é enviado: copie a mensagem e mande no WhatsApp dela. O link vale por 24 horas — se expirar, clique de novo para gerar outro.</p>
+      <form id="staff-access-form" class="flex flex-wrap gap-2 items-end">
+        <div style="flex:1 1 200px;"><label class="text-xs text-white/40 block mb-1">Nome</label><input name="full_name" class="field text-sm" required /></div>
+        <div style="flex:1 1 240px;"><label class="text-xs text-white/40 block mb-1">E-mail</label><input name="email" type="email" class="field text-sm" required /></div>
+        <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Gerar acesso</button>
+      </form>
+      <div id="staff-access-result"></div>
+    `, 'mb-6')}
+    ${card(`
+      <p class="text-sm text-white/50 mb-3">Equipe com acesso</p>
+      ${staff.length ? staff.map((p) => `
+        <div class="flex items-center justify-between gap-3 py-2 border-b border-white/5 last:border-0 flex-wrap">
+          <div><p class="text-sm">${escA(p.full_name)}</p><p class="text-xs text-white/30">${escA(p.email)}</p></div>
+          <button type="button" class="btn-text" data-new-access="${escA(p.email)}" data-name="${escA(p.full_name)}">Gerar novo link</button>
+        </div>`).join('') : '<p class="text-xs text-white/30">Ninguém ainda.</p>'}
+    `, 'mb-6')}
+  `;
+}
+async function requestAccess(fullName, email) {
+  const { data, error } = await supabase.functions.invoke('invite-staff', { body: { full_name: fullName, email } });
+  if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
+  const msg = accessMessage(fullName, data.url);
+  const box = content.querySelector('#staff-access-result');
+  box.innerHTML = `
+    <div class="mt-5 p-4 rounded" style="border:1px solid var(--gold);background:rgba(201,169,110,.06);">
+      <p class="text-sm mb-2" style="color:var(--gold);">Acesso pronto para ${escA(fullName)}</p>
+      <textarea class="field text-sm" rows="7" readonly>${escA(msg)}</textarea>
+      <div class="flex gap-2 mt-3 flex-wrap">
+        <button type="button" class="btn-primary" id="copy-access-msg" style="padding:8px 16px;font-size:12px;">Copiar mensagem</button>
+        <button type="button" class="btn-ghost" id="copy-access-link" style="padding:8px 16px;font-size:12px;">Copiar só o link</button>
+      </div>
+    </div>`;
+  const copy = async (text) => { try { await navigator.clipboard.writeText(text); toast('Copiado.'); } catch { window.prompt('Copie:', text); } };
+  box.querySelector('#copy-access-msg').addEventListener('click', () => copy(msg));
+  box.querySelector('#copy-access-link').addEventListener('click', () => copy(data.url));
+}
 
 // --- Templates ---------------------------------------------------------
 function itemTile(catKey, item, links, label) {
@@ -55,8 +119,9 @@ function singleLinksCard(cats, library) {
     </div>
   `, 'mb-6');
 }
+let templateLibrary = {};
 function renderTemplatesSection() {
-  const library = MockDB.getTemplateLibrary();
+  const library = templateLibrary;
   const grouped = TEMPLATE_CATEGORIES.filter((c) => !c.single);
   const single = TEMPLATE_CATEGORIES.filter((c) => c.single);
   return `
@@ -273,18 +338,22 @@ function renderHublaSection({ clients, error }) {
 async function render() {
   const hublaPending = section === 'hubla' ? await loadHublaPendingClients() : null;
   const wagePayments = section === 'financeiro' ? await loadWagePayments() : null;
+  const staff = section === 'acesso' ? await loadStaff() : null;
+  if (section === 'templates') { try { templateLibrary = await loadTemplateLibrary(); } catch (e) { toast(`Não foi possível carregar os templates: ${e.message}`, { tone: 'error' }); } }
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Assistente</p>
-      <h1 class="text-3xl font-serif">Templates &amp; Revisões</h1>
+      <h1 class="text-3xl font-serif">Sua assistente</h1>
     </div>
-    <div class="flex gap-1 mb-8 border-b border-white/10">
-      <button data-section="revisoes" class="tab-btn ${section === 'revisoes' ? 'active' : ''}">Revisões</button>
+    <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
+      <button data-section="acesso" class="tab-btn ${section === 'acesso' ? 'active' : ''}">Acesso</button>
+      ${SECTIONS.includes('revisoes') ? `<button data-section="revisoes" class="tab-btn ${section === 'revisoes' ? 'active' : ''}">Revisões</button>` : ''}
       <button data-section="templates" class="tab-btn ${section === 'templates' ? 'active' : ''}">Templates</button>
       <button data-section="hubla" class="tab-btn ${section === 'hubla' ? 'active' : ''}">Hubla</button>
       <button data-section="financeiro" class="tab-btn ${section === 'financeiro' ? 'active' : ''}">Financeiro</button>
     </div>
-    ${section === 'templates' ? renderTemplatesSection()
+    ${section === 'acesso' ? renderAccessSection(staff)
+      : section === 'templates' ? renderTemplatesSection()
       : section === 'hubla' ? renderHublaSection(hublaPending)
       : section === 'financeiro' ? renderFinanceiroSection(wagePayments)
       : renderReviewsSection()}
@@ -298,13 +367,26 @@ async function render() {
     });
   });
 
-  if (section === 'templates') {
+  if (section === 'acesso') {
+    content.querySelector('#staff-access-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const btn = e.target.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Gerando…';
+      await requestAccess(String(fd.get('full_name')).trim(), String(fd.get('email')).trim());
+      btn.disabled = false; btn.textContent = 'Gerar acesso';
+    });
+    content.querySelectorAll('[data-new-access]').forEach((b) => b.addEventListener('click', () => requestAccess(b.dataset.name, b.dataset.newAccess)));
+  } else if (section === 'templates') {
     content.querySelectorAll('[data-template-save]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const [catKey, itemKey] = btn.dataset.templateSave.split(':');
         const input = content.querySelector(`[data-template-input="${catKey}:${itemKey}"]`);
-        MockDB.setTemplateLink(catKey, itemKey, input.value);
-        toast('Link do modelo salvo.');
+        const value = input.value.trim();
+        if (value && !isValidHttpUrl(value)) { toast('Cole um link que comece com https://', { tone: 'error' }); return; }
+        btn.disabled = true;
+        const { error } = await saveTemplateLink(catKey, itemKey, value);
+        if (error) { btn.disabled = false; toast(error, { tone: 'error' }); return; }
+        toast('Link do modelo salvo — a assistente já vê.');
         render();
       });
     });
