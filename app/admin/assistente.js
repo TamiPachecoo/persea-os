@@ -45,7 +45,7 @@ function renderAccessSection(staff) {
   return `
     ${card(`
       <p class="text-sm text-white/50 mb-1">Dar acesso à assistente</p>
-      <p class="text-xs text-white/30 mb-4">Ela recebe um link para criar a própria senha. Nenhum e-mail é enviado: copie a mensagem e mande no WhatsApp dela. O link vale por 24 horas — se expirar, clique de novo para gerar outro.</p>
+      <p class="text-xs text-white/30 mb-4">Ela recebe um link para criar a própria senha. Nenhum e-mail é enviado: copie a mensagem e mande no WhatsApp dela. O link vale por 24 horas. Cada novo link gerado cancela o anterior: mande sempre só o mais recente.</p>
       <form id="staff-access-form" class="flex flex-wrap gap-2 items-end">
         <div style="flex:1 1 200px;"><label class="text-xs text-white/40 block mb-1">Nome</label><input name="full_name" class="field text-sm" required /></div>
         <div style="flex:1 1 240px;"><label class="text-xs text-white/40 block mb-1">E-mail</label><input name="email" type="email" class="field text-sm" required /></div>
