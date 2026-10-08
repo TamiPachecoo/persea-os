@@ -75,8 +75,12 @@ export function brl(n) {
   return (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// A bare 'YYYY-MM-DD' (due dates, contract dates) is a calendar day, not a
+// moment: new Date('2026-10-08') is UTC midnight, which in Brazil (UTC-3)
+// is still 7 Oct — every due date showed one day early. Read it at local noon.
 export function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
+  const d = typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T12:00:00`) : new Date(iso);
+  return d.toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 export function formatDateTime(iso) {

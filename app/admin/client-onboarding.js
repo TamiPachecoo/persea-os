@@ -963,7 +963,8 @@ async function markLinesReceived(linesToMark, contractId) {
   const totalCents = linesToMark.reduce((s, l) => s + l.amount_cents, 0);
   const { data: payment, error: payErr } = await supabase.from('payments').insert({
     client_id: clientId, contract_id: contractId, amount_cents: totalCents, status: 'paid',
-    paid_at: new Date().toISOString(), currency: 'BRL', provider: 'mock',
+    paid_at: new Date().toISOString(), currency: 'BRL', provider: 'manual',
+    method: new Set(linesToMark.map((l) => l.method)).size === 1 ? linesToMark[0].method || null : null,
     description: linesToMark.length > 1 ? `Recebido manualmente — ${linesToMark.length} parcelas` : 'Recebido manualmente',
   }).select('id').single();
   if (payErr) return { error: payErr.message };
@@ -1058,9 +1059,12 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
     // here (that never made sense per-installment), just the manual option.
     actionHtml = !isAssistant ? markReceivedButton([line], contractId) : '';
   } else {
+    // Transferência / boleto are paid outside SumUp — no checkout link to
+    // generate; she just confirms it once the money is in.
+    const offersCheckout = !['transferencia', 'boleto'].includes(line.method);
     actionHtml = `
       <div class="flex items-center gap-2 flex-wrap justify-end">
-        <button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>
+        ${offersCheckout ? `<button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>` : ''}
         ${!isAssistant ? markReceivedButton([line], contractId) : ''}
       </div>`;
   }

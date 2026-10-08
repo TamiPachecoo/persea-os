@@ -102,7 +102,7 @@ function computeKPIs(payments, obligationLines) {
   // provider==='sumup') is a second safety net: a seeded/demo row can end
   // up tagged provider='sumup' from old test data without ever having gone
   // through a real checkout — this catches that case even if it recurs.
-  const real = payments.filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
+  const real = payments.filter((p) => ['sumup', 'manual'].includes(p.provider) && !p.clients?.is_demo);
   const recebido = real.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
   const { aReceberCents, emAtrasoCents } = summarizeObligations(obligationLines || []);
   return { recebido, aReceber: aReceberCents, emAtraso: emAtrasoCents };

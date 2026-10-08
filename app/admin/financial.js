@@ -37,7 +37,8 @@ async function loadRealKPIs() {
   ]);
   if (payErr) return { error: payErr.message };
   if (linesErr) return { error: linesErr };
-  const realPayments = (payments || []).filter((p) => p.provider === 'sumup' && !p.clients?.is_demo);
+  // Real money: SumUp-confirmed, or received outside SumUp and confirmed by hand ('manual').
+  const realPayments = (payments || []).filter((p) => ['sumup', 'manual'].includes(p.provider) && !p.clients?.is_demo);
   const recebido = realPayments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
   const { aReceberCents, emAtrasoCents } = summarizeObligations(lines || []);
   return { recebido, aReceber: aReceberCents, emAtraso: emAtrasoCents, lines: lines || [] };
@@ -83,7 +84,7 @@ function renderRealKPIs({ recebido, aReceber, emAtraso, error }) {
   const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   return card(`
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-      <p class="text-sm text-white/50">Receita Real — Sistema Supabase (SumUp)</p>
+      <p class="text-sm text-white/50">Receita Real</p>
       <a href="payments.html" class="btn-text">Ver todas as cobranças ↗</a>
     </div>
     ${error ? `<p class="text-xs" style="color:var(--terracotta);">Não foi possível carregar os totais reais: ${error}</p>` : `
