@@ -671,6 +671,38 @@ export function phaseChip(index, label = `Fase ${index + 1}`) {
   return `<span class="badge" style="background:${c};color:#16100a;border-color:${c};font-weight:600;">${label}</span>`;
 }
 
+// Catches a mistyped e-mail domain before it is saved or used (real case:
+// "…@hotmailm.com" — the Autentique contract went to an address that does
+// not exist). Returns the corrected e-mail when the domain is one or two
+// letters away from a common provider, else null.
+const COMMON_EMAIL_DOMAINS = ['gmail.com', 'hotmail.com', 'hotmail.com.br', 'outlook.com', 'outlook.com.br', 'live.com', 'msn.com', 'yahoo.com', 'yahoo.com.br', 'icloud.com', 'me.com', 'uol.com.br', 'bol.com.br', 'terra.com.br', 'ig.com.br'];
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  }
+  return d[a.length][b.length];
+}
+export function emailTypoSuggestion(email) {
+  const m = String(email || '').trim().toLowerCase().match(/^([^\s@]+)@([^\s@]+)$/);
+  if (!m) return null;
+  const [, local, domain] = m;
+  if (COMMON_EMAIL_DOMAINS.includes(domain)) return null;
+  let best = null;
+  for (const d of COMMON_EMAIL_DOMAINS) {
+    const dist = editDistance(domain, d);
+    if (dist > 0 && dist <= 2 && (!best || dist < best.dist)) best = { d, dist };
+  }
+  return best ? `${local}@${best.d}` : null;
+}
+// Asks once; returns the e-mail to use (fixed or as typed).
+export function confirmEmailTypo(email) {
+  const fix = emailTypoSuggestion(email);
+  if (!fix) return String(email || '').trim();
+  return window.confirm(`O e-mail "${String(email).trim()}" parece ter um erro de digitação.\n\nVocê quis dizer: ${fix} ?\n\nOK = usar ${fix}\nCancelar = manter como foi digitado`) ? fix : String(email).trim();
+}
+
 export function initialsAvatar(fullName, size = 36) {
   const initials = (fullName || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
   return `<div class="avatar-initials" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;">${initials}</div>`;

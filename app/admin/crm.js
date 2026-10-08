@@ -10,7 +10,7 @@ import {
   LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEAD_SOURCE_LABEL, VIP_GROUP_STATUSES, VIP_GROUP_STATUS_LABEL,
   PROGRAMS, PROGRAM_LABEL, SOCIAL_PLATFORMS, SOCIAL_PLATFORM_LABEL, PROGRAM_LABEL_BY_SLUG, LEAD_ONBOARDING_STATUS_BADGE_CLASS,
 } from '../shared/mock-db.js';
-import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink, isProductionEnvironment, phaseChip, phaseColor } from '../shared/ui.js';
+import { renderShell, card, statusBadge, toast, formatDate, openModal, buildRegistrationLink, isProductionEnvironment, phaseChip, phaseColor, confirmEmailTypo } from '../shared/ui.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
@@ -185,7 +185,7 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
     try {
       const { data, error } = await supabase.functions.invoke('create-client-registration', {
         body: {
-          full_name: fd.get('full_name'), email: fd.get('email') || null,
+          full_name: fd.get('full_name'), email: fd.get('email') ? confirmEmailTypo(fd.get('email')) : null,
           tier: isAscensao ? 'essential' : programChoice,
           program_slug: isAscensao ? 'ascensao-marca' : undefined,
         },

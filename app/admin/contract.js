@@ -18,7 +18,7 @@ import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { mergeContractTemplate } from '../shared/contract-merge.js';
 import { renderContractPrintHtml } from '../shared/contract-print.js';
-import { card, toast, functionErrorMessage, renderShell } from '../shared/ui.js';
+import { card, toast, functionErrorMessage, renderShell, emailTypoSuggestion } from '../shared/ui.js';
 // Reusing the same program/duration/payment-method vocabulary the rest of
 // the app already uses (CRM lead conversion, mock onboarding) — just the
 // plain constant lists/labels, nothing MockDB-stateful.
@@ -460,6 +460,12 @@ async function render() {
     openPrintableContract(document.getElementById('body').value, client.full_name);
   });
   document.getElementById('send-autentique')?.addEventListener('click', async (e) => {
+    // Last look at the recipient before a real (quota-counted) Autentique
+    // document goes out — real case: a typo'd "@hotmailm.com" was sent.
+    const to = (client.email || '').trim();
+    const fix = emailTypoSuggestion(to);
+    if (fix) { toast(`O e-mail da cliente parece ter um erro (${to} → ${fix}?). Corrija o e-mail no cadastro dela antes de enviar.`, { tone: 'error' }); return; }
+    if (!window.confirm(`O contrato será enviado pela Autentique para:\n\n${to || '(sem e-mail)'}\n\nO e-mail está correto?`)) return;
     e.target.disabled = true;
     e.target.textContent = 'Enviando...';
     const { data, error } = await supabase.functions.invoke('autentique-send', { body: { contract_id: contract.id } });

@@ -16,7 +16,7 @@
 // No shell/nav on either path — this is reached before any authentication
 // exists, by design.
 import { MockDB, PROGRAM_LABEL_BY_SLUG } from '../shared/mock-db.js';
-import { renderParticles, toast, isProductionEnvironment } from '../shared/ui.js';
+import { renderParticles, toast, isProductionEnvironment, confirmEmailTypo } from '../shared/ui.js';
 import { supabase } from '../shared/supabase-client.js';
 
 const token = new URLSearchParams(location.search).get('token') || '';
@@ -229,6 +229,8 @@ function formViewProduction(client, partyInfo) {
     // registration-submit's ALLOWED_FIELDS uses snake_case (real party_info
     // column names) — remap the shared form's camelCase field names here
     // rather than changing the Edge Function's contract to match one caller.
+    raw.email = confirmEmailTypo(raw.email);
+    const emailInput = e.target.querySelector('input[name="email"]'); if (emailInput) emailInput.value = raw.email;
     const payload = {
       full_name: raw.fullName, social_name: raw.socialName, birth_date: raw.birthDate,
       party_type: raw.partyType, cpf: raw.cpf, rg: raw.rg, profession: raw.profession,
