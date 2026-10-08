@@ -17,6 +17,12 @@
 // a new pattern. Does not broaden anything: admin and assistant could
 // already both do this; a client or unauthenticated caller could not
 // meaningfully abuse the old behavior, and definitely cannot now.
+//
+// channel: "link" (WhatsApp invite) — same account and profile, but instead
+// of Supabase e-mailing the invite, a one-time create-password link
+// (client/set-password.html?token_hash=…) is returned for staff to send on
+// WhatsApp. Generating a new link cancels any earlier invite link (e-mail
+// or WhatsApp), the same way a re-sent e-mail does.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 // Known real frontend origins — both the redirect destination for the
@@ -64,7 +70,7 @@ Deno.serve(async (req) => {
       return json({ error: "apenas admin ou assistente podem conceder acesso" }, 403, cors);
     }
 
-    const { client_id, mock } = await req.json();
+    const { client_id, mock, channel } = await req.json();
     if (!client_id) return json({ error: "client_id required" }, 400, cors);
 
     const { data: client, error: cErr } = await supabaseAsCaller.from("clients").select("id, full_name, email, is_demo, status, program_slug").eq("id", client_id).maybeSingle();
@@ -88,8 +94,32 @@ Deno.serve(async (req) => {
     // it would for a real activation, just without the email.
     const isMockRequest = mock === true || client.is_demo === true;
 
+    if (channel === "link" && !isMockRequest) {
+      const meta = { full_name: client.full_name, program_slug: client.program_slug || "persea" };
+      let type: "invite" | "recovery" = "invite";
+      let { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: client.email, options: { data: meta } });
+      if (linkErr && /already|registered|exists/i.test(linkErr.message)) {
+        type = "recovery";
+        ({ data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: "recovery", email: client.email }));
+      }
+      if (linkErr || !link?.user) return json({ error: linkErr?.message || "não foi possível gerar o link" }, 502, cors);
+      if (!existingProfile) {
+        const { data: sameUser } = await admin.from("profiles").select("id, role").eq("id", link.user.id).maybeSingle();
+        if (sameUser && sameUser.role !== "client") return json({ error: "este e-mail já pertence a uma conta da equipe — use outro e-mail para a cliente" }, 409, cors);
+        if (!sameUser) {
+          const { error: profileErr } = await admin.from("profiles").insert({ id: link.user.id, role: "client", full_name: client.full_name, email: client.email, client_id });
+          if (profileErr) return json({ error: profileErr.message }, 500, cors);
+        }
+        const clientUpdate: Record<string, unknown> = { access_status: "created" };
+        if (client.status !== "active") clientUpdate.status = "active";
+        await admin.from("clients").update(clientUpdate).eq("id", client_id);
+      }
+      const url = `${SITE_URL}/client/set-password.html?token_hash=${encodeURIComponent(link.properties.hashed_token)}&type=${type}`;
+      return json({ ok: true, resent: !!existingProfile, url }, 200, cors);
+    }
+
     if (existingProfile) {
-      if (isMockRequest) return json({ ok: true, resent: true, mock: true }, 200, cors);
+      if (isMockRequest) return json({ ok: true, resent: true, mock: true, url: channel === "link" ? `${SITE_URL}/login.html` : undefined }, 200, cors);
       const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(client.email, {
         data: { full_name: client.full_name, program_slug: client.program_slug || "persea" }, redirectTo: `${SITE_URL}/client/set-password.html`,
       });
@@ -110,7 +140,7 @@ Deno.serve(async (req) => {
       const clientUpdate: Record<string, unknown> = { access_status: "created" };
       if (client.status !== "active") clientUpdate.status = "active";
       await admin.from("clients").update(clientUpdate).eq("id", client_id);
-      return json({ ok: true, resent: false, mock: true }, 200, cors);
+      return json({ ok: true, resent: false, mock: true, url: channel === "link" ? `${SITE_URL}/login.html` : undefined }, 200, cors);
     }
 
     const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(client.email, {

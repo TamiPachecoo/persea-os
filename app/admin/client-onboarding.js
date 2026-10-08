@@ -622,6 +622,46 @@ async function sendInvite() {
   render();
 }
 
+// Same invite, sent on WhatsApp: invite-client (channel 'link') creates
+// her account and returns the one-time create-password link instead of
+// e-mailing it. A new link cancels earlier ones (e-mail included).
+async function sendInviteWhatsApp(client, partyInfo) {
+  if (!confirm('Gerar o link de acesso para enviar pelo WhatsApp? Se ela já recebeu um convite antes, o link anterior deixa de valer.')) return;
+  const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: clientId, channel: 'link' } });
+  if (error || data?.error || !data?.url) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
+  const first = (partyInfo?.social_name || client.full_name || '').trim().split(/\s+/)[0];
+  const isNay = profile.role === 'admin';
+  const senderFirst = String(profile.full_name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] || 'Equipe PERSEA';
+  const msg = [
+    isNay ? `Olá, ${first}! ✨` : `Olá, ${first}! Aqui é a ${senderFirst}, da equipe da Nay. ✨`,
+    '',
+    'Seu acesso ao app *PERSEA* está pronto. Toque no link abaixo para criar a sua senha (mínimo de 8 caracteres):',
+    data.url,
+    '',
+    `Depois, é só entrar em *app.naymurta.com* com o seu e-mail (${client.email}) e a sua senha.`,
+    '',
+    'Para instalar o app no celular ou no computador (1 minuto): app.naymurta.com/tutorial-instalar.html',
+    '',
+    'O link é pessoal e vale por 24 horas.',
+    '',
+    isNay ? 'Com carinho,\nNay' : `Com carinho,\n${senderFirst} · Equipe PERSEA`,
+  ].join('\n');
+  const digits = (partyInfo?.whatsapp || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+  const { el } = openModal({
+    title: 'Convite pelo WhatsApp',
+    bodyHtml: `
+      <p class="text-xs text-white/40 mb-3">O acesso dela foi criado. Envie esta mensagem — ela toca no link, cria a senha e já entra no app.</p>
+      <textarea class="field text-sm" rows="12" readonly style="line-height:1.55;">${escHtml(msg)}</textarea>
+      <div class="flex gap-2 flex-wrap mt-3">
+        ${digits ? `<a href="https://wa.me/55${digits}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Abrir WhatsApp</a>` : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro dela — copie e envie manualmente.</span>'}
+        <button type="button" id="copy-invite-msg" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Copiar mensagem</button>
+      </div>`,
+  });
+  el.querySelector('#copy-invite-msg').addEventListener('click', async () => { try { await navigator.clipboard.writeText(msg); toast('Mensagem copiada.'); } catch { window.prompt('Copie a mensagem:', msg); } });
+  supabase.from('client_message_log').insert({ client_id: clientId, kind: 'invite', channel: 'whatsapp', body: msg, sent_by: profile.id, sent_by_name: String(profile.full_name || '').replace(/\(.*?\)/g, '').trim() || null }).then(() => {});
+  render();
+}
+
 function partyInfoSummary(info) {
   if (!info) return '';
   const isPJ = info.party_type === 'PJ';
@@ -1727,7 +1767,7 @@ const MSG_KINDS = [
   ['welcome', 'Boas-vindas'], ['meeting', 'Encontro agendado'], ['reminder', 'Lembrete de encontro'],
   ['installment', 'Próxima parcela'], ['paid', 'Pagamento recebido'], ['free', 'Mensagem livre'],
 ];
-const MSG_KIND_LABEL = Object.fromEntries(MSG_KINDS);
+const MSG_KIND_LABEL = { ...Object.fromEntries(MSG_KINDS), invite: 'Convite de acesso' };
 const fmtDayLong = (iso) => new Date(iso).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 const fmtHour = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const brlCents = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1925,7 +1965,10 @@ async function render() {
             <p class="text-sm text-white/50 mb-1">Acesso</p>
             <p class="text-xs" style="color:var(--muted);">Contrato assinado — envie o convite de acesso real para a cliente entrar em app.naymurta.com.</p>
           </div>
-          <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite de acesso</button>
+          <div class="flex gap-2 flex-wrap">
+            <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite por e-mail</button>
+            <button id="send-invite-wa" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Enviar convite pelo WhatsApp</button>
+          </div>
         </div>
       `, 'mb-6') : ''}
       ${client.access_status === 'created' ? card(`
@@ -1934,7 +1977,10 @@ async function render() {
             <p class="text-sm text-white/50 mb-1">Acesso</p>
             <p class="text-xs" style="color:var(--muted);">Convite já enviado. Se o link expirou, foi perdido ou nunca chegou (verifique inclusive filtros de segurança do e-mail dela), você pode reenviar aqui.</p>
           </div>
-          <button id="resend-invite" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Reenviar convite de acesso</button>
+          <div class="flex gap-2 flex-wrap">
+            <button id="resend-invite" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Reenviar por e-mail</button>
+            <button id="send-invite-wa" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Reenviar pelo WhatsApp</button>
+          </div>
         </div>
       `, 'mb-6') : ''}
       ${financeiroCard(finState, contract?.id)}
@@ -1982,6 +2028,7 @@ async function render() {
   content.querySelector('#prepare-contract')?.addEventListener('click', (e) => prepareContract(client, e.target));
   content.querySelector('#send-invite')?.addEventListener('click', sendInvite);
   content.querySelector('#resend-invite')?.addEventListener('click', sendInvite);
+  content.querySelector('#send-invite-wa')?.addEventListener('click', () => sendInviteWhatsApp(client, partyInfo));
   content.querySelector('#mark-hubla-granted')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     const { error } = await markHublaAccessGranted(clientId);
