@@ -2,7 +2,8 @@
 // call, written to site_events (staff-only). The site comes from the
 // Origin header, so only naymurta.com and perseaexperience.naymurta.com
 // can write; the device type is worked out here from the user agent and
-// the user agent itself is not stored. No IP, no cookie.
+// the user agent itself is not stored. No IP, no cookie. Visits opened
+// inside the Instagram/Facebook apps are tagged with that source.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SITES: Record<string, string> = {
@@ -42,6 +43,15 @@ Deno.serve(async (req) => {
     let referrer = clean(b.referrer, 300);
     try { referrer = referrer ? new URL(referrer).hostname.replace(/^www\./, "").slice(0, 100) : null; } catch { referrer = null; }
     if (referrer && /(^|\.)naymurta\.com$/.test(referrer)) referrer = null; // moving between her own pages isn't a source
+    // The Instagram / Facebook apps open links in their own browser, which
+    // names itself in the user agent: that marks the visit as coming from
+    // there, so Nay's bio link can stay a clean naymurta.com (no ?utm_).
+    let source = clean(b.utm_source, 60);
+    if (!source) {
+      if (/Instagram/i.test(ua) || (referrer && /(^|\.)instagram\.com$/.test(referrer))) source = "instagram";
+      else if (/FBAN|FBAV|FB_IAB/.test(ua) || (referrer && /(^|\.)facebook\.com$/.test(referrer))) source = "facebook";
+      else if (referrer && /(^|\.)linkedin\.com$|^lnkd\.in$/.test(referrer)) source = "linkedin";
+    }
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     await admin.from("site_events").insert({
       site, kind,
@@ -49,7 +59,7 @@ Deno.serve(async (req) => {
       label: kind === "click" ? clean(b.label, 120) : null,
       device: deviceOf(ua),
       referrer,
-      utm_source: clean(b.utm_source, 60),
+      utm_source: source,
       session_id: clean(b.session_id, 40),
     });
     return done();
