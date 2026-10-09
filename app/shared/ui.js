@@ -230,6 +230,7 @@ const MOBILE_NAV_CONFIG = {
     mais: [
       ['templates.html', 'Templates'],
       ['financial.html', 'Financeiro'],
+      ['events.html', 'Eventos'],
     ],
   },
 };
@@ -342,6 +343,7 @@ const ASSISTANT_NAV = [
   ['clients.html', 'Clientes'],
   ['templates.html', 'Templates'],
   ['financial.html', 'Financeiro'],
+  ['events.html', 'Eventos'],
 ];
 
 export function renderParticles(count = 16) {

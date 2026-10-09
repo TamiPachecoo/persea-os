@@ -19,8 +19,14 @@ import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { renderShell, card, toast, formatDateTime } from '../shared/ui.js';
 
-if (!(await requireProfile('admin'))) throw new Error('not authorized');
-document.body.innerHTML = renderShell({ role: 'admin', active: 'events.html', title: 'Eventos' });
+// Also opened by the assistant (assistant/events.html loads this file).
+// She runs the attendee list like Nay does; only the SumUp payment-link
+// settings and "Gerar novo link" (which cancels the link already sent
+// out) stay with Nay — those write tenant_settings, which is admin-only.
+const role = location.pathname.includes('/assistant/') ? 'assistant' : 'admin';
+const isAdmin = role === 'admin';
+if (!(await requireProfile(role))) throw new Error('not authorized');
+document.body.innerHTML = renderShell({ role, active: 'events.html', title: 'Eventos' });
 const content = document.getElementById('app-content');
 
 const STATUS_LABEL = { interessada: 'Interessada', pago: 'Pago', confirmada: 'Confirmada', falhou: 'Falhou', expirado: 'Expirado', cancelado: 'Cancelado' };
@@ -328,11 +334,11 @@ function render() {
         <input readonly class="field text-sm" style="flex:1; min-width:260px;" value="${esc(directUrl(directSignupCode))}" onclick="this.select()" />
         ${actionBtn('data-copy-direct-msg', 'Copiar mensagem', true)}
         ${actionBtn('data-copy-direct-link', 'Copiar só o link')}
-        ${actionBtn('data-rotate-direct', 'Gerar novo link')}
-      </div>` : actionBtn('data-rotate-direct', 'Criar link', true)}
+        ${isAdmin ? actionBtn('data-rotate-direct', 'Gerar novo link') : ''}
+      </div>` : isAdmin ? actionBtn('data-rotate-direct', 'Criar link', true) : '<p class="text-xs text-white/40">A Nay ainda não criou este link.</p>'}
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
-    ${card(`
+    ${isAdmin ? card(`
       <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
       <p class="text-xs text-white/30 mb-4">Cole aqui um Link de Pagamento criado no app da SumUp (com parcelas e "Não repassar a taxa" configurados). Enquanto este campo estiver preenchido, toda nova inscrição é enviada para este link em vez de um checkout automático — isso significa que o pagamento não é confirmado sozinho: marque "Paga" manualmente aqui depois de conferir no seu app SumUp. Deixe em branco para voltar ao checkout automático (sem parcelamento).</p>
       <form id="manual-link-form" class="flex flex-wrap gap-2">
@@ -345,7 +351,7 @@ function render() {
         <input name="inviteLink" class="field text-sm" style="flex:1; min-width:260px;" value="${invitePaymentLinkUrl}" placeholder="https://pay.sumup.com/..." />
         <button type="submit" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar</button>
       </form>
-    `, 'mb-6')}
+    `, 'mb-6') : ''}
     ${card(`
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-white/50">Inscrições</p>
@@ -367,7 +373,7 @@ function render() {
 
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
   content.querySelector('#status-filter').addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
-  content.querySelector('#manual-link-form').addEventListener('submit', async (e) => {
+  content.querySelector('#manual-link-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = new FormData(e.target).get('manualLink').trim();
     const { error } = await supabase.from('tenant_settings').update({ event_manual_payment_link_url: url || null }).eq('id', 1);
@@ -376,7 +382,7 @@ function render() {
     toast(url ? 'Link salvo — novas inscrições vão para ele.' : 'Link removido — voltando ao checkout automático.');
   });
 
-  content.querySelector('#invite-link-form').addEventListener('submit', async (e) => {
+  content.querySelector('#invite-link-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = new FormData(e.target).get('inviteLink').trim();
     const { error } = await supabase.from('tenant_settings').update({ event_invite_payment_link_url: url || null }).eq('id', 1);
