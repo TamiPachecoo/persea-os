@@ -199,4 +199,32 @@ textarea.field{resize:vertical;min-height:110px;line-height:1.55}
   });
 })();
 </script>
+<script>
+/* Visit and click counter for Nay's sites → app Relatórios → Site (site-track Edge Function).
+   No cookies and nothing personal: the visit id is random and lives only in this browser tab. */
+(function () {
+  if (!/(^|\.)naymurta\.com$/.test(location.hostname)) return;
+  var ENDPOINT = 'https://bletlyuptkppacjcbcvw.supabase.co/functions/v1/site-track';
+  var KEY = 'sb_publishable_37D7JJzhUDCUwtHtYA4gjw_jiSXDMxu';
+  var sid;
+  try { sid = sessionStorage.getItem('nm_visit'); if (!sid) { sid = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('nm_visit', sid); } }
+  catch (e) { sid = Math.random().toString(36).slice(2); }
+  var utm = '';
+  try { utm = new URLSearchParams(location.search).get('utm_source') || ''; } catch (e) {}
+  function send(kind, label) {
+    try {
+      fetch(ENDPOINT, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', apikey: KEY },
+        body: JSON.stringify({ kind: kind, label: label || null, path: location.pathname, referrer: document.referrer, utm_source: utm, session_id: sid }) }).catch(function () {});
+    } catch (e) {}
+  }
+  send('view');
+  // Every link/button click, named by data-track, the page's own trackLabel(), aria-label or its text.
+  document.addEventListener('click', function (ev) {
+    var el = ev.target && ev.target.closest && ev.target.closest('a, button, [data-track]');
+    if (!el) return;
+    var label = el.getAttribute('data-track') || (window.trackLabel && window.trackLabel(el)) || el.getAttribute('aria-label') || (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (label) send('click', label.slice(0, 120));
+  }, true);
+})();
+</script>
 </body></html>
