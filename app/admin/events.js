@@ -141,10 +141,27 @@ async function loadInviteCodes() {
   return data || [];
 }
 
+// Each participant gets her own soft tone (cycling, so neighbours always
+// differ): a tinted card with a coloured edge, and her two panels (invite,
+// preparation answers) a shade deeper, so scrolling a long list it's clear
+// where one person's answers end and the next begins. Same on the mentee
+// results list.
+const TONES = [
+  [220, 199, 168], // dourado
+  [196, 132, 120], // rosé
+  [138, 168, 140], // sálvia
+  [124, 150, 186], // azul
+  [168, 140, 186], // lavanda
+];
+const toneStyle = (i) => {
+  const [r, g, b] = TONES[i % TONES.length];
+  return `--tone-panel:rgba(${r},${g},${b},.11);--tone-line:rgba(${r},${g},${b},.32);background:rgba(${r},${g},${b},.06);border:1px solid rgba(${r},${g},${b},.25);border-left:4px solid rgb(${r},${g},${b});border-radius:6px;padding:16px 16px 16px 18px;`;
+};
+
 // The two things staff send each paid participant, as two labelled panels
 // so the guest invite and the preparation form can't be confused.
 const panel = (icon, title, status, body) => `
-  <div class="p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
+  <div class="p-3 rounded" style="background:var(--tone-panel, rgba(255,255,255,.03));border:1px solid var(--tone-line, var(--line));">
     <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
       <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">${icon} ${title}</p>
       ${status}
@@ -228,8 +245,8 @@ function resultsCard() {
   const total = menteeResults.reduce((s, r) => s + Number(r.revenue_cents), 0);
   const shift = (label, k) => `<div><p class="text-xs text-white/30 mb-1">${label}</p><p class="text-lg font-serif">${avg(`${k}_before`)} <span class="text-white/30">→</span> <span style="color:var(--gold);">${avg(`${k}_after`)}</span></p></div>`;
   const scorePair = (label, r, k) => `<p class="text-sm"><span class="text-white/40">${label}:</span> ${r[`${k}_before`]} → <span style="color:var(--gold);">${r[`${k}_after`]}</span></p>`;
-  const item = (r) => `
-    <details class="py-3">
+  const item = (r, i) => `
+    <details style="${toneStyle(i)}">
       <summary class="cursor-pointer flex items-center justify-between gap-3 flex-wrap">
         <span class="font-medium">${esc(r.full_name)}</span>
         <span class="text-xs text-white/40">${brl(Number(r.revenue_cents))} · ${esc(r.first_sale)} · ${formatDateTime(r.created_at)}</span>
@@ -257,7 +274,7 @@ function resultsCard() {
       <div><p class="text-xs text-white/30 mb-1">Faturamento somado</p><p class="text-lg font-serif" style="color:var(--gold);">${brl(total)}</p></div>
       ${shift('Autoconfiança (média)', 'confidence')}${shift('Visibilidade (média)', 'visibility')}${shift('Percepção de valor (média)', 'value')}
     </div>
-    <div class="divide-y" style="border-color:var(--line);">${menteeResults.map(item).join('')}</div>` : '<p class="text-sm text-white/20 py-4">Nenhuma resposta ainda.</p>'}
+    <div class="space-y-3">${menteeResults.map(item).join('')}</div>` : '<p class="text-sm text-white/20 py-4">Nenhuma resposta ainda.</p>'}
   `, 'mt-6');
 }
 
@@ -266,14 +283,14 @@ async function loadRegistrations() {
   return data || [];
 }
 
-function registrationRow(r) {
+function registrationRow(r, i) {
   const waHref = r.phone ? `https://wa.me/55${r.phone.replace(/\D/g, '')}` : null;
   const social = [
     r.instagram ? `<a href="https://instagram.com/${r.instagram.replace(/^@/, '')}" target="_blank" rel="noopener" style="color:var(--gold);">@${r.instagram.replace(/^@/, '')}</a>` : '',
     r.linkedin ? `<a href="${/^https?:\/\//.test(r.linkedin) ? r.linkedin : `https://linkedin.com/in/${r.linkedin}`}" target="_blank" rel="noopener" style="color:var(--gold);">LinkedIn</a>` : '',
   ].filter(Boolean).join(' · ');
   return `
-    <div class="flex items-start justify-between py-3 gap-3 flex-wrap">
+    <div class="flex items-start justify-between gap-3 flex-wrap" style="${toneStyle(i)}">
       <div class="min-w-0" style="flex:1 1 240px;">
         <div class="flex items-center gap-2 flex-wrap">
           <p class="font-medium break-words">${r.full_name}</p>
@@ -364,7 +381,7 @@ function render() {
           ${Object.entries(STATUS_LABEL).map(([v, l]) => `<option value="${v}" ${statusFilter === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select>
       </div>
-      <div class="divide-y" style="border-color:var(--line);">
+      <div class="space-y-3">
         ${filtered.length ? filtered.map(registrationRow).join('') : '<p class="text-sm text-white/20 py-6">Nenhuma inscrição encontrada.</p>'}
       </div>
     `)}
