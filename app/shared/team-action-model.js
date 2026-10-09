@@ -74,7 +74,7 @@ export async function computeTeamNextStep(client, clientId) {
 
   if (nextDef.number === 1 && !(questionnaire?.status === 'submitted' && archetype?.status === 'completed')) {
     const missing = [];
-    if (questionnaire?.status !== 'submitted') missing.push('Extração de Marca');
+    if (questionnaire?.status !== 'submitted') missing.push('Diagnóstico Estratégico de Entrada');
     if (archetype?.status !== 'completed') missing.push('Teste de Arquétipos');
     return {
       label: 'Aguardando a cliente',

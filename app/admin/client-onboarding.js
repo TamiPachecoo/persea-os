@@ -36,6 +36,7 @@ import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action-model.js';
 import { markHublaAccessGranted } from '../shared/hubla-model.js';
 import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, detachArtifactFromMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
+import { DIAGNOSTIC_TITLE, groupBySection } from '../shared/diagnostic-template.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -1698,7 +1699,7 @@ function wireEncontrosTab(encontros) {
 }
 
 // Questionários: every questionnaire the student answers, in one place.
-// Extração de Marca's answers are shown in full here (it had no staff view
+// The Diagnóstico Estratégico de Entrada (formerly Extração de Marca) answers are shown in full here (it had no staff view
 // in this workspace before — the only one was the legacy MockDB page);
 // the others already have their own tab, so this lists their status with
 // a jump to that tab, plus a link to open the page exactly as she sees it.
@@ -1715,12 +1716,16 @@ const escHtml = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;
 function questionnairesTabHtml({ extraction, archetypeState, surveyState, valueAssessment }) {
   const answered = extraction?.questions.filter((x) => String(x.answer ?? '').trim()).length || 0;
   const extractionBody = !extraction
-    ? '<p class="text-xs" style="color:var(--muted);">Ela ainda não abriu a Extração de Marca.</p>'
-    : `<div class="space-y-4">${extraction.questions.map((x) => `
-        <div class="pb-4 border-b border-white/5 last:border-0 last:pb-0">
-          <p class="text-xs text-white/40 mb-1">${escHtml(x.question_text)}</p>
-          <p class="text-sm" style="white-space:pre-line;">${String(x.answer ?? '').trim() ? escHtml(x.answer) : '<span class="text-white/20">Sem resposta</span>'}</p>
-        </div>`).join('')}</div>`;
+    ? '<p class="text-xs" style="color:var(--muted);">Ela ainda não abriu o Diagnóstico Estratégico de Entrada.</p>'
+    : groupBySection(extraction.questions).map((g, gi) => `
+        ${g.name ? `<p class="text-xs uppercase mt-6 mb-3" style="color:var(--terracotta);letter-spacing:.2em;">${gi + 1}. ${escHtml(g.name)}</p>` : ''}
+        <div class="space-y-4">${g.items.map(({ q: x, n }) => `
+          <div class="pb-4 border-b border-white/5 last:border-0 last:pb-0">
+            <p class="text-xs text-white/40 mb-1">${n}. ${escHtml(x.question_text)}</p>
+            <p class="text-sm" style="white-space:pre-line;">${String(x.answer ?? '').trim()
+              ? (x.question_type === 'scale' ? `<span style="color:var(--gold);font-size:18px;">${escHtml(x.answer)}</span> <span class="text-white/40">de 10</span>` : escHtml(x.answer))
+              : '<span class="text-white/20">Sem resposta</span>'}</p>
+          </div>`).join('')}</div>`).join('');
   const statusPill = (text, done) => `<span class="badge ${done ? 'badge-completed' : 'badge-progress'}" style="font-size:10px;">${text}</span>`;
   const archetypeStatus = archetypeState.status === 'completed' ? statusPill('Concluído', true)
     : archetypeState.status === 'in_progress' ? statusPill(`${archetypeState.answered} de ${archetypeState.total}`, false) : statusPill('Não iniciado', false);
@@ -1737,7 +1742,7 @@ function questionnairesTabHtml({ extraction, archetypeState, surveyState, valueA
     ${card(`
       <div class="flex items-center justify-between gap-2 flex-wrap mb-4">
         <div class="flex items-center gap-2 flex-wrap">
-          <p class="text-sm text-white/50">Extração de Marca</p>
+          <p class="text-sm text-white/50">${escHtml(extraction?.title || DIAGNOSTIC_TITLE)}</p>
           ${extraction ? statusPill(extraction.status === 'submitted' ? 'Enviada' : `${answered} de ${extraction.questions.length} respondidas`, extraction.status === 'submitted') : statusPill('Não iniciada', false)}
         </div>
         ${viewAsLink('questionnaire.html')}

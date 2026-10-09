@@ -149,7 +149,7 @@ function renderContractCard(s) {
   `, 'mb-6');
 }
 
-// Shown as soon as the contract is done — Extração de Marca and Teste de
+// Shown as soon as the contract is done — Diagnóstico Estratégico de Entrada and Teste de
 // Arquétipos don't need the rest of onboarding (WhatsApp, resources) to
 // start, so she's prompted straight into them instead of waiting idle.
 async function renderNextStepCard(s) {
@@ -166,9 +166,9 @@ async function renderNextStepCard(s) {
   return card(`
     <p class="text-sm mb-1" style="color:var(--gold);">Contrato concluído ✓</p>
     <p class="text-lg font-serif mb-2">Próximo passo</p>
-    <p class="text-sm text-white/50 mb-4 max-w-xl">Enquanto o restante do seu onboarding é finalizado, você já pode começar a Extração de Marca e o Teste de Arquétipos.</p>
+    <p class="text-sm text-white/50 mb-4 max-w-xl">Enquanto o restante do seu onboarding é finalizado, você já pode começar o Diagnóstico Estratégico de Entrada e o Teste de Arquétipos.</p>
     <div class="flex flex-wrap gap-3">
-      <a href="questionnaire.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${qDone ? 'Ver Extração de Marca' : 'Iniciar Extração de Marca'}</a>
+      <a href="questionnaire.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${qDone ? 'Ver meu diagnóstico' : 'Iniciar diagnóstico'}</a>
       <a href="${aDone ? 'arquetipos-resultado.html' : 'arquetipos.html'}" class="btn-ghost">${archetypeLabel}</a>
     </div>
   `, 'mb-6');

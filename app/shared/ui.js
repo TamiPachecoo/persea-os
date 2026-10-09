@@ -200,7 +200,7 @@ const MOBILE_NAV_CONFIG = {
     ],
     mais: [
       ['financial.html', 'Financeiro'],
-      ['questionnaire.html', 'Extração de Marca'],
+      ['questionnaire.html', 'Diagnóstico Estratégico de Entrada'],
       ['arquetipos.html', 'Arquétipos'],
       ['business-survey.html', 'Negócios'],
       ['playbook.html', 'Playbook'],

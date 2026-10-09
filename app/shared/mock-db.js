@@ -83,7 +83,7 @@ export const PROGRAM_LABEL_BY_SLUG = Object.fromEntries(PROGRAM_DEFS.map((p) => 
 export const ENCOUNTER_DEFS = [
   {
     number: 1, slug: 'e1', name: 'Extração e Essência', phase: 0,
-    purpose: 'Ouvir e entender QUEM a cliente é e POR QUE ela vende o que vende — Nay chega preparada a partir da Extração de Marca e do Teste de Arquétipos. Depois deste encontro, Nay monta o mural de inspiração (Direção da Marca).',
+    purpose: 'Ouvir e entender QUEM a cliente é e POR QUE ela vende o que vende — Nay chega preparada a partir do Diagnóstico Estratégico de Entrada e do Teste de Arquétipos. Depois deste encontro, Nay monta o mural de inspiração (Direção da Marca).',
     premiumOnly: false,
   },
   {
@@ -129,7 +129,7 @@ export const ENCOUNTER_LABEL = Object.fromEntries(ENCOUNTER_DEFS.map((e) => [e.s
 // (see requestEncounterMeeting). Editable per request (she can add/remove
 // lines when she opens the form), this is just the sensible starting point.
 export const ENCOUNTER_PREP_CHECKLIST = {
-  1: ['Resultados do Teste de Arquétipos e da Extração de Marca revisados', 'Notas prontas para explorar QUEM ela é, O QUE e POR QUE vende'],
+  1: ['Resultados do Teste de Arquétipos e do Diagnóstico Estratégico de Entrada revisados', 'Notas prontas para explorar QUEM ela é, O QUE e POR QUE vende'],
   2: ['Pesquisa de Precificação respondida', 'Pitch e conteúdos para recomendar já escolhidos'],
   3: ['Cartela de Cores e Guia de Produções aprovados', 'Planejamento de Imagem e Ferramentas para Nova Imagem prontos'],
   4: ['Ensaio fotográfico profissional realizado', 'Kit Digital pronto', 'Playbook de Marca Pessoal pronto (link salvo)'],
@@ -151,7 +151,7 @@ export const ENCOUNTER_PREP_CHECKLIST = {
 export const PROGRAM_PHASES = [
   {
     id: 0,
-    description: 'Entender o que você vende e por que vende — sua essência, sua história, e o que já apareceu no Teste de Arquétipos e na Extração de Marca.',
+    description: 'Entender o que você vende e por que vende — sua essência, sua história, e o que já apareceu no Teste de Arquétipos e no Diagnóstico Estratégico de Entrada.',
     clientActivitySlugs: ['brand-extraction', 'archetype-test', 'business-survey', 'activity-guide', 'initial-images'],
     mentorDeliverableKeys: ['extraction_analysis', 'archetype_reading', 'materials_analysis'],
   },
@@ -175,7 +175,7 @@ export const PROGRAM_PHASES = [
   },
 ];
 export const MENTOR_DELIVERABLE_LABEL = {
-  extraction_analysis: 'Análise da Extração de Marca', archetype_reading: 'Leitura dos Arquétipos',
+  extraction_analysis: 'Análise do Diagnóstico Estratégico de Entrada', archetype_reading: 'Leitura dos Arquétipos',
   materials_analysis: 'Análise dos Materiais Enviados',
   image_project: 'Projeto de Imagem', image_guides: 'Guias de Imagem', mood_photo: 'Mood Fotográfico',
   positioning_direction: 'Direção de Comunicação e Posicionamento',
@@ -189,7 +189,7 @@ export const MENTOR_DELIVERABLE_STATUS_BADGE_CLASS = { em_preparacao: 'badge-pro
 // the journey order shown in the Program Hub.
 export const PROGRAM_ACTIVITIES = [
   {
-    slug: 'brand-extraction', title: 'Extração de Marca', activityType: 'questionnaire', displayOrder: 1,
+    slug: 'brand-extraction', title: 'Diagnóstico Estratégico de Entrada', activityType: 'questionnaire', displayOrder: 1,
     description: 'Uma investigação guiada sobre sua essência, história, valores, diferenciais e percepção de marca.', route: 'questionnaire.html',
   },
   {
@@ -1191,7 +1191,7 @@ const SEED = {
       journey: {
         programName: 'Identidade',
         steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'completed' },
+          { key: 'questionnaire', title: 'Diagnóstico Estratégico de Entrada', status: 'completed' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'completed' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'completed' },
           { key: 'assessment', title: 'Teste de Arquétipos', status: 'available' },
@@ -1201,7 +1201,7 @@ const SEED = {
         upcomingMeeting: { title: 'E3 — Imagem e Estratégia', date: '2026-08-19T15:00:00' },
       },
       questionnaire: {
-        title: 'Extração de Marca',
+        title: 'Diagnóstico Estratégico de Entrada',
         questions: [
           { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: 'Ser a estrategista de referência para marcas pessoais premium na América Latina.' },
           { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: 'Precisa, calorosa e alérgica a enrolação.' },
@@ -1300,7 +1300,7 @@ const SEED = {
         { type: 'playbook_published', text: 'Playbook v1 publicado', at: '2026-07-06T11:00:00' },
         { type: 'playbook_draft_created', text: 'Rascunho do Playbook v1 gerado', at: '2026-07-05T09:00:00' },
         { type: 'meeting_analyzed', text: 'Transcrição da E1 analisada', at: '2026-07-04T16:10:00' },
-        { type: 'questionnaire_submitted', text: 'Extração de Marca concluída', at: '2026-07-01T09:40:00' },
+        { type: 'questionnaire_submitted', text: 'Diagnóstico Estratégico de Entrada concluído', at: '2026-07-01T09:40:00' },
       ],
       playbookExperience: { format: 'podcast', completedAt: '2026-07-06T19:30:00' },
       quiz: { score: 4, total: 4, completedAt: '2026-07-06T19:45:00' },
@@ -1438,7 +1438,7 @@ const SEED = {
       journey: {
         programName: 'Identidade',
         steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'completed' },
+          { key: 'questionnaire', title: 'Diagnóstico Estratégico de Entrada', status: 'completed' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'available' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
           { key: 'assessment', title: 'Teste de Arquétipos', status: 'available' },
@@ -1448,7 +1448,7 @@ const SEED = {
         upcomingMeeting: { title: 'E2 — Comunicação e Vendas', date: '2026-08-15T10:00:00' },
       },
       questionnaire: {
-        title: 'Extração de Marca',
+        title: 'Diagnóstico Estratégico de Entrada',
         questions: [
           { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: 'Ser vista como referência em finanças para mulheres autônomas.' },
           { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: 'Organizada, didática, mas ainda insegura para aparecer.' },
@@ -1499,7 +1499,7 @@ const SEED = {
         { id: 'h3', title: 'Perguntas de Reflexão', type: 'text_submission', status: 'pending', submission: '' },
       ],
       activity: [
-        { type: 'questionnaire_submitted', text: 'Extração de Marca concluída', at: '2026-07-10T09:00:00' },
+        { type: 'questionnaire_submitted', text: 'Diagnóstico Estratégico de Entrada concluído', at: '2026-07-10T09:00:00' },
       ],
       playbookExperience: { format: null, completedAt: null },
       quiz: { score: null, total: null, completedAt: null },
@@ -1560,7 +1560,7 @@ const SEED = {
       journey: {
         programName: 'Identidade',
         steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'completed' },
+          { key: 'questionnaire', title: 'Diagnóstico Estratégico de Entrada', status: 'completed' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'completed' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'in_progress' },
           { key: 'assessment', title: 'Teste de Arquétipos', status: 'completed' },
@@ -1570,7 +1570,7 @@ const SEED = {
         upcomingMeeting: { title: 'E4 — Posicionamento e Metas', date: '2026-08-17T13:30:00' },
       },
       questionnaire: {
-        title: 'Extração de Marca',
+        title: 'Diagnóstico Estratégico de Entrada',
         questions: [
           { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: 'Pela consultora que resolve o "caos operacional" de pequenos negócios.' },
           { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: 'Prática, direta, sem paciência para teoria sem aplicação.' },
@@ -1655,7 +1655,7 @@ const SEED = {
         { type: 'playbook_draft_created', text: 'Rascunho do Playbook v1 gerado', at: '2026-07-02T10:00:00' },
         { type: 'assessment_completed', text: 'Teste de Arquétipos concluído', at: '2026-06-30T15:00:00' },
         { type: 'meeting_analyzed', text: 'Transcrição da E3 analisada', at: '2026-06-29T16:00:00' },
-        { type: 'questionnaire_submitted', text: 'Extração de Marca concluída', at: '2026-06-28T10:40:00' },
+        { type: 'questionnaire_submitted', text: 'Diagnóstico Estratégico de Entrada concluído', at: '2026-06-28T10:40:00' },
       ],
       playbookExperience: { format: null, completedAt: null },
       quiz: { score: null, total: null, completedAt: null },
@@ -1707,7 +1707,7 @@ const SEED = {
       journey: {
         programName: 'Identidade',
         steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'locked' },
+          { key: 'questionnaire', title: 'Diagnóstico Estratégico de Entrada', status: 'locked' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'locked' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
           { key: 'assessment', title: 'Teste de Arquétipos', status: 'locked' },
@@ -1717,7 +1717,7 @@ const SEED = {
         upcomingMeeting: { title: 'E1 — Extração e Essência — a agendar após onboarding', date: '2026-08-25T10:00:00' },
       },
       questionnaire: {
-        title: 'Extração de Marca',
+        title: 'Diagnóstico Estratégico de Entrada',
         questions: [
           { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
           { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
@@ -1798,7 +1798,7 @@ const SEED = {
       journey: {
         programName: 'Identidade',
         steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'locked' },
+          { key: 'questionnaire', title: 'Diagnóstico Estratégico de Entrada', status: 'locked' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'locked' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
           { key: 'assessment', title: 'Teste de Arquétipos', status: 'locked' },
@@ -1808,7 +1808,7 @@ const SEED = {
         upcomingMeeting: { title: 'E1 — Extração e Essência — a agendar após onboarding', date: '2026-08-27T10:00:00' },
       },
       questionnaire: {
-        title: 'Extração de Marca',
+        title: 'Diagnóstico Estratégico de Entrada',
         questions: [
           { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
           { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
@@ -1924,7 +1924,7 @@ function blankRegistrationInfo() {
 // Client-friendly primary-action copy per activity+status — the Painel's
 // "one primary next action" and each Hub card's button both read from here.
 const PROGRAM_ACTIVITY_PRIMARY_ACTION = {
-  'brand-extraction': { not_started: 'Iniciar Extração de Marca', in_progress: 'Continuar Extração de Marca', completed: 'Ver Extração de Marca' },
+  'brand-extraction': { not_started: 'Iniciar Diagnóstico Estratégico de Entrada', in_progress: 'Continuar Diagnóstico Estratégico de Entrada', completed: 'Ver Diagnóstico Estratégico de Entrada' },
   'archetype-test': { not_started: 'Iniciar teste', in_progress: 'Continuar teste', completed: 'Ver meu resultado' },
   'business-survey': { not_started: 'Responder pesquisa', completed: 'Ver minhas respostas' },
   'activity-guide': { not_started: 'Ver Guia de Atividades', completed: 'Ver Guia de Atividades' },
@@ -2479,7 +2479,7 @@ export const MockDB = {
     const db = load();
     client(db, id).questionnaire.status = 'submitted';
     save(db);
-    this.logActivity(id, 'questionnaire_submitted', 'Extração de Marca concluída');
+    this.logActivity(id, 'questionnaire_submitted', 'Diagnóstico Estratégico de Entrada concluído');
   },
 
   // --- AI: Questionnaire Analysis ---
@@ -5232,7 +5232,7 @@ export const MockDB = {
       journey: {
         programName: 'Identidade',
         steps: [
-          { key: 'questionnaire', title: 'Extração de Marca', status: 'locked' },
+          { key: 'questionnaire', title: 'Diagnóstico Estratégico de Entrada', status: 'locked' },
           { key: 'meeting_1', title: 'E1 — Extração e Essência', status: 'locked' },
           { key: 'playbook_review', title: 'Playbook de Marca Pessoal', status: 'locked' },
           { key: 'assessment', title: 'Teste de Arquétipos', status: 'locked' },
@@ -5242,7 +5242,7 @@ export const MockDB = {
         upcomingMeeting: { title: 'E1 — Extração e Essência — a agendar após onboarding', date: nextWeek.toISOString() },
       },
       questionnaire: {
-        title: 'Extração de Marca',
+        title: 'Diagnóstico Estratégico de Entrada',
         questions: [
           { id: 'q1', text: 'Pelo que você quer ser conhecida daqui a 3 anos?', type: 'long_text', answer: '' },
           { id: 'q2', text: 'O que parece mais verdadeiro sobre quem você é agora?', type: 'long_text', answer: '' },
