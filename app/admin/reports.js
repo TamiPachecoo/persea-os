@@ -536,13 +536,93 @@ function renderRealFilters() {
   `, 'mb-8 no-print');
 }
 
+// ── Site: visits and clicks on naymurta.com and the event site ──────────
+// Counted by our own tracker (site-track Edge Function → site_events);
+// site_stats() returns the period's aggregates in one call. Single gold
+// hue throughout: every chart here is one series (or a ranked list), and
+// the numbers are always written next to the bars.
+const SITE_LABEL = { naymurta: 'naymurta.com', experience: 'Site do evento' };
+const DEVICE_LABEL = { mobile: 'Celular', desktop: 'Computador', tablet: 'Tablet' };
+const PAGE_LABEL = { '/': 'Página inicial', '/index.html': 'Página inicial', '/resultados/': 'Formulário de resultados', '/aplicacao/': 'Aplicação da mentoria', '/preparacao.html': 'Formulário de preparação' };
+const siteFilters = { days: 30 };
+let siteData = null;
+
+async function loadSiteStats() {
+  const to = new Date(); to.setDate(to.getDate() + 1); to.setHours(0, 0, 0, 0);
+  const from = new Date(to); from.setDate(from.getDate() - siteFilters.days);
+  const { data, error } = await supabase.rpc('site_stats', { p_from: from.toISOString(), p_to: to.toISOString() });
+  return error ? { error: error.message } : { ...data, from, to };
+}
+
+const escH = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// Ranked list: label, thin bar scaled to the largest value, the number.
+function barList(rows, emptyText) {
+  if (!rows.length) return `<p class="text-sm" style="color:var(--muted);">${emptyText}</p>`;
+  const max = Math.max(...rows.map((r) => r.n), 1);
+  return `<div class="space-y-2">${rows.map((r) => `
+    <div title="${escH(r.label)}: ${r.n}">
+      <div class="flex items-baseline justify-between gap-3 text-sm"><span class="truncate">${escH(r.label)}${r.sub ? ` <span class="text-xs text-white/30">${escH(r.sub)}</span>` : ''}</span><span class="text-white/60 shrink-0">${r.n}</span></div>
+      <div style="height:4px;border-radius:4px;background:var(--line);margin-top:4px;"><div style="height:4px;border-radius:4px;background:var(--gold);width:${Math.max(2, Math.round((r.n / max) * 100))}%;"></div></div>
+    </div>`).join('')}</div>`;
+}
+
+// Visits per day, both sites together; hover a bar for the day's numbers.
+function dailyChart(d) {
+  const byDay = new Map();
+  (d.by_day || []).forEach((r) => { const x = byDay.get(r.day) || { visits: 0, clicks: 0 }; x.visits += r.visits; x.clicks += r.clicks; byDay.set(r.day, x); });
+  const days = [];
+  for (let t = new Date(d.from); t < d.to; t.setDate(t.getDate() + 1)) days.push(isoDay(t));
+  const max = Math.max(...days.map((k) => byDay.get(k)?.visits || 0), 1);
+  return `
+    <div class="flex items-end" style="gap:2px;height:120px;border-bottom:1px solid var(--line);">
+      ${days.map((k) => { const v = byDay.get(k) || { visits: 0, clicks: 0 }; return `
+        <div title="${fmtDay(k)}: ${v.visits} ${v.visits === 1 ? 'visita' : 'visitas'} · ${v.clicks} ${v.clicks === 1 ? 'clique' : 'cliques'}" style="flex:1;height:100%;display:flex;align-items:flex-end;cursor:default;">
+          <div style="width:100%;height:${v.visits ? Math.max(3, Math.round((v.visits / max) * 100)) : 0}%;background:var(--gold);border-radius:4px 4px 0 0;opacity:.85;"></div>
+        </div>`; }).join('')}
+    </div>
+    <div class="flex justify-between text-xs text-white/30 mt-1"><span>${fmtDay(days[0])}</span><span>${fmtDay(days[days.length - 1])}</span></div>`;
+}
+
+function renderSite() {
+  const head = `
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4 mt-12">
+      <div><p class="text-white/40 text-sm mb-1">Relatórios</p><h2 class="text-2xl font-serif">Site: visitas e cliques</h2></div>
+      <select id="site-days" class="field text-sm" style="width:auto;">
+        ${[[7, 'Últimos 7 dias'], [30, 'Últimos 30 dias'], [90, 'Últimos 90 dias'], [365, 'Último ano']].map(([v, l]) => `<option value="${v}" ${siteFilters.days === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+    </div>`;
+  if (!siteData) return head + card('<p class="text-sm" style="color:var(--muted);">Carregando…</p>');
+  if (siteData.error) return head + card(`<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${escH(siteData.error)}</p>`);
+  const tot = (site) => (siteData.totals || []).find((t) => t.site === site) || { visits: 0, views: 0, clicks: 0 };
+  const tile = (site) => { const t = tot(site); return card(`
+    <p class="text-xs text-white/30 mb-1">${SITE_LABEL[site]}</p>
+    <p class="text-2xl font-serif" style="color:var(--gold);">${t.visits} <span class="text-sm text-white/40">${t.visits === 1 ? 'visita' : 'visitas'}</span></p>
+    <p class="text-xs text-white/30">${t.views} páginas vistas · ${t.clicks} cliques</p>`); };
+  const clicks = (siteData.clicks || []).map((c) => ({ label: c.label, sub: SITE_LABEL[c.site], n: c.n }));
+  const devices = (siteData.devices || []).map((r) => ({ label: DEVICE_LABEL[r.device] || r.device, n: r.visits })).sort((a, b) => b.n - a.n);
+  const sources = (siteData.sources || []).map((r) => ({ label: r.source === 'direto' ? 'Direto (link, WhatsApp, digitado)' : r.source, n: r.n }));
+  const pages = (siteData.pages || []).map((r) => ({ label: PAGE_LABEL[r.path] || r.path, sub: SITE_LABEL[r.site], n: r.n }));
+  return head + `
+    <div class="grid sm:grid-cols-2 gap-4 mb-4">${tile('naymurta')}${tile('experience')}</div>
+    ${card(`<p class="text-sm text-white/50 mb-4">Visitas por dia <span class="text-xs text-white/30">(os dois sites; passe o mouse numa barra para ver o dia)</span></p>${dailyChart(siteData)}`, 'mb-4')}
+    ${card(`<p class="text-sm text-white/50 mb-4">Onde clicaram</p>${barList(clicks, 'Nenhum clique ainda neste período.')}`, 'mb-4')}
+    <div class="grid md:grid-cols-3 gap-4">
+      ${card(`<p class="text-sm text-white/50 mb-4">De onde vieram</p>${barList(sources, 'Nenhuma visita ainda.')}`)}
+      ${card(`<p class="text-sm text-white/50 mb-4">Aparelho</p>${barList(devices, 'Nenhuma visita ainda.')}`)}
+      ${card(`<p class="text-sm text-white/50 mb-4">Páginas mais vistas</p>${barList(pages, 'Nenhuma visita ainda.')}`)}
+    </div>
+    <p class="text-xs text-white/20 mt-4">Contagem própria, sem cookies e sem dados pessoais. Uma visita é uma pessoa navegando numa aba do navegador; começou a contar em 9 de outubro de 2026.</p>`;
+}
+
 function renderReal() {
   content.innerHTML = `
     <div class="mb-8"><p class="text-white/40 text-sm mb-1">Relatórios</p><h1 class="text-3xl font-serif">Relatório Financeiro</h1></div>
     ${renderRealFilters()}
     ${renderRealFinancial()}
     <p class="text-xs text-white/20 no-print">Os relatórios de impacto, adesão e engajamento ainda não estão ligados aos dados reais e ficam ocultos aqui para não mostrar números de demonstração.</p>
+    <div id="site-report">${renderSite()}</div>
   `;
+  wireSite();
   content.querySelector('#real-period').addEventListener('change', (e) => {
     realFilters.period = e.target.value;
     if (realFilters.period === 'custom' && !realFilters.from) { const [f, t] = [new Date(new Date().getFullYear(), 0, 1), new Date()]; realFilters.from = isoDay(f); realFilters.to = isoDay(t); }
@@ -555,10 +635,24 @@ function renderReal() {
   content.querySelectorAll('[data-real-export]').forEach((b) => b.addEventListener('click', () => exportReal(b.dataset.realExport)));
 }
 
+function wireSite() {
+  content.querySelector('#site-days')?.addEventListener('change', async (e) => {
+    siteFilters.days = Number(e.target.value);
+    siteData = null; refreshSite();
+    siteData = await loadSiteStats(); refreshSite();
+  });
+}
+function refreshSite() {
+  const el = content.querySelector('#site-report');
+  if (el) { el.innerHTML = renderSite(); wireSite(); }
+}
+
 if (isProductionEnvironment()) {
   content.innerHTML = card('<p class="text-sm" style="color:var(--muted);">Carregando…</p>');
   realData = await loadRealFinancial();
   renderReal();
+  siteData = await loadSiteStats();
+  refreshSite();
 } else {
   render();
 }
