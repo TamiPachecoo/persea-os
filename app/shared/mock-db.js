@@ -205,11 +205,11 @@ export const PROGRAM_ACTIVITIES = [
     description: 'Perguntas rápidas sobre como você cobra hoje e o que gostaria de estar cobrando — direciona o seu Encontro 2.', route: 'business-survey.html',
   },
   {
-    slug: 'activity-guide', title: 'Guia de Atividades', activityType: 'document', displayOrder: 4,
+    slug: 'activity-guide', title: 'Análise da Imagem Atual', activityType: 'document', displayOrder: 4,
     description: 'Veja como preparar e fotografar as imagens que serão analisadas pela equipe.', route: 'activity-guide.html',
   },
   {
-    slug: 'initial-images', title: 'Imagens', activityType: 'upload', displayOrder: 5,
+    slug: 'initial-images', title: 'Upload das Imagens', activityType: 'upload', displayOrder: 5,
     description: 'Envie as imagens solicitadas para que a equipe possa iniciar sua análise.', route: 'images.html',
   },
   {
@@ -798,13 +798,13 @@ const SEED = {
     hublaAllContentUrl: 'https://pay.hubla.com.br/PLACEHOLDER-todos-os-conteudos',
     // Guia de Atividades — a single tenant-level PDF (how to prepare/take
     // the initial photos), versioned so clients can tell when it changed.
-    // Bundled as a local asset (see shared/assets/guia-atividades.pdf), same
+    // Bundled as a local asset (see shared/assets/analise-da-imagem-atual.pdf), same
     // pattern as the content-category cover photos. `pages` are the same
     // guide pre-rasterized one image per page (shared/assets/
     // guia-atividades-pages/) so the client page can render it as an actual
     // page-turning book instead of a flat PDF embed — see activity-guide.js.
     activityGuide: {
-      pdfUrl: '../shared/assets/guia-atividades.pdf', version: 1, publishedAt: '2026-08-18T14:23:00',
+      pdfUrl: '../shared/assets/analise-da-imagem-atual.pdf', version: 1, publishedAt: '2026-08-18T14:23:00',
       pages: Array.from({ length: 13 }, (_, i) => `../shared/assets/guia-atividades-pages/page-${String(i + 1).padStart(2, '0')}.jpg`),
     },
     // Google Meet/Drive/Docs sync — prototype only, see "Sincronização com
@@ -1927,7 +1927,7 @@ const PROGRAM_ACTIVITY_PRIMARY_ACTION = {
   'brand-extraction': { not_started: 'Iniciar Diagnóstico Estratégico de Entrada', in_progress: 'Continuar Diagnóstico Estratégico de Entrada', completed: 'Ver Diagnóstico Estratégico de Entrada' },
   'archetype-test': { not_started: 'Iniciar teste', in_progress: 'Continuar teste', completed: 'Ver meu resultado' },
   'business-survey': { not_started: 'Responder pesquisa', completed: 'Ver minhas respostas' },
-  'activity-guide': { not_started: 'Ver Guia de Atividades', completed: 'Ver Guia de Atividades' },
+  'activity-guide': { not_started: 'Ver Análise da Imagem Atual', completed: 'Ver Análise da Imagem Atual' },
   'initial-images': {
     not_started: 'Enviar imagens', in_progress: 'Continuar envio de imagens', submitted: 'Ver imagens enviadas',
     in_analysis: 'Ver imagens enviadas', novas_solicitadas: 'Enviar novas imagens', completed: 'Ver imagens aprovadas',

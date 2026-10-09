@@ -13,7 +13,7 @@ export const DIAGNOSTIC_INTRO = [
 ];
 export const DIAGNOSTIC_TIME = 'Tempo estimado de preenchimento: 10 a 12 minutos.';
 export const DIAGNOSTIC_CLOSING = [
-  'Obrigado por compartilhar essas informações.',
+  'Obrigada por compartilhar essas informações.',
   'Este é o nosso ponto de partida. Na primeira reunião, vamos aprofundar os pontos mais relevantes do seu diagnóstico e identificar onde estão as principais oportunidades para fortalecer seu posicionamento, ampliar a percepção de valor e aproximar seus resultados dos objetivos que deseja alcançar.',
 ];
 // Shown above the first 0–10 question of section 4.

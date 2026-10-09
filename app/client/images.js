@@ -35,7 +35,7 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'imag
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 const client = __clientCtx.client;
-document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Imagens' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Upload das Imagens' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
@@ -170,7 +170,7 @@ async function render() {
     ${card(`
       <div class="flex items-center justify-between mb-3">
         <p class="text-sm text-white/50">Antes de enviar</p>
-        <a href="activity-guide.html" class="btn-text">Ver Guia de Atividades</a>
+        <a href="activity-guide.html" class="btn-text">Ver Análise da Imagem Atual</a>
       </div>
       <p class="text-xs text-white/30">O guia mostra como enquadrar, iluminar e preparar as fotos antes do envio.</p>
     `, 'mb-6')}

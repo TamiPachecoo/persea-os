@@ -204,7 +204,7 @@ const MOBILE_NAV_CONFIG = {
       ['arquetipos.html', 'Arquétipos'],
       ['business-survey.html', 'Negócios'],
       ['playbook.html', 'Playbook'],
-      ['activity-guide.html', 'Guia de Atividades'],
+      ['activity-guide.html', 'Análise da Imagem Atual'],
     ],
   },
   admin: {
@@ -633,7 +633,7 @@ export function hublaHref() {
 
 // A src/href is "usable" either as an admin-entered http(s)/data URL
 // (isValidHttpUrl) or as a bundled local asset path shipped with the app
-// itself (e.g. '../shared/assets/guia-atividades.pdf') — same trust level
+// itself (e.g. '../shared/assets/analise-da-imagem-atual.pdf') — same trust level
 // as book.coverImage. Use this instead of isValidHttpUrl for any field that
 // may hold either kind of source (content-category covers, the Guia de
 // Atividades PDF, etc).

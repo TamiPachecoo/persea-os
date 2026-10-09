@@ -379,7 +379,7 @@ async function render() {
     ${isAscensaoMarca ? card(`
       <p class="text-sm mb-2" style="color:var(--gold);">Como seus encontros são marcados</p>
       <p class="text-sm mb-2" style="color:var(--muted);">O Encontro E1 (Diagnóstico) é realizado depois que a equipe analisa o material que você preencheu.</p>
-      <p class="text-sm" style="color:var(--muted);">O Encontro E3 é marcado com a equipe depois do envio das imagens solicitadas no Guia de Atividades.</p>
+      <p class="text-sm" style="color:var(--muted);">O Encontro E3 é marcado com a equipe depois do envio das imagens solicitadas na Análise da Imagem Atual.</p>
     `, 'mb-6') : ''}
     ${encounterRequestsHtml}
     <div id="meeting-request-card" class="mb-8"></div>

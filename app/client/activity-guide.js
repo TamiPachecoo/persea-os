@@ -20,16 +20,16 @@ const __clientCtx = await getCurrentClientContext('../login.html', { page: 'acti
 if (!__clientCtx) throw new Error('not authorized');
 const clientId = __clientCtx.clientId;
 const client = __clientCtx.client;
-document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Guia de Atividades' });
+document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.client?.program_slug, active: 'program.html', title: 'Análise da Imagem Atual' });
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
 function flipbookMarkup(pages) {
   return `
     <div class="book-wrap">
-      <div class="book-stage" id="book-stage" tabindex="0" aria-label="Guia de Atividades — use as setas para virar as páginas">
+      <div class="book-stage" id="book-stage" tabindex="0" aria-label="Análise da Imagem Atual — use as setas para virar as páginas">
         <div class="book-page book-page-under"><img src="${pages[0]}" alt="" /></div>
-        <div class="book-page book-page-flip" id="book-flip"><img src="${pages[0]}" alt="Página 1 do Guia de Atividades" /></div>
+        <div class="book-page book-page-flip" id="book-flip"><img src="${pages[0]}" alt="Página 1 do guia Análise da Imagem Atual" /></div>
         <div class="book-edge book-edge-right" aria-hidden="true"></div>
         <button type="button" class="book-nav book-prev" id="book-prev" aria-label="Página anterior"><span>&lsaquo;</span></button>
         <button type="button" class="book-nav book-next" id="book-next" aria-label="Próxima página"><span>&rsaquo;</span></button>
@@ -66,7 +66,7 @@ function initFlipbook(pages) {
   function paintStatic() {
     underImg.src = pages[index];
     flipImg.src = pages[index];
-    flipImg.alt = `Página ${index + 1} do Guia de Atividades`;
+    flipImg.alt = `Página ${index + 1} do guia Análise da Imagem Atual`;
     flip.style.transition = 'none';
     flip.classList.remove('origin-right');
     flip.style.transform = 'rotateY(0deg)';
@@ -156,7 +156,7 @@ async function render() {
         <div class="flex flex-wrap items-center justify-center gap-3 mt-6">
           ${pdfOk ? `
             <a ${assetLinkAttrs(version.pdf_url)} class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver PDF completo ↗</a>
-            <a href="${version.pdf_url}" download class="btn-ghost">Baixar PDF</a>
+            <a href="${version.pdf_url}" download="Análise da Imagem Atual — PERSEA.pdf" class="btn-ghost">Baixar PDF</a>
           ` : ''}
         </div>
         <p class="text-xs text-white/20 mt-4 text-center">Versão ${version.version}${version.published_at ? ` · publicada em ${formatDate(version.published_at)}` : ''}</p>
