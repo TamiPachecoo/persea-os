@@ -263,12 +263,7 @@ function resultsCard() {
       <p class="text-sm text-white/50">Resultados das mentoradas</p>
       <span class="text-xs text-white/30">${n} ${n === 1 ? 'resposta' : 'respostas'}</span>
     </div>
-    <p class="text-xs text-white/30 mb-4">Formulário independente para as mentoradas contarem os resultados: faturamento, primeira venda e notas de antes e de hoje (0 a 10).</p>
-    <div class="flex flex-wrap gap-2 items-center mb-2">
-      <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${RESULTS_URL}" onclick="this.select()" />
-      ${actionBtn('data-copy-results-msg', 'Copiar mensagem', true)}
-      ${actionBtn('data-copy-results-link', 'Copiar só o link')}
-    </div>
+    <p class="text-xs text-white/30 mb-2">Respostas do formulário de resultados (o link para enviar fica no alto da página).</p>
     ${n ? `
     <div class="grid sm:grid-cols-4 gap-4 mt-6 mb-2">
       <div><p class="text-xs text-white/30 mb-1">Faturamento somado</p><p class="text-lg font-serif" style="color:var(--gold);">${brl(total)}</p></div>
@@ -276,6 +271,26 @@ function resultsCard() {
     </div>
     <div class="space-y-3">${menteeResults.map(item).join('')}</div>` : '<p class="text-sm text-white/20 py-4">Nenhuma resposta ainda.</p>'}
   `, 'mt-6');
+}
+
+// Near the top of the page, so the link is found without scrolling past
+// the whole participant list; the answers stay in resultsCard() below.
+function resultsLinkCard() {
+  const n = menteeResults.length;
+  const total = menteeResults.reduce((s, r) => s + Number(r.revenue_cents), 0);
+  return card(`
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-sm text-white/50">Link do formulário de resultados</p>
+      <span class="text-xs text-white/30">para as mentoradas</span>
+    </div>
+    <p class="text-xs text-white/30 mb-4">Formulário independente para as mentoradas contarem os resultados: faturamento, primeira venda e notas de antes e de hoje (0 a 10). Só pede o nome; as respostas aparecem no fim desta página.</p>
+    <div class="flex flex-wrap gap-2 items-center">
+      <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${RESULTS_URL}" onclick="this.select()" />
+      ${actionBtn('data-copy-results-msg', 'Copiar mensagem', true)}
+      ${actionBtn('data-copy-results-link', 'Copiar só o link')}
+    </div>
+    <p class="text-xs text-white/40 mt-4">${n ? `${n} ${n === 1 ? 'resposta' : 'respostas'} · faturamento somado <span style="color:var(--gold);">${brl(total)}</span> · <a href="#respostas-resultados" style="color:var(--gold);">ver respostas ↓</a>` : 'Nenhuma resposta ainda.'}</p>
+  `, 'mb-6');
 }
 
 async function loadRegistrations() {
@@ -355,6 +370,7 @@ function render() {
       </div>` : isAdmin ? actionBtn('data-rotate-direct', 'Criar link', true) : '<p class="text-xs text-white/40">A Nay ainda não criou este link.</p>'}
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
+    ${resultsLinkCard()}
     ${isAdmin ? card(`
       <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
       <p class="text-xs text-white/30 mb-4">Cole aqui um Link de Pagamento criado no app da SumUp (com parcelas e "Não repassar a taxa" configurados). Enquanto este campo estiver preenchido, toda nova inscrição é enviada para este link em vez de um checkout automático — isso significa que o pagamento não é confirmado sozinho: marque "Paga" manualmente aqui depois de conferir no seu app SumUp. Deixe em branco para voltar ao checkout automático (sem parcelamento).</p>
@@ -385,7 +401,7 @@ function render() {
         ${filtered.length ? filtered.map(registrationRow).join('') : '<p class="text-sm text-white/20 py-6">Nenhuma inscrição encontrada.</p>'}
       </div>
     `)}
-    ${resultsCard()}
+    <div id="respostas-resultados">${resultsCard()}</div>
   `;
 
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
