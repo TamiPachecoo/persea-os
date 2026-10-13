@@ -442,7 +442,11 @@ async function render() {
     ${isDemo ? `<p class="text-xs mb-3" style="color:var(--terracotta);">⚠ Cliente de demonstração — os botões abaixo simulam o fluxo. Nenhuma chamada real é feita à Autentique, nenhum documento é enviado, nenhuma cota é usada.</p>` : ''}
     ${sentViaAutentique
       ? `<p class="text-xs text-white/30 mb-3">Enviado em ${new Date(contract.sent_for_signature_at).toLocaleString('pt-BR')} — documento Autentique: ${contract.autentique_document_id}</p>
-         <button id="${isDemo ? 'check-autentique-demo' : 'check-autentique'}" class="btn-primary">${isDemo ? 'Simular Assinatura Concluída' : 'Verificar Assinatura'}</button>`
+         <div class="flex flex-wrap gap-2">
+           <button id="${isDemo ? 'check-autentique-demo' : 'check-autentique'}" class="btn-primary">${isDemo ? 'Simular Assinatura Concluída' : 'Verificar Assinatura'}</button>
+           ${isDemo ? '' : '<button id="get-sign-link" class="btn-ghost">Ela não achou o e-mail? Pegar link de assinatura</button>'}
+         </div>
+         <div id="sign-link-box" class="mt-4"></div>`
       : `<button id="${isDemo ? 'send-autentique-demo' : 'send-autentique'}" class="btn-primary">${isDemo ? 'Simular Envio para Assinatura' : 'Enviar para Assinatura via Autentique'}</button>`}
   `, 'mb-6') + card(`
     <p class="text-sm text-white/50 mb-3">Ou registre manualmente (outra plataforma, ou já assinado fisicamente)</p>
@@ -514,6 +518,48 @@ async function render() {
     toast('Assinatura simulada — contrato concluído.');
     render();
   });
+  // Signing link: when the client can't find Autentique's e-mail (spam,
+  // Promoções…), Nay sends her the same personal link by WhatsApp.
+  // autentique-status returns it for each required signer, with whether
+  // the e-mail was delivered and opened.
+  function signLinkBox(data) {
+    const box = document.getElementById('sign-link-box');
+    if (!box) return;
+    const signers = (data.signers || []).filter((s) => !s.signed);
+    if (!signers.length) {
+      box.innerHTML = `<p class="text-xs" style="color:var(--muted);">${data.signers_error ? 'A Autentique não devolveu o link agora. Abra o documento no painel da Autentique e use "Copiar link" ao lado da assinante.' : 'Nenhuma assinatura pendente.'}</p>`;
+      return;
+    }
+    const first = (client.full_name || '').trim().split(/\s+/)[0] || '';
+    const msg = (link) => `Olá, ${first}! Aqui está o link para assinar o seu contrato da Mentoria PERSEA:\n\n${link}\n\nO e-mail da Autentique às vezes cai no Spam ou na aba Promoções, por isso estou enviando por aqui também. Qualquer dúvida, é só me chamar.`;
+    const delivery = (s) => s.refused ? `<span style="color:var(--terracotta);">e-mail não entregue${s.refused_reason ? ` (${s.refused_reason})` : ''}</span>`
+      : s.opened ? 'e-mail entregue e aberto' : s.delivered ? 'e-mail entregue, ainda não aberto — pode estar no Spam ou em Promoções' : s.sent ? 'e-mail enviado' : 'e-mail ainda não enviado';
+    box.innerHTML = signers.map((s) => `
+      <div class="p-3 rounded" style="border:1px solid var(--line);background:rgba(255,255,255,.03);">
+        <p class="text-sm">${s.email || 'Assinante'} <span class="text-xs text-white/40">· ${delivery(s)}</span></p>
+        ${s.link ? `
+          <div class="flex flex-wrap gap-2 items-center mt-2">
+            <input readonly class="field text-sm" style="flex:1;min-width:220px;" value="${s.link}" onclick="this.select()" />
+            <a class="btn-primary" style="padding:8px 14px;font-size:12px;" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg(s.link))}">Enviar no WhatsApp</a>
+            <button type="button" class="btn-ghost" style="padding:8px 14px;font-size:12px;" data-copy-sign="${encodeURIComponent(msg(s.link))}">Copiar mensagem</button>
+          </div>` : '<p class="text-xs mt-2" style="color:var(--muted);">Link não disponível — abra o documento na Autentique e copie o link da assinante.</p>'}
+      </div>`).join('');
+    box.querySelectorAll('[data-copy-sign]').forEach((b) => b.addEventListener('click', async () => {
+      const text = decodeURIComponent(b.dataset.copySign);
+      try { await navigator.clipboard.writeText(text); toast('Mensagem copiada.'); } catch { window.prompt('Copie a mensagem:', text); }
+    }));
+  }
+  document.getElementById('get-sign-link')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    const label = e.target.textContent;
+    e.target.textContent = 'Buscando...';
+    const { data, error } = await supabase.functions.invoke('autentique-status', { body: { contract_id: contract.id } });
+    e.target.disabled = false;
+    e.target.textContent = label;
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
+    if (data.normalized_status === 'COMPLETED') { toast(data.already_processed ? 'Este contrato já está assinado.' : 'Ela já assinou! Contrato registrado.'); render(); return; }
+    signLinkBox(data);
+  });
   document.getElementById('check-autentique')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     e.target.textContent = 'Verificando...';
@@ -542,6 +588,7 @@ async function render() {
       render();
       return;
     }
+    signLinkBox(data);
     if (data.warning) toast(data.warning, { tone: 'error' });
     else toast(STATUS_MESSAGES[data.normalized_status] || 'Ainda pendente de assinatura.', data.normalized_status === 'REJECTED' || data.normalized_status === 'DELIVERY_FAILED' || data.normalized_status === 'ERROR' ? { tone: 'error' } : undefined);
     e.target.disabled = false;
