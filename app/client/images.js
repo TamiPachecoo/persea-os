@@ -20,6 +20,7 @@
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
 import { renderShell, card, toast, initClientSwitcher, formatDateTime, isValidHttpUrl, externalLinkAttrs, hublaHref } from '../shared/ui.js';
+import { loadImagesGate, imagesGateNotes } from '../shared/program-model.js';
 
 const MAX_FILE_MB = 8;
 const IMAGE_STATUS_LABEL = {
@@ -145,10 +146,29 @@ async function loadPhotoReminder() {
   return data;
 }
 
+// Opens after E1 (see program-model.js's loadImagesGate); until then the
+// page only explains when it unlocks and points to the guide, so she can
+// already prepare. Anyone who has started sending keeps full access.
+const imagesGate = await loadImagesGate(clientId);
+const gateNotes = imagesGateNotes(imagesGate);
+
+function renderLocked() {
+  content.innerHTML = `
+    <a href="program.html" class="btn-text mb-6 inline-block">&larr; Seu Programa</a>
+    ${card(`
+      <p class="text-xs uppercase mb-2" style="color:var(--terracotta);letter-spacing:.24em;">Upload das Imagens</p>
+      <p class="text-xl font-serif mb-3">🔒 ${gateNotes.locked}</p>
+      <p class="text-sm text-white/60 mb-2 max-w-xl" style="line-height:1.7;">O envio das suas imagens abre logo depois do nosso primeiro encontro. Enquanto isso, você já pode ler a <b>Análise da Imagem Atual</b> para saber como registrar e preparar as fotos.</p>
+      <p class="text-sm mb-5 max-w-xl" style="color:var(--gold);">${gateNotes.deadline}</p>
+      <a href="activity-guide.html" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver Análise da Imagem Atual</a>
+    `)}`;
+}
+
 async function render() {
-  const [images, reminder, deliveredMaterialsHtml] = await Promise.all([loadImages(), loadPhotoReminder(), renderDeliveredMaterials()]);
   const status = client.images_status || 'aguardando_envio';
   const note = client.images_note;
+  if (!imagesGate.open && status === 'aguardando_envio') { renderLocked(); return; }
+  const [images, reminder, deliveredMaterialsHtml] = await Promise.all([loadImages(), loadPhotoReminder(), renderDeliveredMaterials()]);
 
   content.innerHTML = `
     <a href="program.html" class="btn-text mb-6 inline-block">&larr; Seu Programa</a>
@@ -158,7 +178,10 @@ async function render() {
       <p class="text-sm text-white/50">${reminder.note || 'Envie suas fotos para que possamos seguir com o Projeto de Imagem, o Guia de Produções e o Mood Fotográfico.'}</p>
     `, 'mb-6') : ''}
     <div class="flex items-center justify-between flex-wrap gap-3 mb-2">
-      <p class="text-sm text-white/40 max-w-xl">Envie as imagens solicitadas para que a equipe possa iniciar sua análise.</p>
+      <div>
+        <p class="text-sm text-white/40 max-w-xl">Envie as imagens solicitadas para que a equipe possa iniciar sua análise.</p>
+        ${['aguardando_envio', 'envio_iniciado', 'novas_solicitadas'].includes(status) ? `<p class="text-xs mt-1 max-w-xl" style="color:var(--gold);">${gateNotes.deadline}</p>` : ''}
+      </div>
       <span class="badge ${IMAGE_STATUS_BADGE[status]}">${IMAGE_STATUS_LABEL[status]}</span>
     </div>
 

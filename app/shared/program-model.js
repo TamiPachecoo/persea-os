@@ -39,6 +39,30 @@ const STATUS_BADGE = {
   in_analysis: 'badge-progress', feedback_available: 'badge-completed', completed: 'badge-completed', premium_preview: 'badge-locked',
 };
 
+// Upload das Imagens opens only after her E1: the team first meets her,
+// then she sends the photos, which the assistant needs before E3. E1/E3
+// are her agenda items titled "E1 — …" / "E3 — …" (that's how meetings
+// are named). E1 counts as done once marked completed or once its date
+// and time have passed — meetings aren't always marked completed
+// afterwards. Someone who already started sending keeps access.
+export async function loadImagesGate(clientId) {
+  const { data } = await supabase.from('agenda_items').select('title, item_date, status')
+    .eq('related_student_id', clientId).neq('status', 'cancelled');
+  const enc = (n) => (data || [])
+    .filter((a) => new RegExp(`^\\s*E${n}\\b`, 'i').test(a.title || '') && a.item_date)
+    .sort((a, b) => a.item_date.localeCompare(b.item_date))[0] || null;
+  const e1 = enc(1), e3 = enc(3);
+  const e1Done = !!e1 && (e1.status === 'completed' || new Date(e1.item_date) <= new Date());
+  return { open: e1Done, e1, e3 };
+}
+const fmtShortDate = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+export function imagesGateNotes(gate) {
+  return {
+    locked: gate.e1 ? `Libera depois do seu E1 (${fmtShortDate(gate.e1.item_date)})` : 'Libera depois do seu E1',
+    deadline: gate.e3 ? `Envie antes do seu E3 (${fmtShortDate(gate.e3.item_date)}) — a equipe precisa das imagens para preparar o encontro.` : 'Envie antes do E3 — a equipe precisa das imagens para preparar o encontro.',
+  };
+}
+
 // Real per-activity completion, derived from each activity's own real
 // underlying table — never a separate progress table, so this can never
 // show a number the feature itself would contradict.
@@ -125,6 +149,19 @@ export async function loadProgramState(clientId, client) {
   const statusBySlug = Object.fromEntries(
     await Promise.all(includedSlugs.map(async (slug) => [slug, await computeActivityStatus(slug, clientId)])),
   );
+  // Upload das Imagens: locked until E1 (see loadImagesGate), with the
+  // "before E3" deadline shown while it's still to be sent.
+  const notesBySlug = {};
+  if (includedSlugs.includes('initial-images')) {
+    const gate = await loadImagesGate(clientId);
+    const notes = imagesGateNotes(gate);
+    if (!gate.open && statusBySlug['initial-images'] === 'not_started') {
+      statusBySlug['initial-images'] = 'locked';
+      notesBySlug['initial-images'] = { lockedNote: notes.locked };
+    } else if (!['completed', 'submitted', 'in_analysis'].includes(statusBySlug['initial-images'])) {
+      notesBySlug['initial-images'] = { note: notes.deadline };
+    }
+  }
 
   // Real gap found adding a second program (Ascensão da Marca, single-phase,
   // no Persea-Premium upsell concept at all): this used to treat "no access
@@ -152,6 +189,7 @@ export async function loadProgramState(clientId, client) {
         slug, title: def.title, description: def.description, route: def.route, access,
         status, statusLabel: STATUS_LABEL[status] || status, badgeClass: STATUS_BADGE[status] || 'badge-locked',
         completed: status === 'completed' || status === 'feedback_available',
+        ...(notesBySlug[slug] || {}),
       };
     }
     if (access === 'premium_preview') {
@@ -183,7 +221,7 @@ export async function loadProgramState(clientId, client) {
   const allIncluded = phasesOut.flatMap((p) => p.includedActivities);
   const completedCount = allIncluded.filter((a) => a.completed).length;
   const totalIncluded = allIncluded.length;
-  const nextActivity = allIncluded.find((a) => !a.completed) || null;
+  const nextActivity = allIncluded.find((a) => !a.completed && a.status !== 'locked') || null;
   const pct = totalIncluded ? Math.round((completedCount / totalIncluded) * 100) : 0;
 
   return {

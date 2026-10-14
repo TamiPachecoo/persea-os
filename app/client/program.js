@@ -30,14 +30,15 @@ function activityCard(a) {
   const actionable = a.status !== 'locked';
   const actionHtml = actionable
     ? `<a href="${a.route}" class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">${a.completed ? 'Ver' : 'Continuar'}</a>`
-    : '<span class="text-xs text-white/20">Libera após a etapa anterior</span>';
+    : `<span class="text-xs text-white/40">🔒 ${a.lockedNote || 'Libera após a etapa anterior'}</span>`;
 
   return card(`
     <div class="flex items-start justify-between gap-4 mb-2">
       <p class="text-lg font-serif">${a.title}</p>
       <span class="badge ${a.badgeClass}">${a.statusLabel}</span>
     </div>
-    <p class="text-sm text-white/40 mb-5 max-w-xl">${a.description}</p>
+    <p class="text-sm text-white/40 ${a.note ? 'mb-2' : 'mb-5'} max-w-xl">${a.description}</p>
+    ${a.note ? `<p class="text-xs mb-5 max-w-xl" style="color:var(--gold);">${a.note}</p>` : ''}
     ${actionHtml}
   `, `mb-5 ${!actionable ? 'opacity-70' : ''}`);
 }

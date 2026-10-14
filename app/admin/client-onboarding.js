@@ -1001,11 +1001,17 @@ async function loadFinanceiro(contract) {
 // to, so the "A Receber"/"Em Atraso" numbers everywhere else in the app
 // (loadActiveObligations, admin/financial.js) update correctly with zero
 // special-casing on their end.
-async function markLinesReceived(linesToMark, contractId) {
+// paidDate is the day the money actually arrived (YYYY-MM-DD, chosen in
+// the confirmation modal — a transfer is often recorded days later), saved
+// at noon Brasília time so it never shifts a day in reports. due_date is
+// required on payments (it was missing here, so every manual receipt
+// failed with a not-null error): the earliest due date among the lines.
+async function markLinesReceived(linesToMark, contractId, paidDate) {
   const totalCents = linesToMark.reduce((s, l) => s + l.amount_cents, 0);
+  const dueDate = linesToMark.map((l) => l.due_date).filter(Boolean).sort()[0] || paidDate;
   const { data: payment, error: payErr } = await supabase.from('payments').insert({
     client_id: clientId, contract_id: contractId, amount_cents: totalCents, status: 'paid',
-    paid_at: new Date().toISOString(), currency: 'BRL', provider: 'manual',
+    paid_at: `${paidDate}T12:00:00-03:00`, due_date: dueDate, currency: 'BRL', provider: 'manual',
     method: new Set(linesToMark.map((l) => l.method)).size === 1 ? linesToMark[0].method || null : null,
     description: linesToMark.length > 1 ? `Recebido manualmente — ${linesToMark.length} parcelas` : 'Recebido manualmente',
   }).select('id').single();
@@ -2169,12 +2175,35 @@ async function render() {
       const lineIds = btn.dataset.markReceived.split(',');
       const linesToMark = finState.lines.filter((l) => lineIds.includes(l.id));
       if (!linesToMark.length) return;
-      if (!confirm(`Confirmar recebimento de ${brl(linesToMark.reduce((s, l) => s + l.amount_cents, 0) / 100)}?`)) return;
-      btn.disabled = true; btn.textContent = 'Salvando…';
-      const { error } = await markLinesReceived(linesToMark, btn.dataset.contractId);
-      if (error) { toast(error, { tone: 'error' }); btn.disabled = false; return; }
-      toast('Recebimento registrado.');
-      render();
+      const total = linesToMark.reduce((s, l) => s + l.amount_cents, 0);
+      const methods = [...new Set(linesToMark.map((l) => FIN_METHOD_LABEL[l.method] || l.method || 'A combinar'))].join(', ');
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const modal = openModal({
+        title: 'Registrar recebimento',
+        bodyHtml: `
+          <p class="text-sm mb-1">${brl(total / 100)} <span class="text-white/40">· ${methods}</span></p>
+          <p class="text-xs text-white/40 mb-4">${linesToMark.length > 1 ? `${linesToMark.length} parcelas` : (linesToMark[0].label || 'Parcela')}${linesToMark[0].due_date ? ` · vencimento ${formatDate(`${linesToMark.map((l) => l.due_date).filter(Boolean).sort()[0]}T12:00:00`)}` : ''}</p>
+          <label class="text-xs text-white/50 block mb-1" for="received-date">Data em que o pagamento foi feito</label>
+          <input type="date" id="received-date" class="field text-sm mb-1" value="${today}" max="${today}" />
+          <p class="text-xs text-white/30 mb-5">Use a data da transferência / do Pix no extrato — é ela que entra no financeiro e nos relatórios.</p>
+          <div class="flex justify-end gap-2">
+            <button type="button" id="received-cancel" class="btn-text">Cancelar</button>
+            <button type="button" id="received-confirm" class="btn-primary" style="padding:8px 16px;font-size:12px;">Confirmar recebimento</button>
+          </div>`,
+      });
+      modal.el.querySelector('#received-cancel').addEventListener('click', () => modal.close());
+      modal.el.querySelector('#received-confirm').addEventListener('click', async (ev) => {
+        const paidDate = modal.el.querySelector('#received-date').value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) { toast('Escolha a data do pagamento.', { tone: 'error' }); return; }
+        if (paidDate > today) { toast('A data não pode ser no futuro.', { tone: 'error' }); return; }
+        ev.target.disabled = true; ev.target.textContent = 'Salvando…';
+        const { error } = await markLinesReceived(linesToMark, btn.dataset.contractId, paidDate);
+        if (error) { toast(error, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = 'Confirmar recebimento'; return; }
+        modal.close();
+        toast(`Recebimento registrado em ${formatDate(`${paidDate}T12:00:00`)}.`);
+        render();
+      });
     });
   });
   content.querySelector('[data-edit-pix-key]')?.addEventListener('click', () => { editingPixKey = true; render(); });
