@@ -348,10 +348,54 @@ function photoEntries() {
     PHOTO_KINDS.forEach(([col, label]) => (r[col] || []).forEach((ph, i) => {
       if (!ph?.path) return;
       const ext = (ph.path.match(/\.([a-z0-9]{2,5})$/i)?.[1] || 'jpg').toLowerCase();
-      out.push({ path: ph.path, name: `${person}/${person} - ${label} ${i + 1}.${ext}`, person });
+      out.push({ path: ph.path, name: `${person}/${person} - ${label} ${i + 1}.${ext}`, person, label: `${label} ${i + 1}` });
     }));
   });
   return out;
+}
+// "Escolher fotos" opens a picker: thumbnails grouped by participant, a
+// checkbox on each, select-all per person or overall; "Baixar
+// selecionadas" then downloads only those, together, in one ZIP. The
+// selection survives re-renders (and refreshes) while on the page.
+let photoPickerOpen = false;
+const selectedPhotos = new Set();
+function photoPickerHtml(entries) {
+  const groups = [];
+  entries.forEach((e) => {
+    let g = groups[groups.length - 1];
+    if (!g || g.person !== e.person) { g = { person: e.person, items: [] }; groups.push(g); }
+    g.items.push(e);
+  });
+  const thumb = (e) => {
+    const on = selectedPhotos.has(e.name);
+    return `
+      <label class="block cursor-pointer" style="width:132px;" data-photo-tile="${esc(e.name)}">
+        <div style="position:relative;width:132px;height:132px;border-radius:6px;overflow:hidden;border:2px solid ${on ? 'var(--gold)' : 'var(--line)'};background:rgba(255,255,255,.03);" data-photo-frame>
+          ${photoUrls[e.path] ? `<img src="${photoUrls[e.path]}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">` : '<span class="text-xs text-white/30" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">foto</span>'}
+          <input type="checkbox" data-photo-key="${esc(e.name)}" ${on ? 'checked' : ''} style="position:absolute;top:8px;left:8px;width:20px;height:20px;accent-color:#dcc7a8;cursor:pointer;" aria-label="Selecionar ${esc(e.label)} de ${esc(e.person)}" />
+        </div>
+        <span class="text-xs text-white/50 block mt-1 truncate">${esc(e.label)}</span>
+      </label>`;
+  };
+  return `
+    <div class="mt-5 pt-5" style="border-top:1px solid var(--line);">
+      <div class="flex items-center gap-3 flex-wrap mb-5" style="position:sticky;top:64px;z-index:5;background:var(--card);padding:10px 0;">
+        <button type="button" data-photos-select-all class="btn-text" style="font-size:12px;">Selecionar todas</button>
+        <button type="button" data-photos-clear class="btn-text" style="font-size:12px;">Limpar seleção</button>
+        <span id="photos-selected-count" class="text-xs text-white/50">${selectedPhotos.size} selecionadas</span>
+        <button type="button" id="download-selected-photos" class="btn-primary" style="padding:8px 16px;font-size:12px;" ${selectedPhotos.size ? '' : 'disabled'}>Baixar selecionadas (.zip)</button>
+      </div>
+      <div class="space-y-6">
+        ${groups.map((g) => `
+          <div>
+            <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+              <p class="text-sm">${esc(g.person)} <span class="text-xs text-white/30">· ${g.items.length} ${g.items.length === 1 ? 'foto' : 'fotos'}</span></p>
+              <button type="button" class="btn-text" style="font-size:11px;" data-photos-select-person="${esc(g.person)}">Selecionar todas desta pessoa</button>
+            </div>
+            <div class="flex flex-wrap gap-3">${g.items.map(thumb).join('')}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
 }
 function photosDownloadCard() {
   if (isAdmin) return '';
@@ -362,16 +406,48 @@ function photosDownloadCard() {
       <p class="text-sm text-white/50">Fotos do formulário de preparação</p>
       <span class="text-xs text-white/30">${entries.length} fotos · ${people} participantes</span>
     </div>
-    <p class="text-xs text-white/30 mb-4">Baixa todas as fotos de uma vez, em qualidade original, num arquivo .zip: uma pasta por participante e cada foto com o nome de quem enviou (ex.: "Ana Ribeiro - Foto de criança 1.jpg").</p>
+    <p class="text-xs text-white/30 mb-4">Escolha as fotos que quiser (ou baixe todas) e elas vêm juntas, em qualidade original, num arquivo .zip: uma pasta por participante e cada foto com o nome de quem enviou (ex.: "Ana Ribeiro - Foto de criança 1.jpg").</p>
     ${entries.length ? `
       <div class="flex items-center gap-3 flex-wrap">
-        <button type="button" id="download-all-photos" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Baixar todas as fotos (.zip)</button>
+        <button type="button" id="toggle-photo-picker" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${photoPickerOpen ? 'Fechar seleção' : 'Escolher fotos'}</button>
+        <button type="button" id="download-all-photos" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Baixar todas (.zip)</button>
         <span id="download-photos-status" class="text-xs text-white/40"></span>
-      </div>` : '<p class="text-sm text-white/20">Nenhuma foto enviada ainda.</p>'}
+      </div>
+      ${photoPickerOpen ? photoPickerHtml(entries) : ''}` : '<p class="text-sm text-white/20">Nenhuma foto enviada ainda.</p>'}
   `, 'mb-6');
 }
-async function downloadAllPhotos(btn) {
-  const entries = photoEntries();
+function syncPhotoSelection() {
+  content.querySelectorAll('[data-photo-key]').forEach((cb) => {
+    const on = selectedPhotos.has(cb.dataset.photoKey);
+    cb.checked = on;
+    const frame = cb.closest('[data-photo-frame]');
+    if (frame) frame.style.borderColor = on ? 'var(--gold)' : 'var(--line)';
+  });
+  const count = content.querySelector('#photos-selected-count');
+  if (count) count.textContent = `${selectedPhotos.size} selecionadas`;
+  const btn = content.querySelector('#download-selected-photos');
+  if (btn) btn.disabled = !selectedPhotos.size;
+}
+function wirePhotoPicker() {
+  content.querySelector('#toggle-photo-picker')?.addEventListener('click', () => { photoPickerOpen = !photoPickerOpen; render(); });
+  content.querySelectorAll('[data-photo-key]').forEach((cb) => cb.addEventListener('change', () => {
+    if (cb.checked) selectedPhotos.add(cb.dataset.photoKey); else selectedPhotos.delete(cb.dataset.photoKey);
+    syncPhotoSelection();
+  }));
+  content.querySelector('[data-photos-select-all]')?.addEventListener('click', () => { photoEntries().forEach((e) => selectedPhotos.add(e.name)); syncPhotoSelection(); });
+  content.querySelector('[data-photos-clear]')?.addEventListener('click', () => { selectedPhotos.clear(); syncPhotoSelection(); });
+  content.querySelectorAll('[data-photos-select-person]').forEach((b) => b.addEventListener('click', () => {
+    const mine = photoEntries().filter((e) => e.person === b.dataset.photosSelectPerson);
+    const allOn = mine.every((e) => selectedPhotos.has(e.name));
+    mine.forEach((e) => (allOn ? selectedPhotos.delete(e.name) : selectedPhotos.add(e.name)));
+    syncPhotoSelection();
+  }));
+  content.querySelector('#download-selected-photos')?.addEventListener('click', (e) => {
+    const chosen = photoEntries().filter((x) => selectedPhotos.has(x.name));
+    if (chosen.length) downloadAllPhotos(e.currentTarget, chosen, 'selecionadas');
+  });
+}
+async function downloadAllPhotos(btn, entries = photoEntries(), kind = '') {
   const status = content.querySelector('#download-photos-status');
   btn.disabled = true;
   const files = [];
@@ -393,7 +469,7 @@ async function downloadAllPhotos(btn) {
   if (status) status.textContent = 'Montando o arquivo…';
   const blob = buildZip(files);
   const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: `Fotos PERSEA Experience - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.zip` });
+  const a = Object.assign(document.createElement('a'), { href: url, download: `Fotos PERSEA Experience${kind ? ` (${kind})` : ''} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.zip` });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   btn.disabled = false;
@@ -477,6 +553,7 @@ function render() {
   `;
 
   content.querySelector('#download-all-photos')?.addEventListener('click', (e) => downloadAllPhotos(e.currentTarget));
+  wirePhotoPicker();
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
   content.querySelector('#status-filter').addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
   content.querySelector('#manual-link-form')?.addEventListener('submit', async (e) => {
