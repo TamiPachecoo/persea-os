@@ -18,6 +18,7 @@
 import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { renderShell, card, toast, formatDateTime } from '../shared/ui.js';
+import { buildZip } from '../shared/zip.js';
 
 // Also opened by the assistant (assistant/events.html loads this file).
 // She runs the attendee list like Nay does; only the SumUp payment-link
@@ -330,6 +331,76 @@ function registrationRow(r, i) {
   `;
 }
 
+// Assistant only: every photo sent in the preparation form, downloaded at
+// once as a ZIP of the original files (full quality, never resized), one
+// folder per participant and each file named after her, e.g.
+// "Ana Clara Ribeiro/Ana Clara Ribeiro - Foto de criança 1.jpg".
+const PHOTO_KINDS = [['prep_child_photos', 'Foto de criança'], ['prep_special_photos', 'Pessoas especiais']];
+const safeName = (t) => String(t || 'Sem nome').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Sem nome';
+function photoEntries() {
+  const used = new Set();
+  const out = [];
+  registrations.forEach((r) => {
+    let person = safeName(r.full_name);
+    // Two people with the same name never share a folder.
+    if (used.has(person.toLowerCase())) person = `${person} (${safeName(r.email)})`;
+    used.add(person.toLowerCase());
+    PHOTO_KINDS.forEach(([col, label]) => (r[col] || []).forEach((ph, i) => {
+      if (!ph?.path) return;
+      const ext = (ph.path.match(/\.([a-z0-9]{2,5})$/i)?.[1] || 'jpg').toLowerCase();
+      out.push({ path: ph.path, name: `${person}/${person} - ${label} ${i + 1}.${ext}`, person });
+    }));
+  });
+  return out;
+}
+function photosDownloadCard() {
+  if (isAdmin) return '';
+  const entries = photoEntries();
+  const people = new Set(entries.map((e) => e.person)).size;
+  return card(`
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-sm text-white/50">Fotos do formulário de preparação</p>
+      <span class="text-xs text-white/30">${entries.length} fotos · ${people} participantes</span>
+    </div>
+    <p class="text-xs text-white/30 mb-4">Baixa todas as fotos de uma vez, em qualidade original, num arquivo .zip: uma pasta por participante e cada foto com o nome de quem enviou (ex.: "Ana Ribeiro - Foto de criança 1.jpg").</p>
+    ${entries.length ? `
+      <div class="flex items-center gap-3 flex-wrap">
+        <button type="button" id="download-all-photos" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Baixar todas as fotos (.zip)</button>
+        <span id="download-photos-status" class="text-xs text-white/40"></span>
+      </div>` : '<p class="text-sm text-white/20">Nenhuma foto enviada ainda.</p>'}
+  `, 'mb-6');
+}
+async function downloadAllPhotos(btn) {
+  const entries = photoEntries();
+  const status = content.querySelector('#download-photos-status');
+  btn.disabled = true;
+  const files = [];
+  const failed = [];
+  let done = 0;
+  const queue = [...entries];
+  async function worker() {
+    while (queue.length) {
+      const e = queue.shift();
+      const { data, error } = await supabase.storage.from('event-prep-photos').download(e.path);
+      if (error || !data) failed.push(e.name);
+      else files.push({ name: e.name, data: new Uint8Array(await data.arrayBuffer()) });
+      done += 1;
+      if (status) status.textContent = `Baixando ${done} de ${entries.length}…`;
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, worker));
+  files.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  if (status) status.textContent = 'Montando o arquivo…';
+  const blob = buildZip(files);
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: `Fotos PERSEA Experience - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.zip` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  btn.disabled = false;
+  if (status) status.textContent = failed.length ? `${files.length} fotos baixadas · ${failed.length} não puderam ser baixadas` : `${files.length} fotos baixadas.`;
+  if (failed.length) toast(`Não foi possível baixar: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}`, { tone: 'error' });
+}
+
 function render() {
   const interessadas = registrations.filter((r) => r.status === 'interessada').length;
   const pagas = registrations.filter((r) => r.status === 'pago').length;
@@ -370,6 +441,7 @@ function render() {
       </div>` : isAdmin ? actionBtn('data-rotate-direct', 'Criar link', true) : '<p class="text-xs text-white/40">A Nay ainda não criou este link.</p>'}
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
+    ${photosDownloadCard()}
     ${resultsLinkCard()}
     ${isAdmin ? card(`
       <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
@@ -404,6 +476,7 @@ function render() {
     <div id="respostas-resultados">${resultsCard()}</div>
   `;
 
+  content.querySelector('#download-all-photos')?.addEventListener('click', (e) => downloadAllPhotos(e.currentTarget));
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
   content.querySelector('#status-filter').addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
   content.querySelector('#manual-link-form')?.addEventListener('submit', async (e) => {
