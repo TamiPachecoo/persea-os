@@ -1529,8 +1529,8 @@ async function openScheduleNextModal(next) {
 // Guia de Posicionamento on the E2 card, Kit Digital on the E4 card: Nay
 // (or the assistant) uploads ahead of time; the student sees it only after
 // Nay clicks "Liberar para a cliente" (see shared/encounter-materials.js).
-function materialSlotHtml(m, materials = {}) {
-  const def = ENCOUNTER_MATERIALS[encounterNumber(m.title)];
+function materialSlotHtml(number, materials = {}) {
+  const def = ENCOUNTER_MATERIALS[number];
   if (!def) return '';
   const { row, url } = materials[def.key] || {};
   const has = !!(row?.file_path || row?.file_url);
@@ -1541,7 +1541,7 @@ function materialSlotHtml(m, materials = {}) {
   return `
     <div class="mt-3 rounded" style="padding:14px 16px;border:1px solid var(--line);background:rgba(255,255,255,.03);">
       <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
-        <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">Material do encontro · ${def.label}</p>
+        <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">E${number} · ${def.label}</p>
         ${badge}
       </div>
       ${has ? `<p class="text-sm mb-3">${url ? `<a ${externalLinkAttrs(url)} class="btn-text" style="display:inline;">📄 ${escHtml(row.file_name || (row.file_path ? 'Arquivo' : 'Abrir link'))} ↗</a>` : escHtml(row.file_name || 'Arquivo')}</p>`
@@ -1674,7 +1674,15 @@ function encontrosTabHtml(encontros) {
   const { meetings, artifacts, sessions, fileUrls, materials } = encontros;
   const unassigned = artifacts.filter((a) => !a.agenda_item_id);
   const pastMeetings = meetings.filter(isPastMeeting);
+  // Always shown (not only once an E2/E4 meeting exists), so Nay can
+  // upload ahead of time.
+  const materialsCard = card(`
+    <p class="text-sm text-white/50 mb-1">Materiais dos encontros</p>
+    <p class="text-xs text-white/30 mb-1">Envie quando quiser; ela só vê depois que você clicar em "Liberar para a cliente" (normalmente durante o encontro).</p>
+    ${Object.keys(ENCOUNTER_MATERIALS).map((n) => materialSlotHtml(Number(n), materials)).join('')}
+  `, 'mb-6');
   return `
+    ${materialsCard}
     ${card(`
       <p class="text-sm text-white/50 mb-1">Gravações</p>
       <p class="text-xs text-white/30 mb-3">Gravações vinculadas a ela. Ela já vê todas na página Encontros. Arquivar em um encontro já realizado é opcional.</p>
@@ -1696,7 +1704,6 @@ function encontrosTabHtml(encontros) {
         </div>
         ${m.status === 'upcoming' && new Date(m.item_date) > new Date() ? `<button type="button" class="btn-text" style="font-size:12px;" data-notify-meeting="${m.id}">Avisar pelo WhatsApp →</button>` : ''}
         ${nextEncounterHtml(m, encontros)}
-        ${materialSlotHtml(m, materials)}
         ${sharedNotesHtml(m, fileUrls)}
         <div class="pt-3 mt-2" style="border-top:1px solid var(--line);">
           ${files.length ? files.map((a) => encontroFileRow(a)).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">Encontro ainda não realizado.</p>'}
