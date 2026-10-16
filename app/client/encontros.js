@@ -17,6 +17,7 @@ import { getCurrentClientContext } from '../shared/client-context.js';
 import { supabase } from '../shared/supabase-client.js';
 import { sessionKeyFor } from '../shared/drive-artifacts-model.js';
 import { renderShell, card, formatDateTime, formatDate, toast, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock } from '../shared/ui.js';
+import { ENCOUNTER_MATERIALS, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥', online_event: '🌐', photo_review: '📸',
@@ -138,6 +139,20 @@ function sharedNotesBlock(it) {
     </div>`;
 }
 
+// Guia de Posicionamento (E2) / Kit Digital (E4) — only once Nay releases
+// it (before that the database doesn't even return the row to her).
+let encounterMaterials = {};
+function materialBlock(it) {
+  const def = ENCOUNTER_MATERIALS[encounterNumber(it.title)];
+  const mat = def && encounterMaterials[def.key];
+  if (!mat?.row?.delivered_at || !mat.url) return '';
+  return `
+    <div class="mt-4 pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.14em;">Material do encontro</p>
+      <a ${externalLinkAttrs(mat.url)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Abrir ${def.label} ↗</a>
+    </div>`;
+}
+
 function meetingCard(it, recordingByAgendaId, driveArtifacts) {
   const linkOk = it.status === 'upcoming' && isValidHttpUrl(it.online_link);
   const meetingShape = recordingShapeFor(it, recordingByAgendaId.get(it.id), driveArtifacts);
@@ -153,6 +168,7 @@ function meetingCard(it, recordingByAgendaId, driveArtifacts) {
     ${it.topic ? `<p class="text-sm text-white/50 mb-4 max-w-xl break-words">${it.topic}</p>` : '<div class="mb-4"></div>'}
     ${linkOk ? `<a ${externalLinkAttrs(it.online_link)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Entrar na Reunião ↗</a>` : ''}
     ${meetingShape.recording ? `<div class="mt-4 pt-4" style="border-top:1px solid var(--line);">${renderClientRecordingBlock(meetingShape)}</div>` : ''}
+    ${materialBlock(it)}
     ${sharedNotesBlock(it)}
   `, 'mb-5');
 }
@@ -359,6 +375,7 @@ async function render() {
     renderEncounterRequestsCardReal(),
   ]);
   const recordingByAgendaId = new Map((recordingRows || []).map((r) => [r.agenda_item_id, r]));
+  encounterMaterials = await loadEncounterMaterials(supabase, clientId);
   const sharedPaths = items.flatMap((it) => (it.shared_files || []).map((f) => f.path));
   sharedFileUrls = {};
   if (sharedPaths.length) {

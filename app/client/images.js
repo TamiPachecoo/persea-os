@@ -109,10 +109,16 @@ async function handleFiles(fileList) {
 // Guides, Digital Kit and Hubla access — the assistant's deliverables built
 // from these very photos. Only ever shows what's actually ready.
 async function renderDeliveredMaterials() {
-  const [{ data: guides }, { data: kit }] = await Promise.all([
+  const [{ data: guides }, { data: kitRow }] = await Promise.all([
     supabase.from('image_guides').select('*').eq('client_id', clientId).not('delivered_at', 'is', null),
     supabase.from('digital_kits').select('*').eq('client_id', clientId).maybeSingle(),
   ]);
+  // An uploaded Kit Digital file (Nay's E4 upload) opens through a signed link.
+  const kit = kitRow ? { ...kitRow } : null;
+  if (kit?.file_path) {
+    const { data: signed } = await supabase.storage.from('client-shared-files').createSignedUrl(kit.file_path, 3600);
+    if (signed?.signedUrl) kit.file_url = signed.signedUrl;
+  }
   const hublaGranted = client.hubla_access_status === 'granted';
   if (!(guides && guides.length) && !kit?.delivered_at && !hublaGranted) return '';
 

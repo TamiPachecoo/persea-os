@@ -424,17 +424,31 @@ async function render() {
   }
 
   const sentViaAutentique = !!contract.autentique_document_id;
+  // Nay edits the text; the assistant sends only after Nay marked it
+  // reviewed (admin_reviewed_at — set only by admin and cleared by the
+  // database whenever anyone else changes the text). Nay can always send.
+  const isAdminUser = profile.role === 'admin';
+  const reviewed = !!contract.admin_reviewed_at;
+  const canSend = isAdminUser || reviewed;
+  const reviewBanner = sentViaAutentique ? '' : reviewed
+    ? `<div class="mb-4 px-4 py-3 rounded-xl text-sm" style="border:1px solid rgba(220,199,168,.35);background:rgba(220,199,168,.08);color:var(--gold);">✓ Revisado pela Nay em ${new Date(contract.admin_reviewed_at).toLocaleString('pt-BR')} — pronto para enviar para assinatura.</div>`
+    : isAdminUser
+      ? `<div class="mb-4 px-4 py-3 rounded-xl text-sm text-white/70" style="border:1px solid var(--line);background:rgba(255,255,255,.03);">Edite o que precisar e clique em <b>"Salvar e marcar como revisado"</b>: assim a assistente sabe que pode enviar. Você também pode enviar para assinatura você mesma.</div>`
+      : `<div class="mb-4 px-4 py-3 rounded-xl text-sm" style="border:1px solid rgba(184,134,58,.4);background:rgba(184,134,58,.08);color:var(--terracotta);">Aguardando a revisão da Nay. Só ela edita o texto do contrato; o envio para assinatura libera assim que ela marcar como revisado.</div>`;
 
   // Draft ready — edit, then either let Autentique handle the whole
   // send/track/retrieve loop automatically, or fall back to the manual
   // download-and-reupload path (any other e-sign platform, or if the
   // Autentique secret isn't configured yet).
   content.innerHTML = header + card(`
-    <p class="text-sm text-white/50 mb-1">Revise o texto antes de enviar para assinatura.</p>
-    <p class="text-xs text-white/20 mb-3">O texto abaixo é totalmente editável — para casos específicos (dispensar multa de cancelamento, ajustar uma cláusula para esta cliente, etc.), edite diretamente aqui e salve antes de enviar. Depois de enviado para assinatura, o texto já enviado não pode mais ser alterado por aqui.</p>
-    <textarea id="body" rows="20" class="field" style="font-family:inherit; font-size:13px; line-height:1.6;">${escapeHtml(contract.body_text)}</textarea>
-    <div class="flex items-center gap-3 mt-4">
-      <button id="save" class="btn-ghost">Salvar Alterações</button>
+    ${reviewBanner}
+    <p class="text-sm text-white/50 mb-1">${isAdminUser ? 'Revise o texto antes de enviar para assinatura.' : 'Texto do contrato'}</p>
+    <p class="text-xs text-white/20 mb-3">${isAdminUser ? 'O texto abaixo é totalmente editável — para casos específicos (dispensar multa de cancelamento, ajustar uma cláusula para esta cliente, etc.), edite diretamente aqui. Depois de enviado para assinatura, o texto já enviado não pode mais ser alterado por aqui.' : 'Somente leitura: os ajustes no texto são feitos pela Nay.'}</p>
+    <textarea id="body" rows="20" class="field" style="font-family:inherit; font-size:13px; line-height:1.6;" ${isAdminUser && !sentViaAutentique ? '' : 'readonly'}>${escapeHtml(contract.body_text)}</textarea>
+    <div class="flex items-center gap-3 mt-4 flex-wrap">
+      ${isAdminUser && !sentViaAutentique ? `
+        <button id="save" class="btn-ghost">Salvar alterações</button>
+        <button id="save-review" class="btn-primary">${reviewed ? 'Salvar e manter como revisado' : 'Salvar e marcar como revisado'}</button>` : ''}
       <button id="download" class="btn-ghost">Baixar Contrato (PDF)</button>
     </div>
   `, 'mb-6') + card(`
@@ -447,18 +461,31 @@ async function render() {
            ${isDemo ? '' : '<button id="get-sign-link" class="btn-ghost">Ela não achou o e-mail? Pegar link de assinatura</button>'}
          </div>
          <div id="sign-link-box" class="mt-4"></div>`
-      : `<button id="${isDemo ? 'send-autentique-demo' : 'send-autentique'}" class="btn-primary">${isDemo ? 'Simular Envio para Assinatura' : 'Enviar para Assinatura via Autentique'}</button>`}
+      : canSend
+        ? `<button id="${isDemo ? 'send-autentique-demo' : 'send-autentique'}" class="btn-primary">${isDemo ? 'Simular Envio para Assinatura' : 'Enviar para Assinatura via Autentique'}</button>`
+        : `<button class="btn-primary" disabled style="opacity:.45;cursor:not-allowed;">Enviar para Assinatura via Autentique</button>
+           <p class="text-xs mt-2" style="color:var(--terracotta);">Libera quando a Nay marcar o contrato como revisado.</p>`}
   `, 'mb-6') + card(`
     <p class="text-sm text-white/50 mb-3">Ou registre manualmente (outra plataforma, ou já assinado fisicamente)</p>
     <input type="file" id="signed-file" accept=".pdf,.docx,.doc" class="field mb-3" />
     <button id="upload" class="btn-ghost">Enviar Contrato Assinado</button>
   `);
 
-  document.getElementById('save').addEventListener('click', async () => {
+  document.getElementById('save')?.addEventListener('click', async () => {
     const body = document.getElementById('body').value;
     const { error } = await supabase.from('contracts').update({ body_text: body }).eq('id', contract.id);
     if (error) { toast(error.message, { tone: 'error' }); return; }
     toast('Alterações salvas.');
+  });
+  document.getElementById('save-review')?.addEventListener('click', async (e) => {
+    const body = document.getElementById('body').value;
+    e.target.disabled = true;
+    const { error } = await supabase.from('contracts').update({
+      body_text: body, admin_reviewed_at: new Date().toISOString(), admin_reviewed_by: profile.id,
+    }).eq('id', contract.id);
+    if (error) { toast(error.message, { tone: 'error' }); e.target.disabled = false; return; }
+    toast('Contrato revisado — a assistente já pode enviar para assinatura.');
+    render();
   });
   document.getElementById('download').addEventListener('click', () => {
     openPrintableContract(document.getElementById('body').value, client.full_name);

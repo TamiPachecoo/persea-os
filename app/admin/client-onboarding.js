@@ -37,6 +37,7 @@ import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action
 import { markHublaAccessGranted } from '../shared/hubla-model.js';
 import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, detachArtifactFromMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 import { DIAGNOSTIC_TITLE, groupBySection } from '../shared/diagnostic-template.js';
+import { ENCOUNTER_MATERIALS, MATERIALS_BUCKET, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -1272,13 +1273,13 @@ async function loadImageProject() {
 
 function deliverableStatus(row) {
   if (row?.delivered_at) return { label: 'Entregue', cls: 'badge-completed' };
-  if (row?.file_url || row?.canva_url) return { label: 'Aguardando aprovação', cls: 'badge-progress' };
+  if (row?.file_url || row?.canva_url || row?.file_path) return { label: 'Aguardando aprovação', cls: 'badge-progress' };
   return { label: 'Não iniciado', cls: 'badge-locked' };
 }
 
 function imageDeliverableRow({ key, label, row, isKit }) {
   const status = deliverableStatus(row);
-  const hasContent = !!(row?.file_url || row?.canva_url);
+  const hasContent = !!(row?.file_url || row?.canva_url || row?.file_path);
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -1445,7 +1446,116 @@ async function loadEncontros() {
     const { data } = await supabase.storage.from(SHARED_BUCKET).createSignedUrls(filePaths, 3600);
     (data || []).forEach((d) => { if (d.signedUrl) fileUrls[d.path] = d.signedUrl; });
   }
-  return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()], fileUrls };
+  const [materials, { data: encounterDefs }] = await Promise.all([
+    loadEncounterMaterials(supabase, clientId),
+    supabase.from('encounter_defs').select('number, name, premium_only').order('number'),
+  ]);
+  return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()], fileUrls, materials, encounterDefs: encounterDefs || [] };
+}
+
+// During an encounter Nay schedules the next one right from its card
+// ("E1" → "Agendar E2 — Posicionamento e Metas"). Same record + optional
+// Google Calendar event (with Meet link) as the Agenda's own scheduling.
+// Premium-only encounters (E5+) are offered only to Premium clients.
+function nextEncounterDef(m, encontros) {
+  const n = encounterNumber(m.title);
+  if (!n) return null;
+  const next = encontros.encounterDefs.find((d) => d.number === n + 1);
+  if (!next || (next.premium_only && currentClient?.tier !== 'premium')) return null;
+  return next;
+}
+function nextEncounterHtml(m, encontros) {
+  if (isAssistant || m.status === 'cancelled') return '';
+  const next = nextEncounterDef(m, encontros);
+  if (!next) return '';
+  const already = encontros.meetings.find((x) => encounterNumber(x.title) === next.number && x.status !== 'cancelled');
+  if (already) return `<p class="text-xs text-white/40 mt-3">E${next.number} já agendado · ${formatDateTime(already.item_date)}</p>`;
+  return `<button type="button" class="btn-ghost mt-3" style="padding:7px 14px;font-size:12px;" data-schedule-next="${next.number}">+ Agendar próximo encontro: E${next.number} — ${escHtml(next.name)}</button>`;
+}
+async function openScheduleNextModal(next) {
+  const title = `E${next.number} — ${next.name}`;
+  const { el, close } = openModal({
+    title: `Agendar ${title}`,
+    bodyHtml: `
+      <form id="schedule-next-form" class="space-y-4">
+        <p class="text-sm text-white/60">${escHtml(currentClient?.full_name || '')}</p>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div><label class="text-xs text-white/40 block mb-1">Data e horário</label><input type="datetime-local" name="date" class="field" required /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Duração</label>
+            <select name="duration" class="field"><option value="60">1 hora</option><option value="90" selected>1h30</option><option value="120">2 horas</option></select></div>
+        </div>
+        <div id="schedule-next-google"><p class="text-xs text-white/30">Verificando o Google Calendar…</p></div>
+        <div><label class="text-xs text-white/40 block mb-1">Link da reunião <span class="text-white/20">(automático se criar no Google)</span></label><input name="onlineLink" class="field" placeholder="https://..." /></div>
+        <div class="flex justify-end pt-2"><button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Agendar</button></div>
+      </form>`,
+  });
+  const { data: cal } = await supabase.functions.invoke('google-calendar-status').catch(() => ({ data: null }));
+  const connected = !!cal?.connected && !cal?.error;
+  const gbox = el.querySelector('#schedule-next-google');
+  if (gbox) gbox.innerHTML = connected
+    ? '<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="syncGoogle" checked /> Também criar no Google Calendar (com link do Meet)</label>'
+    : '<p class="text-xs text-white/30">Google Calendar não conectado — cole o link da reunião abaixo, se tiver.</p>';
+  el.querySelector('#schedule-next-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('[type=submit]');
+    const fd = new FormData(e.target);
+    const date = fd.get('date');
+    if (!date) { toast('Escolha a data e o horário.', { tone: 'error' }); return; }
+    btn.disabled = true; btn.textContent = 'Agendando…';
+    const durationMinutes = Number(fd.get('duration')) || 90;
+    const startIso = new Date(date).toISOString();
+    const { data: created, error } = await supabase.from('agenda_items').insert({
+      title, type: 'individual_meeting', item_date: startIso, status: 'upcoming',
+      related_student_id: clientId, duration_minutes: durationMinutes,
+      online_link: (fd.get('onlineLink') || '').trim() || null,
+    }).select().single();
+    if (error) { toast('Não foi possível agendar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Agendar'; return; }
+    let msg = `${title} agendado.`;
+    if (fd.get('syncGoogle') && connected) {
+      const endIso = new Date(new Date(date).getTime() + durationMinutes * 60000).toISOString();
+      const { data, error: gErr } = await supabase.functions.invoke('google-calendar-create-event', { body: { summary: `${title} · ${currentClient?.full_name || ''}`.trim(), start: startIso, end: endIso } });
+      if (gErr || data?.error) msg = `${title} agendado — mas não foi possível criar no Google Calendar.`;
+      else {
+        await supabase.from('agenda_items').update({ google_event_id: data.event_id, online_link: data.meet_url || created.online_link }).eq('id', created.id);
+        msg = `${title} agendado — também no Google Calendar${data.meet_url ? ', com link do Meet' : ''}.`;
+      }
+    }
+    close();
+    toast(`${msg} Use "Avisar pelo WhatsApp" no encontro para mandar a mensagem para ela.`);
+    render();
+  });
+}
+
+// Guia de Posicionamento on the E2 card, Kit Digital on the E4 card: Nay
+// (or the assistant) uploads ahead of time; the student sees it only after
+// Nay clicks "Liberar para a cliente" (see shared/encounter-materials.js).
+function materialSlotHtml(m, materials = {}) {
+  const def = ENCOUNTER_MATERIALS[encounterNumber(m.title)];
+  if (!def) return '';
+  const { row, url } = materials[def.key] || {};
+  const has = !!(row?.file_path || row?.file_url);
+  const released = !!row?.delivered_at;
+  const badge = released ? `<span class="badge badge-completed">Liberado em ${formatDateTime(row.delivered_at)}</span>`
+    : has ? '<span class="badge badge-progress">Pronto · ainda não liberado</span>'
+    : '<span class="badge badge-locked">Ainda não enviado</span>';
+  return `
+    <div class="mt-3 rounded" style="padding:14px 16px;border:1px solid var(--line);background:rgba(255,255,255,.03);">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">Material do encontro · ${def.label}</p>
+        ${badge}
+      </div>
+      ${has ? `<p class="text-sm mb-3">${url ? `<a ${externalLinkAttrs(url)} class="btn-text" style="display:inline;">📄 ${escHtml(row.file_name || (row.file_path ? 'Arquivo' : 'Abrir link'))} ↗</a>` : escHtml(row.file_name || 'Arquivo')}</p>`
+        : `<p class="text-xs text-white/40 mb-3">Envie o ${def.label} antes do encontro; ela só vê quando você liberar.</p>`}
+      <div class="flex items-center gap-2 flex-wrap">
+        <label class="btn-ghost" style="padding:7px 14px;font-size:12px;cursor:pointer;" data-material-label="${def.key}">
+          ${has ? 'Substituir arquivo' : 'Enviar arquivo'}
+          <input type="file" accept="image/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.zip" data-material-upload="${def.key}" style="display:none;" />
+        </label>
+        ${isAssistant ? '<span class="text-xs text-white/30">A Nay libera para a cliente.</span>'
+          : released ? `<button type="button" class="btn-text" style="color:var(--terracotta);" data-material-unrelease="${def.key}">Recolher</button>`
+          : has ? `<button type="button" class="btn-primary" style="padding:7px 14px;font-size:12px;" data-material-release="${def.key}">Liberar para a cliente</button>` : ''}
+      </div>
+    </div>`;
 }
 
 function encontroFileRow(a, pastMeetings = null) {
@@ -1560,7 +1670,8 @@ function isPastMeeting(m) {
   return m.status !== 'cancelled' && new Date(m.item_date) <= new Date();
 }
 
-function encontrosTabHtml({ meetings, artifacts, sessions, fileUrls }) {
+function encontrosTabHtml(encontros) {
+  const { meetings, artifacts, sessions, fileUrls, materials } = encontros;
   const unassigned = artifacts.filter((a) => !a.agenda_item_id);
   const pastMeetings = meetings.filter(isPastMeeting);
   return `
@@ -1583,6 +1694,9 @@ function encontrosTabHtml({ meetings, artifacts, sessions, fileUrls }) {
             ${!isAssistant ? `<a href="agenda.html?item=${m.id}" class="btn-text">Editar</a>` : ''}
           </div>
         </div>
+        ${m.status === 'upcoming' && new Date(m.item_date) > new Date() ? `<button type="button" class="btn-text" style="font-size:12px;" data-notify-meeting="${m.id}">Avisar pelo WhatsApp →</button>` : ''}
+        ${nextEncounterHtml(m, encontros)}
+        ${materialSlotHtml(m, materials)}
         ${sharedNotesHtml(m, fileUrls)}
         <div class="pt-3 mt-2" style="border-top:1px solid var(--line);">
           ${files.length ? files.map((a) => encontroFileRow(a)).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">Encontro ainda não realizado.</p>'}
@@ -1594,6 +1708,53 @@ function encontrosTabHtml({ meetings, artifacts, sessions, fileUrls }) {
 
 function wireEncontrosTab(encontros) {
   const meetingById = new Map(encontros.meetings.map((m) => [m.id, m]));
+  const matDef = (key) => Object.values(ENCOUNTER_MATERIALS).find((d) => d.key === key);
+  content.querySelectorAll('[data-schedule-next]').forEach((btn) => btn.addEventListener('click', () => {
+    const next = encontros.encounterDefs.find((d) => d.number === Number(btn.dataset.scheduleNext));
+    if (next) openScheduleNextModal(next);
+  }));
+  content.querySelectorAll('[data-notify-meeting]').forEach((btn) => btn.addEventListener('click', () => {
+    msgState = { ...msgState, kind: 'meeting', meetingId: btn.dataset.notifyMeeting, draft: null };
+    activeTab = 'mensagens';
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }));
+  content.querySelectorAll('[data-material-upload]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const def = matDef(input.dataset.materialUpload);
+      const f = input.files[0];
+      if (!def || !f) return;
+      if (f.size > 50 * 1024 * 1024) { toast(`${f.name} passa de 50 MB.`, { tone: 'error' }); input.value = ''; return; }
+      const label = content.querySelector(`[data-material-label="${def.key}"]`);
+      if (label) { label.style.opacity = '.5'; label.style.pointerEvents = 'none'; }
+      const ext = (f.name.match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
+      const path = `${clientId}/materials/${def.key}-${crypto.randomUUID()}${ext}`;
+      const { error: upErr } = await supabase.storage.from(MATERIALS_BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
+      if (upErr) { toast('Não foi possível enviar o arquivo.', { tone: 'error' }); render(); return; }
+      const old = encontros.materials?.[def.key]?.row?.file_path;
+      const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_path: path, file_name: f.name.slice(0, 200) }, { onConflict: 'client_id' });
+      if (error) { await supabase.storage.from(MATERIALS_BUCKET).remove([path]); toast('Não foi possível salvar o material.', { tone: 'error' }); render(); return; }
+      if (old && old !== path) await supabase.storage.from(MATERIALS_BUCKET).remove([old]);
+      toast(`${def.label} enviado.${encontros.materials?.[def.key]?.row?.delivered_at ? '' : ' Ela só vê quando você liberar.'}`);
+      render();
+    });
+  });
+  content.querySelectorAll('[data-material-release]').forEach((btn) => btn.addEventListener('click', async () => {
+    const def = matDef(btn.dataset.materialRelease);
+    btn.disabled = true;
+    const { error } = await supabase.from(def.table).update({ delivered_at: new Date().toISOString() }).eq('client_id', clientId);
+    if (error) { toast('Não foi possível liberar agora.', { tone: 'error' }); btn.disabled = false; return; }
+    toast(`${def.label} liberado — ela já vê na página Encontros.`);
+    render();
+  }));
+  content.querySelectorAll('[data-material-unrelease]').forEach((btn) => btn.addEventListener('click', async () => {
+    const def = matDef(btn.dataset.materialUnrelease);
+    if (!confirm(`Recolher o ${def.label}? Ela deixa de ver até você liberar de novo.`)) return;
+    const { error } = await supabase.from(def.table).update({ delivered_at: null }).eq('client_id', clientId);
+    if (error) { toast('Não foi possível recolher agora.', { tone: 'error' }); return; }
+    toast(`${def.label} recolhido.`);
+    render();
+  }));
   content.querySelectorAll('[data-upload-files]').forEach((input) => {
     input.addEventListener('change', async () => {
       const m = meetingById.get(input.dataset.uploadFiles);
@@ -1916,8 +2077,10 @@ function tabBarHtml() {
   `;
 }
 
+let currentClient = null; // for helpers outside render (scheduling the next encounter)
 async function render() {
   const { client, partyInfo, contract, latestToken, tokenActive } = await loadAll();
+  currentClient = client;
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
   const [surveyState, brandState, valueAssessment, archetypeState, playbookState, state, finState, internalProfile, journey, imageProject] = await Promise.all([
@@ -1964,6 +2127,11 @@ async function render() {
           <div>
             <p class="text-sm text-white/50 mb-1">Contrato</p>
             <p class="text-xs" style="color:var(--muted);">${contract ? (CONTRACT_STATUS_LABEL[contract.status] || contract.status) : 'Nenhum contrato preparado ainda.'}</p>
+            ${contract?.body_text && !contract.autentique_document_id && !['signed', 'completed'].includes(contract.status)
+              ? (contract.admin_reviewed_at
+                ? `<p class="text-xs mt-1" style="color:var(--gold);">✓ Revisado pela Nay em ${formatDateTime(contract.admin_reviewed_at)} — pode enviar para assinatura</p>`
+                : '<p class="text-xs mt-1" style="color:var(--terracotta);">Aguardando revisão da Nay</p>')
+              : ''}
           </div>
           ${!contract
             ? `<button id="prepare-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Preparar contrato</button>`
