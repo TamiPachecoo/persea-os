@@ -38,6 +38,7 @@ import { markHublaAccessGranted } from '../shared/hubla-model.js';
 import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, detachArtifactFromMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 import { DIAGNOSTIC_TITLE, groupBySection } from '../shared/diagnostic-template.js';
 import { ENCOUNTER_MATERIALS, MATERIALS_BUCKET, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
+import { IMAGE_PHASE, skippedPhaseSet, applicableEncounters } from '../shared/journey-skips.js';
 
 const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
 const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
@@ -876,11 +877,11 @@ function internalNotesCard(p) {
 
 const ENCOUNTER_STATUS_LABEL = {
   completed: 'Concluído', scheduled: 'Agendado', pending: 'Pronto para agendar',
-  waiting_on_client: 'Aguardando cliente', locked: 'Ainda não chegou a vez',
+  waiting_on_client: 'Aguardando cliente', locked: 'Ainda não chegou a vez', skipped: 'Não se aplica a ela',
 };
 const ENCOUNTER_STATUS_CLASS = {
   completed: 'badge-completed', scheduled: 'badge-progress', pending: 'badge-progress',
-  waiting_on_client: 'badge-locked', locked: 'badge-locked',
+  waiting_on_client: 'badge-locked', locked: 'badge-locked', skipped: 'badge-locked',
 };
 
 // E3 (Imagem e Estratégia) is the one encounter the assistant directly
@@ -891,7 +892,7 @@ const ENCOUNTER_TAB_LINK = { 3: 'projeto-imagem' };
 
 function encounterRow(e) {
   const detail = e.status === 'scheduled' ? `${formatDateTime(e.scheduledAt)} — ${e.purpose}` : e.purpose;
-  const tabKey = ENCOUNTER_TAB_LINK[e.number];
+  const tabKey = e.status === 'skipped' ? null : ENCOUNTER_TAB_LINK[e.number];
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -902,7 +903,7 @@ function encounterRow(e) {
         </div>
       </div>
       <p class="text-xs text-white/30 max-w-2xl">${detail}</p>
-      ${jornadaMaterials && ENCOUNTER_MATERIALS[e.number] ? materialSlotHtml(e.number, jornadaMaterials) : ''}
+      ${jornadaMaterials && ENCOUNTER_MATERIALS[e.number] && e.status !== 'skipped' ? materialSlotHtml(e.number, jornadaMaterials) : ''}
     </div>
   `;
 }
@@ -931,8 +932,38 @@ function phaseActivityRow(a) {
   `;
 }
 
-const PHASE_STATUS_LABEL = { completed: 'Concluída', current: 'Fase atual', upcoming: 'Próxima' };
-const PHASE_STATUS_CLASS = { completed: 'badge-completed', current: 'badge-progress', upcoming: 'badge-locked' };
+const PHASE_STATUS_LABEL = { completed: 'Concluída', current: 'Fase atual', upcoming: 'Próxima', skipped: 'Não se aplica a ela' };
+const PHASE_STATUS_CLASS = { completed: 'badge-completed', current: 'badge-progress', upcoming: 'badge-locked', skipped: 'badge-locked' };
+
+// Nay's control over this client's journey: her current phase and which
+// phases she skips (clients.skipped_phases — see shared/journey-skips.js).
+// A skipped phase's encounters, activities and deliverables are left out
+// for her (and Fase 2 also drops the image activities and Projeto de Imagem).
+function journeyControlCard(client, state) {
+  if (isAssistant || !state.programDef || !client.program_slug?.startsWith('persea')) return '';
+  const skipped = skippedPhaseSet(client);
+  const phases = state.phases;
+  return card(`
+    <p class="text-sm text-white/50 mb-1">Fases da jornada dela</p>
+    <p class="text-xs text-white/30 mb-4">Mude a fase atual quando ela avançar. Marque uma fase como pulada se ela não for passar por ela: os encontros, atividades e entregas dessa fase saem da jornada dela${skipped.has(IMAGE_PHASE) ? '' : ' (pular a Fase 2 também tira a Análise da Imagem Atual, o Upload das Imagens e o Projeto de Imagem)'}.</p>
+    <form id="journey-control" class="space-y-4">
+      <div>
+        <label class="text-xs text-white/40 block mb-1">Fase atual</label>
+        <select name="phase_index" class="field text-sm" style="width:auto;">
+          ${phases.map((ph) => `<option value="${ph.id}" ${(client.phase_index || 0) === ph.id ? 'selected' : ''} ${skipped.has(ph.id) ? 'disabled' : ''}>Fase ${ph.id + 1}${skipped.has(ph.id) ? ' (pulada)' : ''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="space-y-2">
+        ${phases.filter((ph) => ph.id > 0).map((ph) => `
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="skip" value="${ph.id}" ${skipped.has(ph.id) ? 'checked' : ''} />
+            Pular Fase ${ph.id + 1}${ph.description ? ` <span class="text-xs text-white/30">· ${escHtml(ph.description.slice(0, 70))}${ph.description.length > 70 ? '…' : ''}</span>` : ''}
+          </label>`).join('')}
+      </div>
+      <div class="flex justify-end"><button type="submit" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar jornada</button></div>
+    </form>
+  `, 'mb-6');
+}
 
 // The core of "focus on each client's journey": one collapsible block per
 // phase (open by default only for her current one — click any other to
@@ -1458,7 +1489,7 @@ async function loadEncontros() {
   }
   const [materials, { data: encounterDefs }] = await Promise.all([
     loadEncounterMaterials(supabase, clientId),
-    supabase.from('encounter_defs').select('number, name, premium_only').order('number'),
+    supabase.from('encounter_defs').select('number, name, premium_only, phase').order('number'),
   ]);
   return { meetings: meetings || [], artifacts: mine, sessions: [...sessions.values()], fileUrls, materials, encounterDefs: encounterDefs || [] };
 }
@@ -1470,9 +1501,8 @@ async function loadEncontros() {
 function nextEncounterDef(m, encontros) {
   const n = encounterNumber(m.title);
   if (!n) return null;
-  const next = encontros.encounterDefs.find((d) => d.number === n + 1);
-  if (!next || (next.premium_only && currentClient?.tier !== 'premium')) return null;
-  return next;
+  // Her own sequence (tier + skipped phases): after E2, E4 if Fase 2 is skipped.
+  return applicableEncounters(encontros.encounterDefs, currentClient).find((d) => d.number > n) || null;
 }
 function nextEncounterHtml(m, encontros) {
   if (isAssistant || m.status === 'cancelled') return '';
@@ -2092,7 +2122,7 @@ function wireMessagesTab(ctx) {
 function tabBarHtml() {
   return `
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
-      ${TABS.map(([key, label]) => `<button type="button" data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>`).join('')}
+      ${TABS.filter(([key]) => !(key === 'projeto-imagem' && skippedPhaseSet(currentClient).has(IMAGE_PHASE))).map(([key, label]) => `<button type="button" data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>`).join('')}
     </div>
   `;
 }
@@ -2135,6 +2165,7 @@ async function render() {
     jornada: `
       ${nextActionCard(status.nextAction)}
       ${programSummaryHtml}
+      ${journeyControlCard(client, state)}
       ${phaseBreakdownCard(state, journey)}
     `,
     encontros: encontros ? encontrosTabHtml(encontros) : '',
@@ -2214,6 +2245,19 @@ async function render() {
     ${dangerZoneCard()}
   `;
 
+  content.querySelector('#journey-control')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const skips = fd.getAll('skip').map(Number).sort();
+    const phaseIndex = Number(fd.get('phase_index'));
+    if (skips.includes(phaseIndex)) { toast('A fase atual não pode estar marcada como pulada.', { tone: 'error' }); return; }
+    const btn = e.target.querySelector('[type=submit]'); btn.disabled = true;
+    const { error } = await supabase.from('clients').update({ phase_index: phaseIndex, skipped_phases: skips }).eq('id', clientId);
+    btn.disabled = false;
+    if (error) { toast(`Não foi possível salvar: ${error.message}`, { tone: 'error' }); return; }
+    toast('Jornada atualizada — ela já vê assim no app dela.');
+    render();
+  });
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });

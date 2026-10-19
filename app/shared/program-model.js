@@ -29,6 +29,7 @@
 import { supabase } from './supabase-client.js';
 import { getLatestAttempt as getLatestArchetypeAttempt } from './archetype-model.js';
 import { getPublishedPlaybook, getQuizResult as getPlaybookQuizResult } from './playbook-model.js';
+import { isActivitySkipped, skippedPhaseSet } from './journey-skips.js';
 
 const STATUS_LABEL = {
   locked: 'Próxima etapa', not_started: 'Disponível', in_progress: 'Em andamento', submitted: 'Enviada',
@@ -145,7 +146,11 @@ export async function loadProgramState(clientId, client) {
 
   // Only fetch real status for activities this program actually includes —
   // no point querying a table for an activity the client can't reach.
-  const includedSlugs = (phaseActivities || []).map((pa) => pa.activity_slug).filter((slug) => accessBySlug[slug] === 'included');
+  // Skipped phases (clients.skipped_phases) and their activities don't apply to her at all.
+  const skipped = skippedPhaseSet(client);
+  const includedSlugs = (phaseActivities || [])
+    .filter((pa) => !isActivitySkipped(client, pa.activity_slug, pa.phase_id))
+    .map((pa) => pa.activity_slug).filter((slug) => accessBySlug[slug] === 'included');
   const statusBySlug = Object.fromEntries(
     await Promise.all(includedSlugs.map(async (slug) => [slug, await computeActivityStatus(slug, clientId)])),
   );
@@ -199,13 +204,14 @@ export async function loadProgramState(clientId, client) {
   }
 
   const phasesOut = (phases || []).map((phase) => {
-    const slugsInPhase = (phaseActivities || []).filter((pa) => pa.phase_id === phase.id).map((pa) => pa.activity_slug);
+    const slugsInPhase = (phaseActivities || []).filter((pa) => pa.phase_id === phase.id && !isActivitySkipped(client, pa.activity_slug, phase.id)).map((pa) => pa.activity_slug);
     const activities = slugsInPhase.map(buildActivity).filter(Boolean);
     const includedActivities = activities.filter((a) => a.access === 'included');
     const premiumLocked = activities.length > 0 && includedActivities.length === 0;
     const completedCount = includedActivities.filter((a) => a.completed).length;
     let phaseStatus = 'upcoming';
-    if (phase.id < (client.phase_index || 0)) phaseStatus = 'completed';
+    if (skipped.has(phase.id)) phaseStatus = 'skipped';
+    else if (phase.id < (client.phase_index || 0)) phaseStatus = 'completed';
     else if (phase.id === (client.phase_index || 0)) phaseStatus = 'current';
     return {
       id: phase.id, description: phase.description, premiumLocked, activities, includedActivities,
@@ -216,9 +222,9 @@ export async function loadProgramState(clientId, client) {
   // every phase today has at least one of the two for every program — so
   // this only ever removes phases from a program that genuinely has none
   // of that phase's activities, exactly ascensao-marca's phases 1-3.
-  }).filter((phase) => phase.activities.length > 0);
+  }).filter((phase) => phase.activities.length > 0 || phase.status === 'skipped');
 
-  const allIncluded = phasesOut.flatMap((p) => p.includedActivities);
+  const allIncluded = phasesOut.filter((p) => p.status !== 'skipped').flatMap((p) => p.includedActivities);
   const completedCount = allIncluded.filter((a) => a.completed).length;
   const totalIncluded = allIncluded.length;
   const nextActivity = allIncluded.find((a) => !a.completed && a.status !== 'locked') || null;

@@ -61,6 +61,18 @@ async function premiumPreviewCard(a) {
 }
 
 function renderPhaseSection(phase, activityCardsHtml) {
+  // A phase Nay took out of her journey (clients.skipped_phases).
+  if (phase.status === 'skipped') {
+    return `
+      <div class="phase-section phase-section-upcoming" id="phase-section-${phase.id}" style="opacity:.6;">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <span class="phase-section-name">Fase ${phase.id + 1}</span>
+          <span class="badge badge-locked">Não faz parte da sua jornada</span>
+        </div>
+        <p class="text-xs text-white/30 mt-2">Sua jornada segue direto para a fase seguinte.</p>
+      </div>
+    `;
+  }
   if (phase.premiumLocked) {
     return `
       <details class="phase-section phase-section-upcoming" id="phase-section-${phase.id}">
@@ -178,7 +190,7 @@ async function render() {
       <p class="text-xs text-white/30">${programDef.duration_months ? `Duração: ${programDef.duration_months} meses` : 'Duração a confirmar com a Nay'}</p>
     </div>
 
-    ${renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
+    ${renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}${p.status === 'skipped' ? ' · não se aplica' : ''}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
 
     ${card(`
       <div class="grid sm:grid-cols-3 gap-6 mb-5">

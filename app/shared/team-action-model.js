@@ -30,6 +30,7 @@
 import { supabase } from './supabase-client.js';
 import { getLatestAttempt } from './archetype-model.js';
 import { formatDateTime } from './ui.js';
+import { applicableEncounters, skippedPhaseSet } from './journey-skips.js';
 
 // Real gap found live (Ascensão da Marca): this whole module is built on
 // encounter_defs, the Persea-specific E1-E8 methodology table — a
@@ -57,10 +58,12 @@ export async function computeTeamNextStep(client, clientId) {
     getLatestAttempt(clientId),
   ]);
 
-  const nextNumber = (completedMeetings || []).length + 1;
-  const { data: nextDef } = await supabase.from('encounter_defs').select('*').eq('number', nextNumber).maybeSingle();
+  // Her own encounter sequence: tier and skipped phases applied (Fase 2
+  // skipped → E2 is followed by E4), so "next" is the Nth one that applies.
+  const { data: allDefs } = await supabase.from('encounter_defs').select('*').order('number');
+  const nextDef = applicableEncounters(allDefs, client)[(completedMeetings || []).length] || null;
 
-  if (!nextDef || (nextDef.premium_only && client.tier !== 'premium')) {
+  if (!nextDef) {
     return { label: 'Encontros do plano concluídos', detail: 'Nenhum encontro pendente para o plano atual dela.', kind: 'done' };
   }
 
@@ -111,12 +114,18 @@ export async function loadEncounterJourney(client, clientId) {
   ]);
   const completedCount = (completedMeetings || []).length;
   const intakeReady = questionnaire?.status === 'submitted' && archetype?.status === 'completed';
+  // Position in HER sequence (skipped-phase encounters don't count); those
+  // still listed, marked 'skipped', so Nay sees what was left out.
+  const applicable = applicableEncounters(defs, client);
+  const skipped = skippedPhaseSet(client);
 
   return (defs || [])
     .filter((def) => client.tier === 'premium' || !def.premium_only)
     .map((def) => {
-      if (def.number <= completedCount) return { ...def, status: 'completed' };
-      if (def.number === completedCount + 1) {
+      if (skipped.has(Number(def.phase))) return { ...def, status: 'skipped' };
+      const pos = applicable.findIndex((d) => d.number === def.number) + 1;
+      if (pos <= completedCount) return { ...def, status: 'completed' };
+      if (pos === completedCount + 1) {
         if (upcoming) return { ...def, status: 'scheduled', scheduledAt: upcoming.item_date };
         if (def.number === 1 && !intakeReady) return { ...def, status: 'waiting_on_client' };
         return { ...def, status: 'pending' };
