@@ -897,9 +897,14 @@ function encounterRow(e) {
         </div>
       </div>
       <p class="text-xs text-white/30 max-w-2xl">${detail}</p>
+      ${jornadaMaterials && ENCOUNTER_MATERIALS[e.number] ? materialSlotHtml(e.number, jornadaMaterials) : ''}
     </div>
   `;
 }
+// Encounter materials (Guia de Posicionamento on E2, Kit Digital on E4) are
+// also offered right under those encounters in Jornada → Fases do Programa,
+// where Nay naturally looks for E2/E4 — same slot as the Encontros tab.
+let jornadaMaterials = null;
 
 // Clicking a material's slug jumps straight to that tab (see the [data-tab]
 // delegation in render()) — the same navigation any other tab button uses,
@@ -1713,19 +1718,8 @@ function encontrosTabHtml(encontros) {
   `;
 }
 
-function wireEncontrosTab(encontros) {
-  const meetingById = new Map(encontros.meetings.map((m) => [m.id, m]));
+function wireMaterialSlots(materials) {
   const matDef = (key) => Object.values(ENCOUNTER_MATERIALS).find((d) => d.key === key);
-  content.querySelectorAll('[data-schedule-next]').forEach((btn) => btn.addEventListener('click', () => {
-    const next = encontros.encounterDefs.find((d) => d.number === Number(btn.dataset.scheduleNext));
-    if (next) openScheduleNextModal(next);
-  }));
-  content.querySelectorAll('[data-notify-meeting]').forEach((btn) => btn.addEventListener('click', () => {
-    msgState = { ...msgState, kind: 'meeting', meetingId: btn.dataset.notifyMeeting, draft: null };
-    activeTab = 'mensagens';
-    render();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }));
   content.querySelectorAll('[data-material-upload]').forEach((input) => {
     input.addEventListener('change', async () => {
       const def = matDef(input.dataset.materialUpload);
@@ -1738,11 +1732,11 @@ function wireEncontrosTab(encontros) {
       const path = `${clientId}/materials/${def.key}-${crypto.randomUUID()}${ext}`;
       const { error: upErr } = await supabase.storage.from(MATERIALS_BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
       if (upErr) { toast('Não foi possível enviar o arquivo.', { tone: 'error' }); render(); return; }
-      const old = encontros.materials?.[def.key]?.row?.file_path;
+      const old = materials?.[def.key]?.row?.file_path;
       const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_path: path, file_name: f.name.slice(0, 200) }, { onConflict: 'client_id' });
       if (error) { await supabase.storage.from(MATERIALS_BUCKET).remove([path]); toast('Não foi possível salvar o material.', { tone: 'error' }); render(); return; }
       if (old && old !== path) await supabase.storage.from(MATERIALS_BUCKET).remove([old]);
-      toast(`${def.label} enviado.${encontros.materials?.[def.key]?.row?.delivered_at ? '' : ' Ela só vê quando você liberar.'}`);
+      toast(`${def.label} enviado.${materials?.[def.key]?.row?.delivered_at ? '' : ' Ela só vê quando você liberar.'}`);
       render();
     });
   });
@@ -1761,6 +1755,20 @@ function wireEncontrosTab(encontros) {
     if (error) { toast('Não foi possível recolher agora.', { tone: 'error' }); return; }
     toast(`${def.label} recolhido.`);
     render();
+  }));
+}
+
+function wireEncontrosTab(encontros) {
+  const meetingById = new Map(encontros.meetings.map((m) => [m.id, m]));
+  content.querySelectorAll('[data-schedule-next]').forEach((btn) => btn.addEventListener('click', () => {
+    const next = encontros.encounterDefs.find((d) => d.number === Number(btn.dataset.scheduleNext));
+    if (next) openScheduleNextModal(next);
+  }));
+  content.querySelectorAll('[data-notify-meeting]').forEach((btn) => btn.addEventListener('click', () => {
+    msgState = { ...msgState, kind: 'meeting', meetingId: btn.dataset.notifyMeeting, draft: null };
+    activeTab = 'mensagens';
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }));
   content.querySelectorAll('[data-upload-files]').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -2104,6 +2112,7 @@ async function render() {
   ]);
   const programSummaryHtml = await programSummaryCard(client, state);
   const encontros = activeTab === 'encontros' ? await loadEncontros() : null;
+  jornadaMaterials = activeTab === 'jornada' ? await loadEncounterMaterials(supabase, clientId) : null;
   const extraction = activeTab === 'questionarios' ? await loadExtraction() : null;
   const messagesData = activeTab === 'mensagens' ? await loadMessagesData() : null;
 
@@ -2203,7 +2212,8 @@ async function render() {
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });
-  if (encontros) wireEncontrosTab(encontros);
+  if (encontros) { wireEncontrosTab(encontros); wireMaterialSlots(encontros.materials); }
+  if (jornadaMaterials) wireMaterialSlots(jornadaMaterials);
   if (messagesData) wireMessagesTab({ client, partyInfo, finState });
   if (activeTab === 'direcao-marca' && isAssistant && isValidHttpUrl(brandState.bdRow?.pinterest_url)) {
     mountPinterestBoard(document.getElementById('bd-board-area'), brandState.bdRow.pinterest_url);
