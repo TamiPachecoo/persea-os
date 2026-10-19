@@ -74,6 +74,11 @@ const BUSINESS_SURVEY_STAFF_ROLES = ['admin', 'assistant']; // business_surveys_
 const clientId = new URLSearchParams(location.search).get('id');
 
 const profile = await getCurrentProfile();
+if (profile?.role === 'client') {
+  // A student on a staff page (shared computer): her own home, not a sign-out.
+  location.href = '/client/program.html';
+  throw new Error('not authorized');
+}
 if (!profile || !['admin', 'assistant'].includes(profile.role)) {
   await signOut();
   location.href = `../login.html?next=${encodeURIComponent(location.pathname + location.search)}`;

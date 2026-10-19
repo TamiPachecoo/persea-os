@@ -64,8 +64,19 @@ export async function getCurrentProfile() {
 // exactly what produces an infinite login↔page redirect loop. Clearing the
 // session here means login.html can never be fooled into bouncing back —
 // worst case the person re-enters her password once, which beats a loop.
+// Signed in, but as another role (e.g. the assistant opening an admin page
+// someone else left open on a shared computer): she goes to her own home
+// instead of being signed out. Signing her out here produced a real loop —
+// login worked, the remembered admin page logged her out a second later,
+// and it looked like a wrong password ("keeps asking for a new password").
+const ROLE_HOME = { admin: '/admin/agenda.html', assistant: '/assistant/agenda.html', client: '/client/program.html' };
+
 export async function requireProfile(role, loginPath = '../login.html') {
   const profile = await getCurrentProfile();
+  if (profile && role && profile.role !== role && ROLE_HOME[profile.role]) {
+    location.href = ROLE_HOME[profile.role];
+    return null;
+  }
   if (!profile || (role && profile.role !== role)) {
     await signOut();
     location.href = `${loginPath}?next=${encodeURIComponent(location.pathname + location.search)}`;

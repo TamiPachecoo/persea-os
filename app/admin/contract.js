@@ -49,6 +49,11 @@ const STATUS_LABEL = {
 };
 
 const profile = await getCurrentProfile();
+if (profile?.role === 'client') {
+  // A student on a staff page (shared computer): her own home, not a sign-out.
+  location.href = '/client/program.html';
+  throw new Error('not authorized');
+}
 if (!profile || !['admin', 'assistant'].includes(profile.role)) {
   // Sign out before redirecting — see supabase-auth.js's requireProfile for
   // why: this stops a stale/racing session from bouncing us right back.

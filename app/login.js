@@ -18,8 +18,14 @@ const ROLE_HOME = {
   client: '/client/program.html', // Painel removed — Minha Jornada is her landing page now
 };
 
+// The remembered page (?next=) is only used when it belongs to the role
+// that just signed in — on a shared computer it may be someone else's
+// (Nay's admin page, then the assistant logs in), which used to bounce her
+// straight back here as if the password were wrong.
+const ROLE_AREA = { admin: '/admin/', assistant: '/assistant/', client: '/client/' };
 function goHome(role) {
-  location.href = next || ROLE_HOME[role] || '/index.html';
+  const ownNext = next && next.startsWith('/') && !next.startsWith('//') && ROLE_AREA[role] && next.startsWith(ROLE_AREA[role]) ? next : null;
+  location.href = ownNext || ROLE_HOME[role] || '/index.html';
 }
 
 // Already signed in? Skip straight past the form.
@@ -92,8 +98,12 @@ function render() {
 
   document.getElementById('forgot-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = e.target.querySelector('[type=submit]');
+    if (btn.disabled) return;
+    btn.disabled = true; btn.textContent = 'Enviando…';
     const email = new FormData(e.target).get('email');
     const { error } = await resetPasswordForEmail(email);
+    btn.disabled = false; btn.textContent = 'Enviar link';
     // Always show the same success message regardless of whether the email
     // exists — Supabase's own API behaves this way too, and matching it
     // here avoids leaking which addresses have accounts.
@@ -103,12 +113,21 @@ function render() {
     `);
   });
 
+  // One attempt at a time: the button shows "Entrando…" until it answers
+  // (logs showed 3 identical attempts per click from repeated clicking).
   document.getElementById('signin-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = e.target.querySelector('[type=submit]');
+    if (btn.disabled) return;
+    btn.disabled = true; btn.textContent = 'Entrando…';
     const fd = new FormData(e.target);
-    const { error } = await signInWithPassword(fd.get('email'), fd.get('password'));
+    const { error } = await signInWithPassword(String(fd.get('email') || '').trim(), fd.get('password'));
     if (error) {
-      const msg = error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos. Ainda não criou a sua senha? Toque em "Primeiro acesso".'
+      btn.disabled = false; btn.textContent = 'Entrar';
+      // Not "Primeiro acesso": a wrong password is usually the browser
+      // filling in an old saved one, and sending everyone to create a new
+      // password kept the saved passwords on each device out of sync.
+      const msg = error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos. Confira a senha digitada (o navegador pode estar preenchendo uma senha antiga). Se não lembrar, toque em "Esqueci minha senha".'
         : /not confirmed/i.test(error.message) ? 'Seu acesso ainda não foi ativado. Toque em "Primeiro acesso" para receber o link e criar a sua senha.'
         : error.message;
       toast(msg, { tone: 'error' });
@@ -116,6 +135,7 @@ function render() {
     }
     const profile = await getCurrentProfile();
     if (!profile) {
+      btn.disabled = false; btn.textContent = 'Entrar';
       toast('Login feito, mas seu acesso ainda não foi vinculado a um perfil — fale com a Nay.', { tone: 'error' });
       return;
     }
