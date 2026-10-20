@@ -1738,7 +1738,7 @@ function renderProgramTab() {
     ${card(`
       <div class="flex items-start gap-5 flex-wrap">
         <div id="profile-photo-frame" style="width:96px; height:96px; border-radius:50%; overflow:hidden; flex-shrink:0; background:var(--bg2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center;">
-          ${isValidHttpUrl(summary.photoUrl) ? `<img id="profile-photo-img" src="${summary.photoUrl}" alt="${client.fullName}" style="width:100%; height:100%; object-fit:cover;" onerror="this.remove(); document.getElementById('profile-photo-fallback').style.display='flex';" />` : ''}
+          ${isValidHttpUrl(summary.photoUrl) ? `<img id="profile-photo-img" src="${summary.photoUrl}" alt="${client.fullName}" style="width:100%; height:100%; object-fit:cover;" data-fallback-next="flex" />` : ''}
           <span id="profile-photo-fallback" class="font-serif text-xl" style="color:var(--muted); ${isValidHttpUrl(summary.photoUrl) ? 'display:none;' : ''}">${initials(client.fullName)}</span>
         </div>
         <div class="flex-1 min-w-[220px]">

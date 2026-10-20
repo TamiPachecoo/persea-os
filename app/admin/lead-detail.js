@@ -159,7 +159,7 @@ function renderRegistrationCard(lead) {
     <p class="text-sm text-white/50 mb-1">Cadastro</p>
     <p class="text-xs text-white/20 mb-4">Link pronto assim que a venda é fechada — copie e mande direto no WhatsApp com o cliente.</p>
     <div class="flex items-center gap-2 mb-4">
-      <input readonly class="field text-sm" style="flex:1;" value="${link}" onclick="this.select()" />
+      <input readonly class="field text-sm" style="flex:1;" value="${link}" data-autoselect />
       <button id="copy-link" class="btn-primary" style="padding:9px 18px;font-size:12.5px; white-space:nowrap;">${lead.registrationSentAt ? 'Copiar de Novo' : 'Copiar Link'}</button>
     </div>
     ${lead.registrationSentAt ? `<p class="text-xs mb-4" style="color:var(--gold);">Enviado em ${formatDateTime(lead.registrationSentAt)}</p>` : ''}

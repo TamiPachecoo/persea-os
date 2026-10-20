@@ -286,7 +286,7 @@ function resultsLinkCard() {
     </div>
     <p class="text-xs text-white/30 mb-4">Formulário independente para as mentoradas contarem os resultados: faturamento, primeira venda e notas de antes e de hoje (0 a 10). Só pede o nome; as respostas aparecem no fim desta página.</p>
     <div class="flex flex-wrap gap-2 items-center">
-      <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${RESULTS_URL}" onclick="this.select()" />
+      <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${RESULTS_URL}" data-autoselect />
       ${actionBtn('data-copy-results-msg', 'Copiar mensagem', true)}
       ${actionBtn('data-copy-results-link', 'Copiar só o link')}
     </div>
@@ -498,11 +498,12 @@ function openRestaurantReport() {
 
   <p class="foot">Informações enviadas pelas participantes no formulário de preparação da PERSEA Experience.</p>
 </div>
-  <script>window.onload = function () { setTimeout(function () { window.print(); }, 300); };<\/script>
 </body></html>`;
   const w = window.open('', '_blank');
   if (!w) { toast('O navegador bloqueou a janela — permita pop-ups para este site e tente de novo.', { tone: 'error' }); return; }
   w.document.open(); w.document.write(html); w.document.close();
+  // Printed from here: the page's Content-Security-Policy blocks inline scripts.
+  setTimeout(() => w.print(), 300);
 }
 
 function photosDownloadCard() {
@@ -618,7 +619,7 @@ function render() {
       <p class="text-xs text-white/30 mb-4">Um único link para todas as pessoas que vão ao evento mas não passaram pela página de inscrição. Ela preenche os dados (nome, e-mail, WhatsApp, Instagram/LinkedIn, idade) e o formulário de preparação; quando termina, aparece na lista abaixo como <b>Confirmada · Cadastro direto</b>. Se o mesmo e-mail já estiver inscrito, as respostas vão para a inscrição existente.</p>
       ${directSignupCode ? `
       <div class="flex flex-wrap gap-2 items-center">
-        <input readonly class="field text-sm" style="flex:1; min-width:260px;" value="${esc(directUrl(directSignupCode))}" onclick="this.select()" />
+        <input readonly class="field text-sm" style="flex:1; min-width:260px;" value="${esc(directUrl(directSignupCode))}" data-autoselect />
         ${actionBtn('data-copy-direct-msg', 'Copiar mensagem', true)}
         ${actionBtn('data-copy-direct-link', 'Copiar só o link')}
         ${isAdmin ? actionBtn('data-rotate-direct', 'Gerar novo link') : ''}

@@ -117,6 +117,8 @@ function openPrintableContract(bodyText, clientName) {
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
+  // Wired from here: the page's Content-Security-Policy blocks inline onclick.
+  win.document.querySelector('[data-print]')?.addEventListener('click', () => win.print());
 }
 
 // Everything the payment clause in the contract text is auto-generated
@@ -571,7 +573,7 @@ async function render() {
         <p class="text-sm">${s.email || 'Assinante'} <span class="text-xs text-white/40">· ${delivery(s)}</span></p>
         ${s.link ? `
           <div class="flex flex-wrap gap-2 items-center mt-2">
-            <input readonly class="field text-sm" style="flex:1;min-width:220px;" value="${s.link}" onclick="this.select()" />
+            <input readonly class="field text-sm" style="flex:1;min-width:220px;" value="${s.link}" data-autoselect />
             <a class="btn-primary" style="padding:8px 14px;font-size:12px;" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg(s.link))}">Enviar no WhatsApp</a>
             <button type="button" class="btn-ghost" style="padding:8px 14px;font-size:12px;" data-copy-sign="${encodeURIComponent(msg(s.link))}">Copiar mensagem</button>
           </div>` : '<p class="text-xs mt-2" style="color:var(--muted);">Link não disponível — abra o documento na Autentique e copie o link da assinante.</p>'}

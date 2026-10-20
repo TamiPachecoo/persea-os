@@ -22,6 +22,24 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   });
 }
 
+// The Content-Security-Policy (see _headers) blocks inline onclick/onerror
+// attributes, so the few small behaviors they carried live here instead:
+// data-autoselect (select a read-only link on click), data-reload, and
+// data-fallback-next="block|flex" (broken photo → show the next sibling).
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t instanceof HTMLInputElement && t.hasAttribute('data-autoselect')) t.select();
+    if (t instanceof Element && t.closest('[data-reload]')) location.reload();
+  });
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || !img.hasAttribute('data-fallback-next')) return;
+    img.style.display = 'none';
+    if (img.nextElementSibling) img.nextElementSibling.style.display = img.dataset.fallbackNext || 'block';
+  }, true);
+}
+
 // Kept as its original name/behavior (real auth is what actually protects a
 // page — this only decides whether a *convenience* shortcut renders at
 // all) for the handful of things that must stay local-only specifically:
@@ -417,7 +435,7 @@ function shellAvatar(c, size = 32) {
   if (!c) return '';
   const photo = isValidHttpUrl(c.photo_url)
     ? `<span style="width:${size}px;height:${size}px;position:relative;display:inline-block;flex-shrink:0;">
-        <img src="${c.photo_url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+        <img src="${c.photo_url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" data-fallback-next="block" />
         <span style="display:none;">${initialsAvatar(c.full_name, size)}</span>
       </span>`
     : initialsAvatar(c.full_name, size);

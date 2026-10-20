@@ -55,7 +55,7 @@ export function renderContractPrintHtml(bodyText, { title = 'Contrato' } = {}) {
 </style>
 </head>
 <body>
-  <div class="print-bar"><button onclick="window.print()" style="padding:10px 20px;font-size:14px;cursor:pointer;">Imprimir / Salvar como PDF</button></div>
+  <div class="print-bar"><button type="button" data-print style="padding:10px 20px;font-size:14px;cursor:pointer;">Imprimir / Salvar como PDF</button></div>
   ${blocks}
 </body>
 </html>`;

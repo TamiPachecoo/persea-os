@@ -771,7 +771,7 @@ function clientPhoto(c, size = 96) {
   if (isValidHttpUrl(c.photo_url)) {
     return `
       <div style="width:${size}px;height:${size}px;flex-shrink:0;position:relative;">
-        <img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <img src="${c.photo_url}" alt="${c.full_name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" data-fallback-next="flex" />
         <div style="display:none;">${initialsAvatar(c.full_name, size)}</div>
       </div>
     `;

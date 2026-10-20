@@ -239,7 +239,7 @@ try {
   console.error('Program Hub render failed', err);
   content.innerHTML = card(`
     <p class="text-sm mb-4" style="color:var(--muted);">Não foi possível carregar seu programa. Tente novamente.</p>
-    <button type="button" class="btn-primary" style="padding:9px 18px;font-size:12.5px;" onclick="location.reload()">Recarregar</button>
+    <button type="button" class="btn-primary" style="padding:9px 18px;font-size:12.5px;" data-reload>Recarregar</button>
   `);
 }
 

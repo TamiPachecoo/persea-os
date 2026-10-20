@@ -160,7 +160,7 @@ function showLinkModal(hostedUrl, isMock) {
     bodyHtml: `
       ${isMock ? `<p class="text-xs mb-3" style="color:var(--terracotta);">⚠ Modo de teste — SumUp não conectado, este link não é real.</p>` : ''}
       <p class="text-sm text-white/50 mb-2">Copie o link abaixo e envie para a cliente.</p>
-      <input type="text" readonly class="field mb-4" value="${hostedUrl}" onclick="this.select()" />
+      <input type="text" readonly class="field mb-4" value="${hostedUrl}" data-autoselect />
       <div class="flex items-center gap-3">
         <button id="copy-link-modal" class="btn-primary">Copiar Link</button>
         <a href="${hostedUrl}" target="_blank" rel="noopener" class="btn-ghost">Abrir link ↗</a>
