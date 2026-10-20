@@ -130,9 +130,9 @@ export const ENCOUNTER_LABEL = Object.fromEntries(ENCOUNTER_DEFS.map((e) => [e.s
 // lines when she opens the form), this is just the sensible starting point.
 export const ENCOUNTER_PREP_CHECKLIST = {
   1: ['Resultados do Teste de Arquétipos e do Diagnóstico Estratégico de Entrada revisados', 'Notas prontas para explorar QUEM ela é, O QUE e POR QUE vende'],
-  2: ['Pesquisa de Precificação respondida', 'Pitch e conteúdos para recomendar já escolhidos'],
+  2: ['Ensaio fotográfico profissional realizado', 'Kit Digital pronto', 'Playbook de Marca Pessoal pronto (link salvo)'],
   3: ['Cartela de Cores e Guia de Produções aprovados', 'Planejamento de Imagem e Ferramentas para Nova Imagem prontos'],
-  4: ['Ensaio fotográfico profissional realizado', 'Kit Digital pronto', 'Playbook de Marca Pessoal pronto (link salvo)'],
+  4: ['Pesquisa de Precificação respondida', 'Pitch e conteúdos para recomendar já escolhidos'],
   5: ['Análise de Negócio preenchida pela cliente', 'Nova estratégia de precificação definida'],
   6: ['Business Playbook pronto (link salvo)', 'Pontos de implementação para validar com a cliente'],
   7: ['Necessidade específica da cliente identificada para este encontro'],
