@@ -439,25 +439,40 @@ function openRestaurantReport() {
   const allergyCount = attention.filter((r) => r.allergy).length;
   const accessCount = attention.filter((r) => r.access.length).length;
   const today = new Date().toLocaleDateString('pt-BR');
+  const line = (label, value, cls = '') => `<div class="row"><span class="lbl">${label}</span><span class="val ${value ? cls : 'muted'}">${value ? esc(value) : '—'}</span></div>`;
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>PERSEA Experience - Restrições para o restaurante</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  @page { size: A4; margin: 16mm; }
-  body { font-family: Georgia, 'Times New Roman', serif; color: #1c1917; font-size: 12px; line-height: 1.45; }
-  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: .02em; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: #8a6a3b; margin: 22px 0 8px; }
-  .sub { color: #57534e; margin: 0 0 14px; }
-  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
-  .pill { border: 1px solid #d6c7ad; border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
-  .pill b { color: #1c1917; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #57534e; border-bottom: 1.5px solid #1c1917; padding: 6px 6px; }
-  td { border-bottom: 1px solid #e7e0d4; padding: 7px 6px; vertical-align: top; }
-  td.name { font-weight: bold; width: 28%; }
+  /* Margins live inside the page (not in the browser's print settings, which
+     can shrink to almost nothing): side margins are padding on .page, top and
+     bottom come from @page so every page — not just the first — has them. */
+  @page { size: A4 portrait; margin: 16mm 0 16mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1c1917; font-size: 12.5px; line-height: 1.5;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; max-width: 100%; margin: 0 auto; padding: 4mm 20mm 2mm; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #57534e; margin: 0 0 16px; font-size: 12px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: #8a6a3b; margin: 26px 0 10px;
+    padding-bottom: 6px; border-bottom: 1px solid #e7e0d4; break-after: avoid; }
+  .summary { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+  .pill { border: 1px solid #d6c7ad; border-radius: 999px; padding: 3px 11px; font-size: 11.5px; white-space: nowrap; }
+  .person { border: 1px solid #e7e0d4; border-left: 3px solid #b8863a; border-radius: 6px; padding: 10px 14px;
+    margin: 0 0 10px; break-inside: avoid; page-break-inside: avoid; }
+  .person.allergic { border-left-color: #b42318; }
+  .pname { font-size: 14px; font-weight: bold; margin: 0 0 6px; }
+  .pname small { font-weight: normal; color: #a8a29e; font-size: 11px; margin-left: 6px; }
+  .row { display: flex; gap: 10px; padding: 2px 0; }
+  .lbl { flex: 0 0 150px; color: #78716c; font-size: 12px; }
+  .val { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
   .allergy { color: #b42318; font-weight: bold; }
   .muted { color: #a8a29e; }
-  .list { columns: 2; column-gap: 24px; padding-left: 16px; margin: 0; }
-  .foot { margin-top: 24px; font-size: 10.5px; color: #78716c; border-top: 1px solid #e7e0d4; padding-top: 8px; }
-</style></head><body>
+  .names { columns: 2; column-gap: 28px; margin: 0; padding-left: 18px; }
+  .names li { break-inside: avoid; margin-bottom: 2px; }
+  .foot { margin-top: 26px; font-size: 10.5px; color: #78716c; border-top: 1px solid #e7e0d4; padding-top: 8px; }
+  @media screen { body { background: #f5f2ec; } .page { background: #fff; margin: 16px auto; padding: 18mm 20mm; box-shadow: 0 1px 8px rgba(0,0,0,.08); } }
+</style></head><body><div class="page">
   <h1>PERSEA Experience</h1>
   <p class="sub">Restrições alimentares, alergias e acessibilidade · ${rows.length} participantes · gerado em ${today}</p>
   <div class="summary">
@@ -467,22 +482,22 @@ function openRestaurantReport() {
   </div>
 
   <h2>Atenção (${attention.length})</h2>
-  ${attention.length ? `<table><thead><tr><th>Participante</th><th>Restrição alimentar</th><th>Alergias</th><th>Acessibilidade</th></tr></thead><tbody>
-    ${attention.map((r) => `<tr>
-      <td class="name">${esc(r.name)}${r.answered ? '' : '<br><span class="muted" style="font-weight:normal;font-size:10.5px;">formulário ainda não enviado</span>'}</td>
-      <td>${r.food.length ? esc(r.food.join(', ')) : '<span class="muted">—</span>'}</td>
-      <td>${r.allergy ? `<span class="allergy">${esc(r.allergy)}</span>` : '<span class="muted">—</span>'}</td>
-      <td>${r.access.length ? esc(r.access.join(', ')) : '<span class="muted">—</span>'}</td>
-    </tr>`).join('')}
-  </tbody></table>` : '<p class="muted">Nenhuma restrição informada.</p>'}
+  ${attention.length ? attention.map((r) => `
+    <div class="person ${r.allergy ? 'allergic' : ''}">
+      <p class="pname">${esc(r.name)}${r.answered ? '' : '<small>formulário ainda não enviado</small>'}</p>
+      ${line('Restrição alimentar', r.food.join(', '))}
+      ${line('Alergias', r.allergy, 'allergy')}
+      ${line('Acessibilidade', r.access.join(', '))}
+    </div>`).join('') : '<p class="muted">Nenhuma restrição informada.</p>'}
 
   <h2>Sem restrições (${noNeeds.length})</h2>
-  ${noNeeds.length ? `<ul class="list">${noNeeds.map((r) => `<li>${esc(r.name)}</li>`).join('')}</ul>` : '<p class="muted">—</p>'}
+  ${noNeeds.length ? `<ul class="names">${noNeeds.map((r) => `<li>${esc(r.name)}</li>`).join('')}</ul>` : '<p class="muted">—</p>'}
 
   ${missing.length ? `<h2>Ainda não responderam (${missing.length})</h2>
-  <ul class="list">${missing.map((r) => `<li>${esc(r.name)}</li>`).join('')}</ul>` : ''}
+  <ul class="names">${missing.map((r) => `<li>${esc(r.name)}</li>`).join('')}</ul>` : ''}
 
   <p class="foot">Informações enviadas pelas participantes no formulário de preparação da PERSEA Experience.</p>
+</div>
   <script>window.onload = function () { setTimeout(function () { window.print(); }, 300); };<\/script>
 </body></html>`;
   const w = window.open('', '_blank');
