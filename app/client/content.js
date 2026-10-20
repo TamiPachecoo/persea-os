@@ -96,7 +96,8 @@ async function recordedClassesSection() {
 async function render() {
   const [{ data: categories }, { data: tenant }, recommendedHtml, recordedClassesHtml] = await Promise.all([
     supabase.from('content_categories').select('*').eq('is_visible', true).order('display_order'),
-    supabase.from('tenant_settings').select('hubla_all_content_url').limit(1).maybeSingle(),
+    // tenant_settings is staff-only (it also holds payment links); this returns just the link.
+    supabase.rpc('client_hubla_content_url').then(({ data }) => ({ data: { hubla_all_content_url: data } })),
     recommendedSection(),
     isPersea ? recordedClassesSection() : Promise.resolve(''),
   ]);
