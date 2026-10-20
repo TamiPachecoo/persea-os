@@ -397,6 +397,99 @@ function photoPickerHtml(entries) {
       </div>
     </div>`;
 }
+// Assistant only: a restaurant-ready sheet (opens the print dialog → "Salvar
+// como PDF") with every attending participant's food restrictions,
+// allergies and accessibility needs from the preparation form — who needs
+// attention first, then everyone else, then who hasn't answered yet.
+const NONE_FOOD = new Set(['Nenhuma']);
+const NONE_ACCESS = new Set(['Não preciso']);
+function restaurantRows() {
+  return registrations.filter((r) => attending(r) && !directInProgress(r))
+    .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), 'pt-BR'))
+    .map((r) => {
+      const food = (r.prep_food_restrictions || []).filter((f) => !NONE_FOOD.has(f) && f !== 'Outra');
+      if (r.prep_food_note) food.push(r.prep_food_note);
+      const access = (r.prep_accessibility || []).filter((a) => !NONE_ACCESS.has(a));
+      if (access.length && r.prep_accessibility_note) access.push(r.prep_accessibility_note);
+      const allergy = String(r.prep_allergies || '').trim();
+      return { name: r.full_name, answered: !!r.prep_submitted_at, food, allergy, access, needs: !!(food.length || allergy || access.length) };
+    });
+}
+function restaurantCard() {
+  if (isAdmin) return '';
+  const rows = restaurantRows();
+  const needs = rows.filter((r) => r.needs).length;
+  const missing = rows.filter((r) => !r.answered).length;
+  return card(`
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-sm text-white/50">Restrições para o restaurante</p>
+      <span class="text-xs text-white/30">${rows.length} participantes · ${needs} com restrição, alergia ou acessibilidade${missing ? ` · ${missing} sem resposta` : ''}</span>
+    </div>
+    <p class="text-xs text-white/30 mb-4">Gera uma folha pronta para enviar ao restaurante: restrições alimentares, alergias e acessibilidade de cada participante confirmada. Na janela que abrir, escolha <b>"Salvar como PDF"</b>.</p>
+    <button type="button" id="restaurant-pdf" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Gerar PDF para o restaurante</button>
+  `, 'mb-6');
+}
+function openRestaurantReport() {
+  const rows = restaurantRows();
+  const attention = rows.filter((r) => r.needs);
+  const noNeeds = rows.filter((r) => r.answered && !r.needs);
+  const missing = rows.filter((r) => !r.answered);
+  const count = {};
+  attention.forEach((r) => r.food.forEach((f) => { count[f] = (count[f] || 0) + 1; }));
+  const allergyCount = attention.filter((r) => r.allergy).length;
+  const accessCount = attention.filter((r) => r.access.length).length;
+  const today = new Date().toLocaleDateString('pt-BR');
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>PERSEA Experience - Restrições para o restaurante</title>
+<style>
+  @page { size: A4; margin: 16mm; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1c1917; font-size: 12px; line-height: 1.45; }
+  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: .02em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: #8a6a3b; margin: 22px 0 8px; }
+  .sub { color: #57534e; margin: 0 0 14px; }
+  .summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+  .pill { border: 1px solid #d6c7ad; border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+  .pill b { color: #1c1917; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #57534e; border-bottom: 1.5px solid #1c1917; padding: 6px 6px; }
+  td { border-bottom: 1px solid #e7e0d4; padding: 7px 6px; vertical-align: top; }
+  td.name { font-weight: bold; width: 28%; }
+  .allergy { color: #b42318; font-weight: bold; }
+  .muted { color: #a8a29e; }
+  .list { columns: 2; column-gap: 24px; padding-left: 16px; margin: 0; }
+  .foot { margin-top: 24px; font-size: 10.5px; color: #78716c; border-top: 1px solid #e7e0d4; padding-top: 8px; }
+</style></head><body>
+  <h1>PERSEA Experience</h1>
+  <p class="sub">Restrições alimentares, alergias e acessibilidade · ${rows.length} participantes · gerado em ${today}</p>
+  <div class="summary">
+    ${Object.entries(count).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<span class="pill">${esc(k)}: <b>${n}</b></span>`).join('')}
+    <span class="pill">Alergias: <b>${allergyCount}</b></span>
+    <span class="pill">Acessibilidade: <b>${accessCount}</b></span>
+  </div>
+
+  <h2>Atenção (${attention.length})</h2>
+  ${attention.length ? `<table><thead><tr><th>Participante</th><th>Restrição alimentar</th><th>Alergias</th><th>Acessibilidade</th></tr></thead><tbody>
+    ${attention.map((r) => `<tr>
+      <td class="name">${esc(r.name)}${r.answered ? '' : '<br><span class="muted" style="font-weight:normal;font-size:10.5px;">formulário ainda não enviado</span>'}</td>
+      <td>${r.food.length ? esc(r.food.join(', ')) : '<span class="muted">—</span>'}</td>
+      <td>${r.allergy ? `<span class="allergy">${esc(r.allergy)}</span>` : '<span class="muted">—</span>'}</td>
+      <td>${r.access.length ? esc(r.access.join(', ')) : '<span class="muted">—</span>'}</td>
+    </tr>`).join('')}
+  </tbody></table>` : '<p class="muted">Nenhuma restrição informada.</p>'}
+
+  <h2>Sem restrições (${noNeeds.length})</h2>
+  ${noNeeds.length ? `<ul class="list">${noNeeds.map((r) => `<li>${esc(r.name)}</li>`).join('')}</ul>` : '<p class="muted">—</p>'}
+
+  ${missing.length ? `<h2>Ainda não responderam (${missing.length})</h2>
+  <ul class="list">${missing.map((r) => `<li>${esc(r.name)}</li>`).join('')}</ul>` : ''}
+
+  <p class="foot">Informações enviadas pelas participantes no formulário de preparação da PERSEA Experience.</p>
+  <script>window.onload = function () { setTimeout(function () { window.print(); }, 300); };<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('O navegador bloqueou a janela — permita pop-ups para este site e tente de novo.', { tone: 'error' }); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 function photosDownloadCard() {
   if (isAdmin) return '';
   const entries = photoEntries();
@@ -517,6 +610,7 @@ function render() {
       </div>` : isAdmin ? actionBtn('data-rotate-direct', 'Criar link', true) : '<p class="text-xs text-white/40">A Nay ainda não criou este link.</p>'}
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
+    ${restaurantCard()}
     ${photosDownloadCard()}
     ${resultsLinkCard()}
     ${isAdmin ? card(`
@@ -552,6 +646,7 @@ function render() {
     <div id="respostas-resultados">${resultsCard()}</div>
   `;
 
+  content.querySelector('#restaurant-pdf')?.addEventListener('click', openRestaurantReport);
   content.querySelector('#download-all-photos')?.addEventListener('click', (e) => downloadAllPhotos(e.currentTarget));
   wirePhotoPicker();
   content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
