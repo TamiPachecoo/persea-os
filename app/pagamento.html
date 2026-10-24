@@ -34,6 +34,15 @@
   .hint{margin-top:12px;font-size:13px;line-height:1.6;color:var(--faint)}
   .toast{white-space:nowrap;position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,20px);padding:12px 20px;background:var(--cream);color:#070f1b;font-size:14px;border-radius:2px;opacity:0;transition:all .3s;pointer-events:none}
   .toast.on{opacity:1;transform:translate(-50%,0)}
+  .hidden{display:none!important}
+  .fl{display:block;margin-top:16px;font-size:13px;color:var(--muted)}
+  .in{width:100%;margin-top:6px;padding:14px 14px;border:1px solid var(--line);border-radius:2px;background:rgba(4,10,20,.6);color:var(--cream);font:inherit;font-size:16px}
+  .in:focus{outline:none;border-color:var(--gold)}
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  .err{margin-top:12px;font-size:14px;color:#e2a98b;min-height:0}
+  .btn:disabled{opacity:.6}
+  .hello{margin-top:26px;font-family:var(--serif);font-style:italic;font-size:20px;color:var(--gold)}
+  .btn-link{display:block;margin:24px auto 0;background:none;border:none;color:var(--faint);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}
   footer{margin-top:40px;text-align:center;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint)}
 </style>
 </head>
@@ -41,8 +50,24 @@
 <div class="wrap">
   <div class="brand">PERSEA Experience</div>
   <h1>Garanta a <em>sua vaga</em></h1>
-  <p class="lead">Escolha como prefere pagar. Depois de concluir, envie o comprovante para a equipe da Nay.</p>
+  <p class="lead" id="leadForm">Primeiro, seus dados para a equipe da Nay acompanhar a sua inscrição. Em seguida, escolha como prefere pagar.</p>
+  <p class="lead hidden" id="leadPay">Escolha como prefere pagar. Depois de concluir, envie o comprovante para a equipe da Nay.</p>
 
+  <form class="opt" id="who" novalidate>
+    <div class="k">Seus dados</div>
+    <label class="fl" for="name">Nome completo</label>
+    <input class="in" id="name" autocomplete="name" required>
+    <label class="fl" for="phone">WhatsApp com DDD</label>
+    <input class="in" id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(31) 99999-9999" required>
+    <label class="fl" for="insta">Instagram</label>
+    <input class="in" id="insta" autocapitalize="off" autocorrect="off" placeholder="@seuperfil">
+    <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <p class="err" id="err"></p>
+    <button class="btn" type="submit" id="go">Continuar para o pagamento</button>
+  </form>
+
+  <div class="hidden" id="pay">
+  <p class="hello" id="hello"></p>
   <section class="opt">
     <div class="k">Opção 01</div>
     <h2>Pix</h2>
@@ -58,6 +83,8 @@
     <p>Pagamento seguro pela SumUp.</p>
     <a class="btn" id="card" href="https://pay.sumup.com/b2c/QVJ9C4JR" target="_blank" rel="noopener">Pagar com cartão</a>
   </section>
+  <button class="btn-link" type="button" id="edit">Corrigir meus dados</button>
+  </div>
 
   <footer>Nay Murta · PERSEA</footer>
 </div>

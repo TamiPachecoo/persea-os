@@ -43,6 +43,7 @@ let invitePaymentLinkUrl = '';
 let inviteCodes = [];
 let directSignupCode = '';
 let menteeResults = [];
+let offerSignups = []; // people who filled the payment page during the event pitch
 let photoUrls = {}; // storage path → signed URL, for the preparation photos
 
 const EVENT_SITE = 'https://perseaexperience.naymurta.com';
@@ -232,6 +233,43 @@ function prepBlock(r) {
     </div>
     ${photosHtml(r)}
     ${actions}`);
+}
+
+async function loadOfferSignups() {
+  const { data } = await supabase.from('event_offer_signups').select('*').order('created_at', { ascending: false });
+  return data || [];
+}
+
+const PAY_CHOICE = { pix: 'Abriu o Pix', cartao: 'Abriu o cartão' };
+// Who filled name/WhatsApp/Instagram on the payment page (QR at the end of the pitch).
+function offerSignupsCard() {
+  const pending = offerSignups.filter((o) => !o.followed_up).length;
+  const row = (o, i) => `
+    <div class="flex items-start justify-between gap-3 flex-wrap" style="${toneStyle(i)}">
+      <div class="min-w-0" style="flex:1 1 240px;">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="font-medium break-words">${esc(o.full_name)}</p>
+          <span class="badge badge-locked" style="font-size:10px;">Inscrição durante o evento</span>
+          ${o.payment_choice ? `<span class="badge badge-progress" style="font-size:10px;">${PAY_CHOICE[o.payment_choice]}</span>` : ''}
+          ${o.followed_up ? '<span class="badge badge-completed" style="font-size:10px;">Contato feito</span>' : ''}
+        </div>
+        <p class="text-xs text-white/30 break-words">${esc(o.phone)}${o.instagram ? ` · <a href="https://instagram.com/${encodeURIComponent(o.instagram)}" target="_blank" rel="noopener" style="color:var(--gold);">@${esc(o.instagram)}</a>` : ''}</p>
+        <p class="text-xs text-white/20 mt-1">${formatDateTime(o.created_at)}</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <a href="${waLink(o.phone, `Olá, ${firstName(o.full_name)}! Aqui é da equipe da Nay. Que alegria ter você na PERSEA Experience.`)}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>
+        <button type="button" data-offer-follow="${o.id}" class="btn-text" style="font-size:11px;">${o.followed_up ? 'Desmarcar contato' : 'Marcar contato feito'}</button>
+        <button type="button" data-offer-delete="${o.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button>
+      </div>
+    </div>`;
+  return card(`
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-sm text-white/50">Inscrições durante o evento</p>
+      <span class="text-xs text-white/30">${offerSignups.length} ${offerSignups.length === 1 ? 'pessoa' : 'pessoas'}${pending ? ` · ${pending} sem contato` : ''}</span>
+    </div>
+    <p class="text-xs text-white/30 mb-4">Quem leu o QR code do pitch e preencheu nome, WhatsApp e Instagram antes de ver as formas de pagamento (app.naymurta.com/pagamento.html). O pagamento em si não é confirmado aqui: confira no app do banco ou da SumUp.</p>
+    ${offerSignups.length ? `<div class="space-y-3">${offerSignups.map(row).join('')}</div>` : '<p class="text-sm text-white/20 py-2">Ninguém ainda.</p>'}
+  `, 'mb-6');
 }
 
 async function loadMenteeResults() {
@@ -626,6 +664,7 @@ function render() {
       </div>` : isAdmin ? actionBtn('data-rotate-direct', 'Criar link', true) : '<p class="text-xs text-white/40">A Nay ainda não criou este link.</p>'}
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
+    ${offerSignupsCard()}
     ${restaurantCard()}
     ${photosDownloadCard()}
     ${resultsLinkCard()}
@@ -730,6 +769,25 @@ function render() {
     toast('Novo link criado.');
     render();
   });
+  content.querySelectorAll('[data-offer-follow]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const o = offerSignups.find((x) => x.id === btn.dataset.offerFollow);
+      if (!o) return;
+      const { error } = await supabase.from('event_offer_signups').update({ followed_up: !o.followed_up }).eq('id', o.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      await refresh();
+    });
+  });
+  content.querySelectorAll('[data-offer-delete]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const o = offerSignups.find((x) => x.id === btn.dataset.offerDelete);
+      if (!o || !confirm(`Excluir ${o.full_name} da lista? Isto não pode ser desfeito.`)) return;
+      const { error } = await supabase.from('event_offer_signups').delete().eq('id', o.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast('Excluída.');
+      await refresh();
+    });
+  });
   content.querySelector('[data-copy-results-msg]')?.addEventListener('click', () => copyText(resultsMessage()));
   content.querySelector('[data-copy-results-link]')?.addEventListener('click', () => copyText(RESULTS_URL));
   content.querySelectorAll('[data-delete-result]').forEach((btn) => {
@@ -784,7 +842,7 @@ function render() {
 
 async function refresh() {
   let links;
-  [registrations, links, inviteCodes, menteeResults] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults()]);
+  [registrations, links, inviteCodes, menteeResults, offerSignups] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults(), loadOfferSignups()]);
   [manualPaymentLinkUrl, invitePaymentLinkUrl, directSignupCode] = links;
   const paths = registrations.flatMap((r) => [...(r.prep_child_photos || []), ...(r.prep_special_photos || [])].map((ph) => ph.path));
   photoUrls = {};
