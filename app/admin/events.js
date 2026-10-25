@@ -732,6 +732,7 @@ function render() {
       ${card(`<p class="text-xs text-white/30 mb-1">Receita confirmada</p><p class="text-2xl font-serif" style="color:var(--gold);">${brl(receita)}</p>`)}
       ${card(`<p class="text-xs text-white/30 mb-1">Preparação respondida</p><p class="text-2xl font-serif">${registrations.filter((r) => attending(r) && r.prep_submitted_at).length} <span class="text-sm text-white/30">de ${pagas + confirmadas}</span></p>`)}
     </div>
+    ${feedbackCard()}
     ${card(`
       <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
         <p class="text-sm text-white/50">Link de cadastro direto</p>
@@ -748,7 +749,6 @@ function render() {
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
     ${offerSignupsCard()}
-    ${feedbackCard()}
     ${restaurantCard()}
     ${photosDownloadCard()}
     ${resultsLinkCard()}
