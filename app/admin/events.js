@@ -44,6 +44,7 @@ let inviteCodes = [];
 let directSignupCode = '';
 let menteeResults = [];
 let offerSignups = []; // people who filled the payment page during the event pitch
+let feedback = []; // anonymous post-event survey answers (feedback.html)
 let photoUrls = {}; // storage path → signed URL, for the preparation photos
 
 const EVENT_SITE = 'https://perseaexperience.naymurta.com';
@@ -269,6 +270,88 @@ function offerSignupsCard() {
     </div>
     <p class="text-xs text-white/30 mb-4">Quem leu o QR code do pitch e preencheu nome, WhatsApp e Instagram antes de ver as formas de pagamento (app.naymurta.com/pagamento.html). O pagamento em si não é confirmado aqui: confira no app do banco ou da SumUp.</p>
     ${offerSignups.length ? `<div class="space-y-3">${offerSignups.map(row).join('')}</div>` : '<p class="text-sm text-white/20 py-2">Ninguém ainda.</p>'}
+  `, 'mb-6');
+}
+
+async function loadFeedback() {
+  const { data } = await supabase.from('event_feedback').select('*').order('created_at', { ascending: false });
+  return data || [];
+}
+
+const FEEDBACK_URL = 'https://app.naymurta.com/feedback.html';
+const feedbackMessage = () => `Tripulação, obrigada por viverem a PERSEA Experience com a gente! 💛\n\nQueremos saber com sinceridade o que funcionou e onde podemos fazer melhor. É anônimo e leva uns 3 minutos:\n${FEEDBACK_URL}`;
+const FB_AREAS = [['overall', 'Evento (geral)'], ['location', 'Local'], ['food', 'Comida'], ['organization', 'Organização e horários'], ['value_for_money', 'Valeu o investimento']];
+const FB_TALKS = [['talk_posicionamento', 'posicionamento', 'Posicionamento · Nay'], ['talk_capital_visual', 'capital_visual', 'Capital Visual · Nay'],
+  ['talk_visibilidade', 'visibilidade', 'Visibilidade · Nay'], ['talk_vendas', 'vendas', 'Vendas · Nay'],
+  ['talk_larissa', 'larissa', 'Oratória · Larissa'], ['talk_rejane', 'rejane', 'Presença Magnética · Rejane']];
+const FB_WISH = { pratica: 'Exercícios práticos', networking: 'Networking', perguntas: 'Tempo para perguntas', vendas: 'Vendas e precificação',
+  instagram: 'Instagram e conteúdo', imagem: 'Imagem e estilo', mentalidade: 'Mentalidade', pausas: 'Pausas e descanso' };
+const FB_PRICE = { barato: 'Abaixo do que vale', justo: 'Justo', caro: 'Acima do que vale' };
+const avgOf = (k) => {
+  const v = feedback.map((f) => f[k]).filter((n) => n != null);
+  return v.length ? { avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+};
+const countOf = (list) => list.reduce((m, v) => (v ? { ...m, [v]: (m[v] || 0) + 1 } : m), {});
+
+// Anonymous survey: weakest areas first, talks ranked, what they want more of, then the comments.
+function feedbackCard() {
+  const n = feedback.length;
+  const bar = (label, a, extra = '') => {
+    const pct = a ? (a.avg / 5) * 100 : 0;
+    const tone = !a ? 'rgba(255,255,255,.1)' : a.avg < 3.5 ? 'var(--terracotta)' : a.avg < 4.3 ? 'var(--gold)' : 'var(--sage, #8fb39a)';
+    return `<div class="mb-2">
+      <div class="flex justify-between text-xs mb-1"><span class="text-white/60">${label}${extra}</span><span class="text-white/40">${a ? `${a.avg.toFixed(1).replace('.', ',')} / 5 · ${a.n}` : '—'}</span></div>
+      <div style="height:6px;background:rgba(255,255,255,.06);border-radius:3px;"><div style="width:${pct}%;height:100%;background:${tone};border-radius:3px;"></div></div>
+    </div>`;
+  };
+  const areas = FB_AREAS.map(([k, l]) => [l, avgOf(k)]).sort((a, b) => (a[1]?.avg ?? 9) - (b[1]?.avg ?? 9));
+  const fav = countOf(feedback.map((f) => f.favorite_talk));
+  const talks = FB_TALKS.map(([k, v, l]) => [l, avgOf(k), fav[v] || 0]).sort((a, b) => (b[1]?.avg ?? -1) - (a[1]?.avg ?? -1) || b[2] - a[2]);
+  const rec = feedback.map((f) => f.recommend).filter((v) => v != null);
+  const nps = rec.length ? Math.round(((rec.filter((v) => v >= 9).length - rec.filter((v) => v <= 6).length) / rec.length) * 100) : null;
+  const price = countOf(feedback.map((f) => f.price_perception));
+  const wish = Object.entries(countOf(feedback.flatMap((f) => f.wish_more || []))).sort((a, b) => b[1] - a[1]);
+  const quotes = (k, title) => {
+    const list = feedback.filter((f) => f[k]);
+    return list.length ? `<p class="text-xs text-white/40 mt-5 mb-2">${title} (${list.length})</p><div class="space-y-2">${list.map((f) => `<p class="text-sm text-white/70 break-words" style="border-left:2px solid var(--gold);padding-left:10px;">${esc(f[k])}</p>`).join('')}</div>` : '';
+  };
+  const extras = (f) => [f.location_note && `Local: ${f.location_note}`, f.food_note && `Comida: ${f.food_note}`, f.wish_more_other && `Queria mais: ${f.wish_more_other}`].filter(Boolean);
+  const notes = feedback.flatMap((f) => extras(f));
+  return card(`
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+      <p class="text-sm text-white/50">Feedback do evento (anônimo)</p>
+      <span class="text-xs text-white/30">${n} ${n === 1 ? 'resposta' : 'respostas'}</span>
+    </div>
+    <p class="text-xs text-white/30 mb-3">Pesquisa sem nome nem contato. Envie o link no grupo do WhatsApp depois do evento.</p>
+    <div class="flex flex-wrap gap-2 items-center mb-5">
+      <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${FEEDBACK_URL}" data-autoselect />
+      ${actionBtn('data-copy-feedback-msg', 'Copiar mensagem', true)}
+      ${actionBtn('data-copy-feedback-link', 'Copiar só o link')}
+    </div>
+    ${n ? `
+    <div class="grid gap-6" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+      <div>
+        <p class="text-xs text-white/40 mb-2">Onde melhorar · menor nota primeiro</p>
+        ${areas.map(([l, a]) => bar(l, a)).join('')}
+        <p class="text-xs text-white/40 mt-4">Recomendaria (NPS): <span style="color:var(--gold);">${nps == null ? '—' : nps}</span>${rec.length ? ` · média ${(rec.reduce((a, b) => a + b, 0) / rec.length).toFixed(1).replace('.', ',')} / 10` : ''}</p>
+        <p class="text-xs text-white/40 mt-1">Preço: ${Object.keys(FB_PRICE).map((k) => `${FB_PRICE[k]} ${price[k] || 0}`).join(' · ')}</p>
+      </div>
+      <div>
+        <p class="text-xs text-white/40 mb-2">Ranking das aulas</p>
+        ${talks.map(([l, a, f], i) => bar(`${i + 1}. ${l}`, a, f ? ` · <span style="color:var(--gold);">★ favorita de ${f}</span>` : '')).join('')}
+      </div>
+    </div>
+    ${wish.length ? `<p class="text-xs text-white/40 mt-5 mb-2">Queriam mais</p><div class="flex flex-wrap gap-2">${wish.map(([k, c]) => `<span class="badge badge-progress" style="font-size:11px;">${FB_WISH[k] || esc(k)} · ${c}</span>`).join('')}</div>` : ''}
+    ${quotes('improve', 'O que podemos fazer melhor')}
+    ${quotes('suggestions', 'Sugestões')}
+    ${quotes('highlight', 'O que mais marcou')}
+    ${notes.length ? `<p class="text-xs text-white/40 mt-5 mb-2">Outros comentários (${notes.length})</p><div class="space-y-1">${notes.map((t) => `<p class="text-sm text-white/60 break-words">${esc(t)}</p>`).join('')}</div>` : ''}
+    ${isAdmin ? `<details class="mt-5"><summary class="text-xs text-white/30" style="cursor:pointer;">Respostas individuais</summary><div class="space-y-2 mt-3">${feedback.map((f) => `
+      <div class="flex items-start justify-between gap-3 text-xs text-white/50" style="border-top:1px solid rgba(255,255,255,.06);padding-top:8px;">
+        <span>${formatDateTime(f.created_at)} · geral ${f.overall ?? '—'}/5 · recomendaria ${f.recommend ?? '—'}/10${f.improve ? ` · “${esc(f.improve.slice(0, 80))}${f.improve.length > 80 ? '…' : ''}”` : ''}</span>
+        <button type="button" data-feedback-delete="${f.id}" class="btn-text shrink-0" style="font-size:11px;color:var(--terracotta);">Excluir</button>
+      </div>`).join('')}</div></details>` : ''}
+    ` : '<p class="text-sm text-white/20 py-2">Nenhuma resposta ainda.</p>'}
   `, 'mb-6');
 }
 
@@ -665,6 +748,7 @@ function render() {
       ${inProgress.length ? `<p class="text-xs text-white/30 mt-4">Começaram e ainda não terminaram (${inProgress.length}): ${inProgress.map((r) => `${esc(r.full_name)}${r.phone ? ` <a href="${waLink(r.phone, `Olá, ${firstName(r.full_name)}! Vi que você começou o formulário da PERSEA Experience. Falta só um pouquinho para terminar: ${prepUrl(r.prep_token)}`)}" target="_blank" rel="noopener" style="color:var(--gold);">lembrar</a>` : ''}`).join(' · ')}</p>` : ''}
     `, 'mb-6')}
     ${offerSignupsCard()}
+    ${feedbackCard()}
     ${restaurantCard()}
     ${photosDownloadCard()}
     ${resultsLinkCard()}
@@ -788,6 +872,17 @@ function render() {
       await refresh();
     });
   });
+  content.querySelector('[data-copy-feedback-msg]')?.addEventListener('click', () => copyText(feedbackMessage()));
+  content.querySelector('[data-copy-feedback-link]')?.addEventListener('click', () => copyText(FEEDBACK_URL));
+  content.querySelectorAll('[data-feedback-delete]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Excluir esta resposta? Isto não pode ser desfeito.')) return;
+      const { error } = await supabase.from('event_feedback').delete().eq('id', btn.dataset.feedbackDelete);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast('Resposta excluída.');
+      await refresh();
+    });
+  });
   content.querySelector('[data-copy-results-msg]')?.addEventListener('click', () => copyText(resultsMessage()));
   content.querySelector('[data-copy-results-link]')?.addEventListener('click', () => copyText(RESULTS_URL));
   content.querySelectorAll('[data-delete-result]').forEach((btn) => {
@@ -842,7 +937,7 @@ function render() {
 
 async function refresh() {
   let links;
-  [registrations, links, inviteCodes, menteeResults, offerSignups] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults(), loadOfferSignups()]);
+  [registrations, links, inviteCodes, menteeResults, offerSignups, feedback] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults(), loadOfferSignups(), loadFeedback()]);
   [manualPaymentLinkUrl, invitePaymentLinkUrl, directSignupCode] = links;
   const paths = registrations.flatMap((r) => [...(r.prep_child_photos || []), ...(r.prep_special_photos || [])].map((ph) => ph.path));
   photoUrls = {};

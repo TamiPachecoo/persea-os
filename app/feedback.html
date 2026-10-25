@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Como foi a PERSEA Experience?</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#070f1b" />
+<meta name="robots" content="noindex" />
+<link rel="icon" href="shared/assets/icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg0:#070f1b;--bg1:#0c1a2c;--gold:#e2b35f;--cream:#efe6d6;--muted:rgba(239,230,214,.68);--faint:rgba(239,230,214,.42);--line:rgba(226,179,95,.32);--serif:'Playfair Display',Georgia,serif;--sans:'Poppins','Helvetica Neue',Arial,sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--bg0)}
+  body{min-height:100vh;color:var(--cream);font-family:var(--sans);font-weight:300;-webkit-font-smoothing:antialiased;background:radial-gradient(ellipse 90% 60% at 80% 0%,#17325f 0%,var(--bg1) 45%,var(--bg0) 100%) fixed}
+  .wrap{max-width:600px;margin:0 auto;padding:44px 22px calc(56px + env(safe-area-inset-bottom))}
+  .brand{display:flex;align-items:center;gap:12px;font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--gold)}
+  .brand::before{content:"";width:28px;height:1px;background:var(--gold)}
+  h1{font-family:var(--serif);font-weight:400;font-size:36px;line-height:1.12;margin:22px 0 12px}
+  h1 em{font-style:italic;color:var(--gold)}
+  .lead{font-size:15px;line-height:1.7;color:var(--muted)}
+  .anon{display:inline-block;margin-top:14px;padding:6px 12px;border:1px solid var(--line);font-size:12px;color:var(--gold);letter-spacing:.04em}
+  .opt{margin-top:24px;padding:22px 20px;border:1px solid var(--line);background:rgba(4,10,20,.5)}
+  .opt .k{font-size:11px;letter-spacing:.36em;text-transform:uppercase;color:var(--gold)}
+  .opt h2{font-family:var(--serif);font-weight:400;font-size:24px;margin:8px 0 4px}
+  .opt .sub{font-size:13px;line-height:1.6;color:var(--faint)}
+  .q{margin-top:18px}
+  .q > label,.q > p{display:block;font-size:14px;line-height:1.5;color:var(--cream)}
+  .q small{display:block;font-size:12px;color:var(--faint);margin-top:2px}
+  .stars{display:flex;gap:6px;margin-top:8px}
+  .stars button{flex:1;max-width:56px;height:44px;border:1px solid var(--line);background:transparent;color:var(--faint);font-size:20px;cursor:pointer;border-radius:2px}
+  .stars button.on{background:var(--gold);border-color:var(--gold);color:#070f1b}
+  .scale{display:grid;grid-template-columns:repeat(11,1fr);gap:4px;margin-top:8px}
+  .scale button{height:40px;border:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;border-radius:2px;padding:0}
+  .scale button.on{background:var(--gold);border-color:var(--gold);color:#070f1b;font-weight:500}
+  .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:4px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chips button{padding:10px 14px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:13px;cursor:pointer}
+  .chips button.on{background:var(--gold);border-color:var(--gold);color:#070f1b}
+  .talk{padding:12px 0;border-top:1px solid rgba(226,179,95,.14)}
+  .talk:first-of-type{border-top:none}
+  .talk b{font-weight:400;font-size:14px;display:block}
+  .talk span{font-size:12px;color:var(--faint)}
+  .talk .stars{margin-top:8px}
+  .talk .stars button{width:38px;height:36px;font-size:16px;flex:none}
+  .in,textarea{width:100%;margin-top:8px;padding:12px 14px;border:1px solid var(--line);border-radius:2px;background:rgba(4,10,20,.6);color:var(--cream);font:inherit;font-size:15px}
+  textarea{min-height:92px;resize:vertical;line-height:1.5}
+  .in:focus,textarea:focus{outline:none;border-color:var(--gold)}
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  .btn{display:flex;align-items:center;justify-content:center;width:100%;padding:16px 18px;margin-top:24px;border:1px solid var(--gold);border-radius:2px;background:var(--gold);color:#070f1b;font:inherit;font-size:15px;font-weight:500;letter-spacing:.05em;cursor:pointer}
+  .btn:disabled{opacity:.6}
+  .err{margin-top:12px;font-size:14px;color:#e2a98b}
+  .hidden{display:none!important}
+  .thanks{text-align:center;padding:60px 0 20px}
+  .thanks h1{font-size:40px}
+  footer{margin-top:40px;text-align:center;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">PERSEA Experience</div>
+
+  <form id="fb" novalidate>
+    <h1>Como foi a sua <em>travessia?</em></h1>
+    <p class="lead">Queremos saber com sinceridade o que funcionou e onde podemos fazer melhor. Leva uns 3 minutos.</p>
+    <span class="anon">Anônimo · não pedimos nome nem contato</span>
+
+    <section class="opt">
+      <div class="k">01 · O evento</div>
+      <h2>De forma geral</h2>
+      <div class="q"><p>Que nota você dá para a PERSEA Experience?</p><div class="stars" data-k="overall"></div></div>
+      <div class="q"><p>De 0 a 10, o quanto você recomendaria a PERSEA Experience para uma amiga?</p><div class="scale" data-k="recommend"></div><div class="ends"><span>nada provável</span><span>com certeza</span></div></div>
+    </section>
+
+    <section class="opt">
+      <div class="k">02 · Estrutura</div>
+      <h2>Local, comida e organização</h2>
+      <div class="q"><p>Local (Evü Café): conforto, acesso, som e telão</p><div class="stars" data-k="location"></div><input class="in" id="location_note" placeholder="Algo sobre o local? (opcional)"></div>
+      <div class="q"><p>Comida: almoço e coffee break</p><div class="stars" data-k="food"></div><input class="in" id="food_note" placeholder="Algo sobre a comida? (opcional)"></div>
+      <div class="q"><p>Organização e horários</p><div class="stars" data-k="organization"></div></div>
+    </section>
+
+    <section class="opt">
+      <div class="k">03 · Investimento</div>
+      <h2>Preço</h2>
+      <div class="q"><p>O evento valeu o investimento?</p><div class="stars" data-k="value_for_money"></div></div>
+      <div class="q"><p>Pelo que você recebeu, o preço foi:</p><div class="chips" data-one="price_perception">
+        <button type="button" data-v="barato">Abaixo do que vale</button><button type="button" data-v="justo">Justo</button><button type="button" data-v="caro">Acima do que vale</button></div></div>
+    </section>
+
+    <section class="opt">
+      <div class="k">04 · Conteúdo</div>
+      <h2>As aulas e palestras</h2>
+      <p class="sub">Dê uma nota para cada uma. Pule a que você não assistiu.</p>
+      <div class="q" id="talks"></div>
+      <div class="q"><p>Qual foi a sua favorita?</p><div class="chips" data-one="favorite_talk" id="fav"></div></div>
+    </section>
+
+    <section class="opt">
+      <div class="k">05 · Próxima edição</div>
+      <h2>O que você queria que tivesse mais?</h2>
+      <p class="sub">Escolha quantas quiser.</p>
+      <div class="chips" data-many="wish_more">
+        <button type="button" data-v="pratica">Exercícios práticos</button><button type="button" data-v="networking">Networking</button>
+        <button type="button" data-v="perguntas">Tempo para perguntas</button><button type="button" data-v="vendas">Vendas e precificação</button>
+        <button type="button" data-v="instagram">Instagram e conteúdo</button><button type="button" data-v="imagem">Imagem e estilo</button>
+        <button type="button" data-v="mentalidade">Mentalidade</button><button type="button" data-v="pausas">Pausas e descanso</button>
+      </div>
+      <input class="in" id="wish_more_other" placeholder="Outra coisa? (opcional)">
+    </section>
+
+    <section class="opt">
+      <div class="k">06 · Com as suas palavras</div>
+      <h2>Conte para a gente</h2>
+      <div class="q"><label for="highlight">O que mais marcou você no evento?</label><textarea id="highlight"></textarea></div>
+      <div class="q"><label for="improve">O que podemos fazer melhor?</label><small>Pode ser direta: é isso que nos ajuda.</small><textarea id="improve"></textarea></div>
+      <div class="q"><label for="suggestions">Alguma sugestão para a próxima edição?</label><textarea id="suggestions"></textarea></div>
+    </section>
+
+    <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <p class="err" id="err"></p>
+    <button class="btn" type="submit" id="go">Enviar respostas</button>
+  </form>
+
+  <div class="thanks hidden" id="thanks">
+    <h1>Obrigada, <em>tripulação.</em></h1>
+    <p class="lead">Suas respostas chegaram. Elas vão direto para o planejamento da próxima edição.</p>
+  </div>
+
+  <footer>Nay Murta · PERSEA</footer>
+</div>
+<script src="feedback.js"></script>
+</body>
+</html>
