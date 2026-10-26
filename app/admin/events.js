@@ -15,6 +15,9 @@
 // a 'confirmada' registration that shows up here once they finish.
 // The mentee results survey (naymurta.com/resultados, mentee-results Edge
 // Function → mentee_results) is listed here too, at the bottom.
+// Each edition has its own tab: 2026 holds everything from that event
+// (registrations, offer sign-ups, feedback, photos); 2027 holds the waiting
+// list (naymurta.com/listadeespera → event-waitlist → event_waitlist).
 import { supabase } from '../shared/supabase-client.js';
 import { requireProfile } from '../shared/supabase-auth.js';
 import { renderShell, card, toast, formatDateTime } from '../shared/ui.js';
@@ -45,6 +48,13 @@ let directSignupCode = '';
 let menteeResults = [];
 let offerSignups = []; // people who filled the payment page during the event pitch
 let feedback = []; // anonymous post-event survey answers (feedback.html)
+let waitlist = []; // next edition's waiting list (naymurta.com/listadeespera)
+// Each edition is its own tab; the choice is remembered on this browser.
+const EDITIONS = [
+  { id: '2026', title: 'PERSEA Experience 2026', meta: '24 de outubro · Evü Café, BH' },
+  { id: '2027', title: 'PERSEA Experience 2027', meta: '10 de abril de 2027 · lista de espera' },
+];
+let edition = (() => { try { return localStorage.getItem('persea-events-edition') || '2026'; } catch (e) { return '2026'; } })();
 let photoUrls = {}; // storage path → signed URL, for the preparation photos
 
 const EVENT_SITE = 'https://perseaexperience.naymurta.com';
@@ -353,6 +363,72 @@ function feedbackCard() {
       </div>`).join('')}</div></details>` : ''}
     ` : '<p class="text-sm text-white/20 py-2">Nenhuma resposta ainda.</p>'}
   `, 'mb-6');
+}
+
+async function loadWaitlist() {
+  const { data } = await supabase.from('event_waitlist').select('*').order('created_at', { ascending: false });
+  return data || [];
+}
+
+const WAITLIST_URL = 'https://naymurta.com/listadeespera/';
+const waitlistMessage = () => `A próxima PERSEA Experience já tem data: 10 de abril de 2027! ✨\n\nEntre na lista de espera e receba o convite e as condições especiais antes de todo mundo:\n${WAITLIST_URL}`;
+// Waiting list for the 2027 edition: who signed up on naymurta.com/listadeespera.
+function waitlistCard() {
+  const list = waitlist.filter((w) => w.edition === '2027');
+  const pending = list.filter((w) => !w.contacted).length;
+  const returning = list.filter((w) => w.attended_before).length;
+  const row = (w, i) => `
+    <div class="flex items-start justify-between gap-3 flex-wrap" style="${toneStyle(i)}">
+      <div class="min-w-0" style="flex:1 1 240px;">
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="font-medium break-words">${esc(w.full_name)}</p>
+          ${w.attended_before ? '<span class="badge badge-progress" style="font-size:10px;">Esteve em 2026</span>' : ''}
+          ${w.contacted ? '<span class="badge badge-completed" style="font-size:10px;">Contato feito</span>' : ''}
+        </div>
+        <p class="text-xs text-white/30 break-words">${esc(w.phone)}${w.email ? ` · ${esc(w.email)}` : ''}${w.instagram ? ` · <a href="https://instagram.com/${encodeURIComponent(w.instagram)}" target="_blank" rel="noopener" style="color:var(--gold);">@${esc(w.instagram)}</a>` : ''}</p>
+        <p class="text-xs text-white/20 mt-1">${formatDateTime(w.created_at)}</p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <a href="${waLink(w.phone, `Olá, ${firstName(w.full_name)}! Aqui é da equipe da Nay. Vi que você entrou na lista de espera da PERSEA Experience 2027 (10 de abril).`)}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>
+        <button type="button" data-wait-contact="${w.id}" class="btn-text" style="font-size:11px;">${w.contacted ? 'Desmarcar contato' : 'Marcar contato feito'}</button>
+        <button type="button" data-wait-delete="${w.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button>
+      </div>
+    </div>`;
+  return `
+    <div class="grid sm:grid-cols-3 gap-4 mb-6">
+      ${card(`<p class="text-xs text-white/30 mb-1">Lista de espera</p><p class="text-2xl font-serif" style="color:var(--gold);">${list.length}</p>`)}
+      ${card(`<p class="text-xs text-white/30 mb-1">Estiveram em 2026</p><p class="text-2xl font-serif">${returning}</p>`)}
+      ${card(`<p class="text-xs text-white/30 mb-1">Sem contato ainda</p><p class="text-2xl font-serif">${pending}</p>`)}
+    </div>
+    ${card(`
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <p class="text-sm text-white/50">Link da lista de espera</p>
+        <span class="text-xs text-white/30">naymurta.com → PERSEA Experience 2027</span>
+      </div>
+      <p class="text-xs text-white/30 mb-4">Quem entra pelo site (portal PERSEA Experience 2027) ou por este link deixa nome, WhatsApp, e-mail e Instagram e aparece aqui. Se a mesma pessoa se inscrever de novo com o mesmo WhatsApp, os dados são atualizados em vez de duplicar.</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${WAITLIST_URL}" data-autoselect />
+        ${actionBtn('data-copy-wait-msg', 'Copiar mensagem', true)}
+        ${actionBtn('data-copy-wait-link', 'Copiar só o link')}
+        ${list.length ? actionBtn('data-wait-csv', 'Baixar planilha (.csv)') : ''}
+      </div>
+    `, 'mb-6')}
+    ${card(`
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-4">
+        <p class="text-sm text-white/50">Lista de espera</p>
+        <span class="text-xs text-white/30">${list.length} ${list.length === 1 ? 'pessoa' : 'pessoas'}${pending ? ` · ${pending} sem contato` : ''}</span>
+      </div>
+      ${list.length ? `<div class="space-y-3">${list.map(row).join('')}</div>` : '<p class="text-sm text-white/20 py-2">Ninguém ainda.</p>'}
+    `, 'mb-6')}`;
+}
+function downloadWaitlistCsv() {
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Nome', 'WhatsApp', 'E-mail', 'Instagram', 'Esteve em 2026', 'Contato feito', 'Inscrição']]
+    .concat(waitlist.filter((w) => w.edition === '2027').map((w) => [w.full_name, w.phone, w.email, w.instagram ? `@${w.instagram}` : '',
+      w.attended_before == null ? '' : w.attended_before ? 'Sim' : 'Não', w.contacted ? 'Sim' : 'Não', formatDateTime(w.created_at)]));
+  const blob = new Blob(['﻿' + rows.map((r) => r.map(q).join(';')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'Lista de espera PERSEA Experience 2027.csv' });
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 async function loadMenteeResults() {
@@ -721,11 +797,32 @@ function render() {
     return matchesSearch && matchesStatus;
   });
 
-  content.innerHTML = `
-    <div class="mb-8">
+  const tabs = `
+    <div class="mb-6">
       <p class="text-white/40 text-sm mb-1">Eventos</p>
       <h1 class="text-3xl font-serif">PERSEA Experience</h1>
     </div>
+    <div class="flex flex-wrap gap-3 mb-8" role="tablist">
+      ${EDITIONS.map((ed) => {
+        const on = ed.id === edition;
+        const count = ed.id === '2027' ? waitlist.filter((w) => w.edition === '2027').length : 0;
+        return `<button type="button" role="tab" aria-selected="${on}" data-edition="${ed.id}" style="text-align:left;padding:14px 18px;border-radius:10px;border:1px solid ${on ? 'var(--gold)' : 'var(--line)'};background:${on ? 'rgba(226,179,95,.08)' : 'transparent'};cursor:pointer;min-width:220px;color:inherit;font:inherit;">
+          <span class="block font-serif" style="font-size:18px;color:${on ? 'var(--gold)' : 'inherit'};">${ed.title}</span>
+          <span class="block text-xs text-white/40 mt-1">${ed.meta}${count ? ` · ${count} na lista` : ''}</span>
+        </button>`;
+      }).join('')}
+    </div>`;
+  const mentoria = `
+    <p class="text-white/40 text-sm mt-10 mb-3">Mentoria · resultados das mentoradas</p>
+    ${resultsLinkCard()}
+    <div id="respostas-resultados">${resultsCard()}</div>`;
+  if (edition === '2027') {
+    content.innerHTML = tabs + waitlistCard() + mentoria;
+    wireEvents();
+    return;
+  }
+
+  content.innerHTML = tabs + `
     <div class="grid sm:grid-cols-4 gap-4 mb-6">
       ${card(`<p class="text-xs text-white/30 mb-1">Interessadas</p><p class="text-2xl font-serif">${interessadas}</p>`)}
       ${card(`<p class="text-xs text-white/30 mb-1">Participantes</p><p class="text-2xl font-serif" style="color:var(--gold);">${pagas + confirmadas}</p><p class="text-xs text-white/30">${pagas} pagas${confirmadas ? ` · ${confirmadas} cadastro direto` : ''}</p>`)}
@@ -751,7 +848,6 @@ function render() {
     ${offerSignupsCard()}
     ${restaurantCard()}
     ${photosDownloadCard()}
-    ${resultsLinkCard()}
     ${isAdmin ? card(`
       <p class="text-sm text-white/50 mb-2">Link de pagamento com parcelamento</p>
       <p class="text-xs text-white/30 mb-4">Cole aqui um Link de Pagamento criado no app da SumUp (com parcelas e "Não repassar a taxa" configurados). Enquanto este campo estiver preenchido, toda nova inscrição é enviada para este link em vez de um checkout automático — isso significa que o pagamento não é confirmado sozinho: marque "Paga" manualmente aqui depois de conferir no seu app SumUp. Deixe em branco para voltar ao checkout automático (sem parcelamento).</p>
@@ -782,14 +878,44 @@ function render() {
         ${filtered.length ? filtered.map(registrationRow).join('') : '<p class="text-sm text-white/20 py-6">Nenhuma inscrição encontrada.</p>'}
       </div>
     `)}
-    <div id="respostas-resultados">${resultsCard()}</div>
-  `;
+  ` + mentoria;
+  wireEvents();
+}
 
+// One wiring pass for whichever edition is on screen (missing elements are skipped).
+function wireEvents() {
+  content.querySelectorAll('[data-edition]').forEach((b) => b.addEventListener('click', () => {
+    edition = b.dataset.edition;
+    try { localStorage.setItem('persea-events-edition', edition); } catch (e) { /* private mode */ }
+    render();
+  }));
+  content.querySelector('[data-copy-wait-msg]')?.addEventListener('click', () => copyText(waitlistMessage()));
+  content.querySelector('[data-copy-wait-link]')?.addEventListener('click', () => copyText(WAITLIST_URL));
+  content.querySelector('[data-wait-csv]')?.addEventListener('click', downloadWaitlistCsv);
+  content.querySelectorAll('[data-wait-contact]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const w = waitlist.find((x) => x.id === btn.dataset.waitContact);
+      if (!w) return;
+      const { error } = await supabase.from('event_waitlist').update({ contacted: !w.contacted }).eq('id', w.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      await refresh();
+    });
+  });
+  content.querySelectorAll('[data-wait-delete]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const w = waitlist.find((x) => x.id === btn.dataset.waitDelete);
+      if (!w || !confirm(`Excluir ${w.full_name} da lista de espera? Isto não pode ser desfeito.`)) return;
+      const { error } = await supabase.from('event_waitlist').delete().eq('id', w.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast('Excluída.');
+      await refresh();
+    });
+  });
   content.querySelector('#restaurant-pdf')?.addEventListener('click', openRestaurantReport);
   content.querySelector('#download-all-photos')?.addEventListener('click', (e) => downloadAllPhotos(e.currentTarget));
   wirePhotoPicker();
-  content.querySelector('#reg-search').addEventListener('input', (e) => { search = e.target.value; render(); });
-  content.querySelector('#status-filter').addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
+  content.querySelector('#reg-search')?.addEventListener('input', (e) => { search = e.target.value; render(); });
+  content.querySelector('#status-filter')?.addEventListener('change', (e) => { statusFilter = e.target.value; render(); });
   content.querySelector('#manual-link-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = new FormData(e.target).get('manualLink').trim();
@@ -937,7 +1063,7 @@ function render() {
 
 async function refresh() {
   let links;
-  [registrations, links, inviteCodes, menteeResults, offerSignups, feedback] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults(), loadOfferSignups(), loadFeedback()]);
+  [registrations, links, inviteCodes, menteeResults, offerSignups, feedback, waitlist] = await Promise.all([loadRegistrations(), loadTenantLinks(), loadInviteCodes(), loadMenteeResults(), loadOfferSignups(), loadFeedback(), loadWaitlist()]);
   [manualPaymentLinkUrl, invitePaymentLinkUrl, directSignupCode] = links;
   const paths = registrations.flatMap((r) => [...(r.prep_child_photos || []), ...(r.prep_special_photos || [])].map((ph) => ph.path));
   photoUrls = {};
