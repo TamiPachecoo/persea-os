@@ -87,8 +87,8 @@ export const ENCOUNTER_DEFS = [
     premiumOnly: false,
   },
   {
-    number: 2, slug: 'e2', name: 'Comunicação e Vendas', phase: 0,
-    purpose: 'A cliente já respondeu a pesquisa de precificação (O QUE e COMO ela vende hoje) — Nay entra direcionando o encontro para as vendas dela: pitch para praticar, conteúdo recomendado, e onde ela pode se inspirar na Direção da Marca.',
+    number: 2, slug: 'e2', name: 'Posicionamento e Metas', phase: 0,
+    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação. Encerramento formal da Persea Essencial.',
     premiumOnly: false,
   },
   {
@@ -97,8 +97,8 @@ export const ENCOUNTER_DEFS = [
     premiumOnly: false,
   },
   {
-    number: 4, slug: 'e4', name: 'Posicionamento e Metas', phase: 2,
-    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação. Encerramento formal da Persea Essencial.',
+    number: 4, slug: 'e4', name: 'Comunicação e Vendas', phase: 2,
+    purpose: 'A cliente já respondeu a pesquisa de precificação (O QUE e COMO ela vende hoje) — Nay entra direcionando o encontro para as vendas dela: pitch para praticar, conteúdo recomendado, e onde ela pode se inspirar na Direção da Marca.',
     premiumOnly: false,
   },
   {
