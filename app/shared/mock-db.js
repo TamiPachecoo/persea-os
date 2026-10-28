@@ -88,7 +88,7 @@ export const ENCOUNTER_DEFS = [
   },
   {
     number: 2, slug: 'e2', name: 'Posicionamento e Metas', phase: 0,
-    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação. Encerramento formal da Persea Essencial.',
+    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação.',
     premiumOnly: false,
   },
   {
