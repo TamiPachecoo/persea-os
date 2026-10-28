@@ -88,7 +88,7 @@ export const ENCOUNTER_DEFS = [
   },
   {
     number: 2, slug: 'e2', name: 'Posicionamento e Metas', phase: 0,
-    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação.',
+    purpose: 'A cliente já respondeu a pesquisa de precificação (O QUE e COMO ela vende hoje) — Nay entra direcionando o encontro para as vendas dela: pitch para praticar, conteúdo recomendado, e onde ela pode se inspirar na Direção da Marca.',
     premiumOnly: false,
   },
   {
@@ -98,7 +98,7 @@ export const ENCOUNTER_DEFS = [
   },
   {
     number: 4, slug: 'e4', name: 'Comunicação e Vendas', phase: 2,
-    purpose: 'A cliente já respondeu a pesquisa de precificação (O QUE e COMO ela vende hoje) — Nay entra direcionando o encontro para as vendas dela: pitch para praticar, conteúdo recomendado, e onde ela pode se inspirar na Direção da Marca.',
+    purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação.',
     premiumOnly: false,
   },
   {
