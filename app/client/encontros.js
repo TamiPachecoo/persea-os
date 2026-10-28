@@ -18,6 +18,7 @@ import { supabase } from '../shared/supabase-client.js';
 import { sessionKeyFor } from '../shared/drive-artifacts-model.js';
 import { renderShell, card, formatDateTime, formatDate, toast, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock } from '../shared/ui.js';
 import { ENCOUNTER_MATERIALS, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
+import { applicableEncounters } from '../shared/journey-skips.js';
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥', online_event: '🌐', photo_review: '📸',
@@ -42,11 +43,17 @@ document.body.innerHTML = renderShell({ role: 'client', program: __clientCtx?.cl
 initClientSwitcher();
 const content = document.getElementById('app-content');
 
-function usageSummary(items) {
+// planned: the E1-E8 encounters her program includes (encounter_defs filtered
+// by tier and skipped phases), so the count reads "1 de 4" for Essencial even
+// before E3/E4 are booked, with the ones still to schedule listed by name.
+function usageSummary(items, planned) {
   const encounters = items.filter((it) => it.type === 'individual_meeting');
   const checkpoints = items.filter((it) => it.type === 'checkpoint');
   const groupMeetings = items.filter((it) => it.type === 'group_meeting');
-  if (!encounters.length && !checkpoints.length && !groupMeetings.length) return '';
+  if (!encounters.length && !checkpoints.length && !groupMeetings.length && !planned.length) return '';
+  const booked = new Set(encounters.filter((it) => it.status !== 'cancelled').map((it) => encounterNumber(it.title)).filter(Boolean));
+  const toSchedule = planned.filter((d) => !booked.has(d.number));
+  const total = Math.max(planned.length, encounters.filter((it) => it.status !== 'cancelled').length);
   const completed = (arr) => arr.filter((it) => it.status === 'completed').length;
   const upcomingCount = checkpoints.filter((it) => it.status === 'upcoming').length;
   return card(`
@@ -54,7 +61,8 @@ function usageSummary(items) {
     <div class="grid sm:grid-cols-3 gap-6">
       <div>
         <p class="text-xs text-white/30 mb-1">Encontros Individuais</p>
-        <p class="text-2xl font-serif">${completed(encounters)} <span class="text-sm text-white/30">de ${encounters.length}</span></p>
+        <p class="text-2xl font-serif">${completed(encounters)} <span class="text-sm text-white/30">de ${total}</span></p>
+        ${toSchedule.length ? `<p class="text-xs mt-1" style="color:var(--muted);">A agendar: ${toSchedule.map((d) => `E${d.number} — ${d.name}`).join(' · ')}</p>` : ''}
       </div>
       ${checkpoints.length ? `
         <div>
@@ -368,12 +376,15 @@ async function render() {
   const items = (itemsRaw || []).filter((it) => MEETING_TYPES.has(it.type));
   const ids = items.map((it) => it.id);
 
-  const [{ data: recordingRows }, { data: driveArtifactsRaw }, { data: looseFiles }, encounterRequestsHtml] = await Promise.all([
+  const usesJourney = !!__clientCtx.client?.program_slug?.startsWith('persea');
+  const [{ data: recordingRows }, { data: driveArtifactsRaw }, { data: looseFiles }, encounterRequestsHtml, { data: encounterDefs }] = await Promise.all([
     ids.length ? supabase.from('meeting_recordings').select('*').in('agenda_item_id', ids) : Promise.resolve({ data: [] }),
     ids.length ? supabase.from('google_meet_drive_artifacts').select('*').in('agenda_item_id', ids) : Promise.resolve({ data: [] }),
     supabase.from('google_meet_drive_artifacts').select('*').eq('client_id', clientId).is('agenda_item_id', null).order('discovered_at', { ascending: false }),
     renderEncounterRequestsCardReal(),
+    usesJourney ? supabase.from('encounter_defs').select('number, name, phase, premium_only').order('number') : Promise.resolve({ data: [] }),
   ]);
+  const planned = applicableEncounters(encounterDefs || [], __clientCtx.client);
   const recordingByAgendaId = new Map((recordingRows || []).map((r) => [r.agenda_item_id, r]));
   encounterMaterials = await loadEncounterMaterials(supabase, clientId);
   const sharedPaths = items.flatMap((it) => (it.shared_files || []).map((f) => f.path));
@@ -400,7 +411,7 @@ async function render() {
     `, 'mb-6') : ''}
     ${encounterRequestsHtml}
     <div id="meeting-request-card" class="mb-8"></div>
-    ${usageSummary(items)}
+    ${usageSummary(items, planned)}
     <p class="text-xs uppercase mb-4" style="color:var(--muted); letter-spacing:.12em;">Próximos</p>
     ${upcoming.length ? upcoming.map((it) => meetingCard(it, recordingByAgendaId, driveArtifacts)).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado no momento — Nay avisa por aqui assim que marcar o próximo.</p>', 'mb-5')}
 
