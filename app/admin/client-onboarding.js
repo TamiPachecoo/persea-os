@@ -1236,12 +1236,107 @@ let editingLineId = null;
 let expandedBlockKey = null;
 let editingPixKey = false;
 
-function financeiroCard(finState, contractId) {
+// Whole-plan editor: rewrites every parcela at once (add, remove, change
+// value / forma / vencimento) through the same renegotiate_payment_plan RPC
+// the single-line edit uses, so the change is a new plan version and the old
+// one stays in the history. Paid lines are shown locked: their seq is kept,
+// which is what lets the RPC carry their payment_allocations forward.
+function openPaymentPlanEditor(contractId, contractValueCents, currentLines) {
+  const rows = (currentLines || []).map((l) => ({
+    seq: l.seq, label: l.label || '', amount_cents: l.amount_cents, method: l.method || 'pix', due_date: l.due_date || '',
+    locked: l.effective_status === 'paid' || l.allocated_cents > 0,
+  }));
+  if (!rows.length) rows.push({ seq: 0, label: 'Entrada', amount_cents: 0, method: 'pix', due_date: '', locked: false });
+  const nextSeq = () => rows.reduce((m, r) => Math.max(m, Number(r.seq) || 0), -1) + 1;
+  const methodOptions = (sel) => Object.entries(FIN_METHOD_LABEL).map(([v, l]) => `<option value="${v}" ${sel === v ? 'selected' : ''}>${l}</option>`).join('');
+  const reais = (c) => (c / 100).toFixed(2);
+
+  const modal = openModal({ title: 'Editar plano de pagamento', bodyHtml: '<div id="plan-editor"></div>' });
+  const root = modal.el.querySelector('#plan-editor');
+
+  function readInputs() {
+    root.querySelectorAll('[data-row]').forEach((el) => {
+      const r = rows[Number(el.dataset.row)];
+      if (!r || r.locked) return;
+      r.label = el.querySelector('[data-f="label"]').value;
+      const v = parseFloat(String(el.querySelector('[data-f="amount"]').value).replace(',', '.'));
+      r.amount_cents = Number.isFinite(v) ? Math.round(v * 100) : 0;
+      r.method = el.querySelector('[data-f="method"]').value;
+      r.due_date = el.querySelector('[data-f="due"]').value;
+    });
+  }
+  function totalHtml() {
+    const total = rows.reduce((s, r) => s + (r.amount_cents || 0), 0);
+    const diff = contractValueCents ? total - contractValueCents : 0;
+    return `
+          <p class="text-sm">Total do plano: <b style="font-weight:500;">${brl(total / 100)}</b></p>
+          ${contractValueCents ? `<p class="text-xs mt-1" style="color:${diff === 0 ? 'var(--muted)' : 'var(--terracotta)'};">Valor do contrato: ${brl(contractValueCents / 100)}${diff === 0 ? ' · confere' : ` · diferença de ${brl(Math.abs(diff) / 100)} ${diff > 0 ? 'a mais' : 'a menos'}`}</p>` : ''}`;
+  }
+  function draw() {
+    root.innerHTML = `
+      <p class="text-xs text-white/40 mb-4">Cada linha é uma cobrança. Parcelamento no cartão (ex.: 12x sem juros) entra como uma linha só, com o valor total: a operadora cobra mês a mês. Parcelas já recebidas ficam travadas.</p>
+      <div class="space-y-3">
+        ${rows.map((r, i) => `
+          <div data-row="${i}" class="p-3" style="border:1px solid var(--line);border-radius:8px;${r.locked ? 'opacity:.6;' : ''}">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="text-xs text-white/40">Parcela ${i + 1}${r.locked ? ' · recebida' : ''}</span>
+              ${r.locked ? '' : `<button type="button" data-remove="${i}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Remover</button>`}
+            </div>
+            <input data-f="label" class="field text-sm mb-2" placeholder="Descrição (ex.: Entrada por transferência)" value="${escHtml(r.label)}" ${r.locked ? 'disabled' : ''} />
+            <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));">
+              <div><label class="text-xs text-white/40 block mb-1">Valor (R$)</label><input data-f="amount" type="number" step="0.01" min="0" class="field text-sm" value="${reais(r.amount_cents)}" ${r.locked ? 'disabled' : ''} /></div>
+              <div><label class="text-xs text-white/40 block mb-1">Forma</label><select data-f="method" class="field text-sm" ${r.locked ? 'disabled' : ''}>${methodOptions(r.method)}</select></div>
+              <div><label class="text-xs text-white/40 block mb-1">Vencimento</label><input data-f="due" type="date" class="field text-sm" value="${r.due_date || ''}" ${r.locked ? 'disabled' : ''} /></div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <button type="button" data-add class="btn-ghost mt-3" style="padding:7px 14px;font-size:12px;">+ Adicionar parcela</button>
+      <div class="mt-5 pt-4 flex items-center justify-between flex-wrap gap-3" style="border-top:1px solid var(--line);">
+        <div data-total>${totalHtml()}</div>
+        <div class="flex gap-2">
+          <button type="button" data-cancel class="btn-text">Cancelar</button>
+          <button type="button" data-save class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar plano</button>
+        </div>
+      </div>`;
+    root.querySelectorAll('[data-f="amount"]').forEach((el) => el.addEventListener('input', () => { readInputs(); root.querySelector('[data-total]').innerHTML = totalHtml(); }));
+    root.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => { readInputs(); rows.splice(Number(b.dataset.remove), 1); draw(); }));
+    root.querySelector('[data-add]').addEventListener('click', () => {
+      readInputs();
+      const last = rows[rows.length - 1];
+      rows.push({ seq: nextSeq(), label: '', amount_cents: 0, method: last?.method || 'pix', due_date: '', locked: false });
+      draw();
+    });
+    root.querySelector('[data-cancel]').addEventListener('click', () => modal.close());
+    root.querySelector('[data-save]').addEventListener('click', async (ev) => {
+      readInputs();
+      if (!rows.length) { toast('Inclua ao menos uma parcela.', { tone: 'error' }); return; }
+      const bad = rows.findIndex((r) => !r.locked && (!(r.amount_cents > 0) || !r.due_date));
+      if (bad !== -1) { toast(`Parcela ${bad + 1}: preencha valor e vencimento.`, { tone: 'error' }); return; }
+      const sum = rows.reduce((s, r) => s + r.amount_cents, 0);
+      if (contractValueCents && sum !== contractValueCents
+        && !confirm(`O total do plano (${brl(sum / 100)}) é diferente do valor do contrato (${brl(contractValueCents / 100)}). Salvar mesmo assim?`)) return;
+      ev.target.disabled = true; ev.target.textContent = 'Salvando…';
+      const newLines = rows.map((r) => ({ seq: r.seq, label: r.label.trim() || null, amount_cents: r.amount_cents, method: r.method, due_date: r.due_date }));
+      const { error } = await supabase.rpc('renegotiate_payment_plan', {
+        p_contract_id: contractId, p_new_lines: newLines, p_reason: 'Plano de pagamento reorganizado',
+      });
+      if (error) { toast(error.message, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = 'Salvar plano'; return; }
+      modal.close();
+      toast('Plano de pagamento atualizado.');
+      render();
+    });
+  }
+  draw();
+}
+
+function financeiroCard(finState, contractId, contract) {
   if (!finState) return '';
   if (finState.error) return card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar o financeiro agora.</p>', 'mb-6');
   const { lines, paymentByLine } = finState;
+  const editPlanBtn = !isAssistant && contractId ? `<button type="button" data-edit-plan="${contractId}" data-contract-value="${contract?.value_cents ?? ''}" class="btn-text" style="font-size:12px;">Editar plano de pagamento</button>` : '';
+  const header = `<div class="flex items-center justify-between flex-wrap gap-2 mb-1"><p class="text-sm text-white/50">Financeiro</p>${editPlanBtn}</div>`;
   if (!lines.length) {
-    return card(`<p class="text-sm text-white/50 mb-1">Financeiro</p><p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>`, 'mb-6');
+    return card(`${header}<p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>`, 'mb-6');
   }
 
   const sections = groupLinesByMethod(lines);
@@ -1256,7 +1351,7 @@ function financeiroCard(finState, contractId) {
   const hasPix = lines.some((l) => l.method === 'pix');
 
   return card(`
-    <p class="text-sm text-white/50 mb-1">Financeiro</p>
+    ${header}
     ${hasPix ? pixKeyBlock(finState) : ''}
     <div class="mt-2">${sectionsHtml}</div>
   `, 'mb-6');
@@ -2214,7 +2309,7 @@ async function render() {
           </div>
         </div>
       `, 'mb-6') : ''}
-      ${financeiroCard(finState, contract?.id)}
+      ${financeiroCard(finState, contract?.id, contract)}
       ${hublaAccessCard(client)}
     `,
     // "Quem é" moved here (both roles — client_profile_summary is
@@ -2370,6 +2465,7 @@ async function render() {
       render();
     });
   });
+  content.querySelector('[data-edit-plan]')?.addEventListener('click', (e) => openPaymentPlanEditor(e.currentTarget.dataset.editPlan, Number(e.currentTarget.dataset.contractValue) || 0, finState.lines));
   content.querySelectorAll('[data-edit-line]').forEach((btn) => {
     btn.addEventListener('click', () => { editingLineId = btn.dataset.editLine; render(); });
   });
