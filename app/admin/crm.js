@@ -267,6 +267,7 @@ function realLeadRow(l) {
         ${l.converted_to_client_id
           ? `<a href="client-onboarding.html?id=${l.converted_to_client_id}" class="text-xs" style="color:var(--gold);padding:6px 4px;">✓ Já é cliente</a>`
           : `<button type="button" data-convert-lead="${l.id}" class="btn-primary" style="padding:6px 12px;font-size:11px;">Converter em Cliente</button>`}
+        <button type="button" data-delete-lead="${l.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button>
       </div>
     </div>
   `;
@@ -374,6 +375,21 @@ async function renderProductionCRM() {
       btn.addEventListener('click', () => {
         const lead = lastLoadedLeads.find((l) => l.id === btn.dataset.convertLead);
         if (lead) openCreateClientModal(lead);
+      });
+    });
+    // Deleting a lead also removes her notes, history and commercial terms
+    // (those tables cascade). A lead already converted keeps her client record.
+    content.querySelectorAll('[data-delete-lead]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const lead = lastLoadedLeads.find((l) => l.id === btn.dataset.deleteLead);
+        if (!lead) return;
+        const note = lead.converted_to_client_id ? ' O cadastro dela em Clientes continua.' : '';
+        if (!confirm(`Excluir o lead ${lead.full_name || '(sem nome)'}? As anotações e o histórico dele também serão apagados. Isto não pode ser desfeito.${note}`)) return;
+        btn.disabled = true;
+        const { error } = await supabase.from('leads').delete().eq('id', lead.id);
+        if (error) { toast('Não foi possível excluir agora.', { tone: 'error' }); btn.disabled = false; return; }
+        toast('Lead excluído.');
+        renderProductionCRM();
       });
     });
   } else {
