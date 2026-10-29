@@ -267,7 +267,7 @@ function realLeadRow(l) {
         ${l.converted_to_client_id
           ? `<a href="client-onboarding.html?id=${l.converted_to_client_id}" class="text-xs" style="color:var(--gold);padding:6px 4px;">✓ Já é cliente</a>`
           : `<button type="button" data-convert-lead="${l.id}" class="btn-primary" style="padding:6px 12px;font-size:11px;">Converter em Cliente</button>`}
-        <button type="button" data-delete-lead="${l.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button>
+        <button type="button" data-delete-lead="${l.id}" class="btn-ghost" style="padding:6px 12px;font-size:11px;color:var(--terracotta);border-color:var(--terracotta);">Excluir lead</button>
       </div>
     </div>
   `;
