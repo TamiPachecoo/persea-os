@@ -164,10 +164,21 @@ function playbookBonusCard() {
   `;
 }
 
+// Her own contract decides how long she has (anual = 12 months, semestral =
+// 6), e.g. an Essencial client with a year of access; the program's standard
+// duration is the fallback when there's no contract yet.
+const CONTRACT_MONTHS = { anual: 12, semestral: 6 };
+async function loadContractMonths(id) {
+  const { data } = await supabase.from('contracts').select('duration, status').eq('client_id', id)
+    .neq('status', 'cancelled').order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return CONTRACT_MONTHS[data?.duration] || null;
+}
+
 async function render() {
-  const [state, nextMeeting] = await Promise.all([
+  const [state, nextMeeting, contractMonths] = await Promise.all([
     loadProgramState(clientId, client),
     loadNextMeeting(clientId),
+    loadContractMonths(clientId),
   ]);
   const { programDef, phases, progress } = state;
 
@@ -187,7 +198,7 @@ async function render() {
       <h1 class="text-3xl font-serif mb-3">${programDef.name}</h1>
       <p class="text-sm text-white/50 max-w-2xl mb-1">${programDef.description}</p>
       ${programDef.supporting_statement ? `<p class="text-xs text-white/30 mb-1">${programDef.supporting_statement}</p>` : ''}
-      <p class="text-xs text-white/30">${programDef.duration_months ? `Duração: ${programDef.duration_months} meses` : 'Duração a confirmar com a Nay'}</p>
+      <p class="text-xs text-white/30">${(contractMonths || programDef.duration_months) ? `Duração: ${contractMonths || programDef.duration_months} meses` : 'Duração a confirmar com a Nay'}</p>
     </div>
 
     ${renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}${p.status === 'skipped' ? ' · não se aplica' : ''}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
