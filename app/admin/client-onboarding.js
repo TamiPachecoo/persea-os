@@ -1105,7 +1105,7 @@ function nfControls(line, nf) {
   if (nf?.invoice?.status === 'issued') {
     return `<span class="badge badge-completed" style="font-size:10px;">NF enviada</span>${nf.invoice.signedUrl ? ` <a ${externalLinkAttrs(nf.invoice.signedUrl)} class="btn-text" style="font-size:11px;">Ver NF</a>` : ''}`;
   }
-  if (isAssistant || !nf?.paymentId) return needsNf && line.effective_status === 'paid' ? '<span class="badge badge-progress" style="font-size:10px;">NF pendente</span>' : '';
+  if (!nf?.paymentId) return needsNf && line.effective_status === 'paid' ? '<span class="badge badge-progress" style="font-size:10px;">NF pendente</span>' : '';
   return `${needsNf ? '<span class="badge badge-progress" style="font-size:10px;">NF pendente</span> ' : ''}<label class="btn-ghost" style="padding:6px 12px;font-size:11px;cursor:pointer;">Enviar nota fiscal<input type="file" accept="application/pdf,image/*,.xml" data-nf-upload="${nf.paymentId}" class="hidden" /></label>`;
 }
 
@@ -1136,6 +1136,10 @@ function pixKeyBlock(finState) {
       <button type="button" data-edit-pix-key class="btn-text">${finState.pixKey ? 'Editar' : 'Cadastrar chave'}</button>
     </div>
   `;
+}
+
+function cardChargedButton(line, contractId) {
+  return `<button type="button" data-card-charged="${line.id}" data-contract-id="${contractId}" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Cobrado no cartão + NF</button>`;
 }
 
 function markReceivedButton(lines, contractId, label = 'Marcar como recebida') {
@@ -1192,7 +1196,9 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
   } else if (opts.compact) {
     // Sub-line inside an expanded method block — no SumUp checkout offered
     // here (that never made sense per-installment), just the manual option.
-    actionHtml = !isAssistant ? markReceivedButton([line], contractId) : '';
+    // Card lines get the charge + nota fiscal step, for the assistant too:
+    // sending the NF is her job.
+    actionHtml = line.method === 'cartao_credito' ? cardChargedButton(line, contractId) : (!isAssistant ? markReceivedButton([line], contractId) : '');
   } else {
     // Transferência / boleto are paid outside SumUp — no checkout link to
     // generate; she just confirms it once the money is in.
@@ -1200,9 +1206,7 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
     actionHtml = `
       <div class="flex items-center gap-2 flex-wrap justify-end">
         ${offersCheckout ? `<button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>` : ''}
-        ${!isAssistant ? (line.method === 'cartao_credito'
-          ? `<button type="button" data-card-charged="${line.id}" data-contract-id="${contractId}" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Cobrado no cartão + NF</button>`
-          : markReceivedButton([line], contractId)) : ''}
+        ${line.method === 'cartao_credito' ? cardChargedButton(line, contractId) : (!isAssistant ? markReceivedButton([line], contractId) : '')}
       </div>`;
   }
   return `
