@@ -70,7 +70,10 @@ function paymentHistoryRow(p) {
           : nfStatus === 'requested'
             ? '<span class="text-xs text-white/20">Solicitada — a equipe vai emitir em breve</span>'
             : isValidHttpUrl(p.invoice?.signedUrl)
-              ? `<a ${externalLinkAttrs(p.invoice.signedUrl)} class="btn-text">Ver Nota Fiscal</a>`
+              ? `<div class="flex items-center gap-3 flex-wrap">
+                  <a ${externalLinkAttrs(p.invoice.signedUrl)} class="btn-text">Ver Nota Fiscal</a>
+                  ${isValidHttpUrl(p.invoice.downloadUrl) ? `<a href="${p.invoice.downloadUrl}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Baixar nota fiscal</a>` : ''}
+                </div>`
               : ''}
       </div>
     </div>
@@ -100,8 +103,14 @@ async function render() {
   // reasoning as client/images.js/homework.js.
   await Promise.all((payments || []).map(async (p) => {
     if (!p.invoice?.file_url) return;
-    const { data } = await supabase.storage.from('client-uploads').createSignedUrl(p.invoice.file_url, 3600);
+    // Two links: one opens the file, the other makes the browser save it
+    // under its original name (Storage's download option).
+    const [{ data }, { data: dl }] = await Promise.all([
+      supabase.storage.from('client-uploads').createSignedUrl(p.invoice.file_url, 3600),
+      supabase.storage.from('client-uploads').createSignedUrl(p.invoice.file_url, 3600, { download: p.invoice.file_name || true }),
+    ]);
     if (data?.signedUrl) p.invoice.signedUrl = data.signedUrl;
+    if (dl?.signedUrl) p.invoice.downloadUrl = dl.signedUrl;
   }));
 
   const { aReceberCents, emAtrasoCents } = summarizeObligations(lines || []);
