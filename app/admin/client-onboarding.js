@@ -1027,9 +1027,28 @@ async function loadFinanceiro(contract) {
   (payments || []).forEach((p) => {
     if (p.intended_payment_line_id && !paymentByLine.has(p.intended_payment_line_id)) paymentByLine.set(p.intended_payment_line_id, p);
   });
+  // Nota fiscal per line: the confirmed payment that covers it (allocations)
+  // and that payment's payment_invoices row, with a signed link to the file.
+  const nfByLine = new Map();
+  const lineIds = (lines || []).map((l) => l.id);
+  if (lineIds.length) {
+    const { data: allocs } = await supabase.from('payment_allocations')
+      .select('payment_line_id, payment_id, payments!inner(status)').eq('payments.status', 'paid').in('payment_line_id', lineIds);
+    const paymentIds = [...new Set((allocs || []).map((a) => a.payment_id))];
+    const { data: invoices } = paymentIds.length ? await supabase.from('payment_invoices').select('*').in('payment_id', paymentIds) : { data: [] };
+    const invoiceByPayment = new Map((invoices || []).map((i) => [i.payment_id, i]));
+    await Promise.all((invoices || []).filter((i) => i.file_url).map(async (i) => {
+      const { data } = await supabase.storage.from(NF_BUCKET).createSignedUrl(i.file_url, 3600);
+      if (data?.signedUrl) i.signedUrl = data.signedUrl;
+    }));
+    (allocs || []).forEach((a) => {
+      if (!nfByLine.has(a.payment_line_id)) nfByLine.set(a.payment_line_id, { paymentId: a.payment_id, invoice: invoiceByPayment.get(a.payment_id) || null });
+    });
+  }
   return {
     lines: (lines || []).slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)),
     paymentByLine,
+    nfByLine,
     pixKey: tenantPix?.pix_key || null,
     pixQrUrl: tenantPix?.pix_qr_code_url || null,
   };
@@ -1062,7 +1081,32 @@ async function markLinesReceived(linesToMark, contractId, paidDate) {
     linesToMark.map((l) => ({ payment_id: payment.id, payment_line_id: l.id, amount_cents: l.amount_cents })),
   );
   if (allocErr) return { error: allocErr.message };
+  return { ok: true, paymentId: payment.id };
+}
+
+// Nota fiscal: every card sale needs one. The file goes to the private
+// client-uploads bucket under <client>/invoices/ and payment_invoices marks
+// it issued — the same record the client's own Financeiro already reads to
+// show "Ver Nota Fiscal".
+const NF_BUCKET = 'client-uploads';
+async function attachInvoice(paymentId, file) {
+  if (file.size > 8 * 1024 * 1024) return { error: 'O arquivo passa de 8 MB.' };
+  const path = `${clientId}/invoices/${paymentId}-${Date.now()}-${file.name.replace(/[^\w.\-]+/g, '_')}`;
+  const { error: upErr } = await supabase.storage.from(NF_BUCKET).upload(path, file);
+  if (upErr) return { error: 'Não foi possível enviar o arquivo agora.' };
+  const { error } = await supabase.from('payment_invoices').upsert({
+    payment_id: paymentId, status: 'issued', issued_at: new Date().toISOString(), file_name: file.name, file_url: path,
+  });
+  if (error) return { error: 'O arquivo foi enviado, mas a nota não foi registrada. Tente de novo.' };
   return { ok: true };
+}
+function nfControls(line, nf) {
+  const needsNf = line.method === 'cartao_credito';
+  if (nf?.invoice?.status === 'issued') {
+    return `<span class="badge badge-completed" style="font-size:10px;">NF enviada</span>${nf.invoice.signedUrl ? ` <a ${externalLinkAttrs(nf.invoice.signedUrl)} class="btn-text" style="font-size:11px;">Ver NF</a>` : ''}`;
+  }
+  if (isAssistant || !nf?.paymentId) return needsNf && line.effective_status === 'paid' ? '<span class="badge badge-progress" style="font-size:10px;">NF pendente</span>' : '';
+  return `${needsNf ? '<span class="badge badge-progress" style="font-size:10px;">NF pendente</span> ' : ''}<label class="btn-ghost" style="padding:6px 12px;font-size:11px;cursor:pointer;">Enviar nota fiscal<input type="file" accept="application/pdf,image/*,.xml" data-nf-upload="${nf.paymentId}" class="hidden" /></label>`;
 }
 
 function pixKeyBlock(finState) {
@@ -1134,8 +1178,9 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
   // from a payment row alone.
   const activePayment = !isPaid && payment && payment.status === 'pending' && isValidHttpUrl(payment.sumup_link_url) ? payment : null;
   let actionHtml;
+  const nf = currentNfByLine.get(line.id);
   if (isPaid) {
-    actionHtml = `<span class="badge badge-completed">Pago${payment?.status === 'paid' && payment.paid_at ? ` em ${formatDate(payment.paid_at)}` : ''}</span>`;
+    actionHtml = `<div class="flex items-center gap-2 flex-wrap justify-end"><span class="badge badge-completed">Pago${payment?.status === 'paid' && payment.paid_at ? ` em ${formatDate(payment.paid_at)}` : ''}</span>${nfControls(line, nf)}</div>`;
   } else if (activePayment) {
     actionHtml = `
       <div class="flex items-center gap-2 flex-wrap justify-end">
@@ -1155,7 +1200,9 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
     actionHtml = `
       <div class="flex items-center gap-2 flex-wrap justify-end">
         ${offersCheckout ? `<button type="button" data-generate-checkout="${line.id}" class="btn-primary" style="padding:8px 16px;font-size:12px;">${line.method === 'pix' ? 'Gerar PIX' : 'Gerar link de pagamento'}</button>` : ''}
-        ${!isAssistant ? markReceivedButton([line], contractId) : ''}
+        ${!isAssistant ? (line.method === 'cartao_credito'
+          ? `<button type="button" data-card-charged="${line.id}" data-contract-id="${contractId}" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Cobrado no cartão + NF</button>`
+          : markReceivedButton([line], contractId)) : ''}
       </div>`;
   }
   return `
@@ -1233,6 +1280,7 @@ function methodBlockRow(section, paymentByLine, contractId) {
 // for: a Pix parcela where the client actually paid a different amount
 // than originally planned — Nay corrects the record to match reality.
 let editingLineId = null;
+let currentNfByLine = new Map();
 let expandedBlockKey = null;
 let editingPixKey = false;
 
@@ -1333,6 +1381,7 @@ function financeiroCard(finState, contractId, contract) {
   if (!finState) return '';
   if (finState.error) return card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar o financeiro agora.</p>', 'mb-6');
   const { lines, paymentByLine } = finState;
+  currentNfByLine = finState.nfByLine || new Map();
   const editPlanBtn = !isAssistant && contractId ? `<button type="button" data-edit-plan="${contractId}" data-contract-value="${contract?.value_cents ?? ''}" class="btn-text" style="font-size:12px;">Editar plano de pagamento</button>` : '';
   const header = `<div class="flex items-center justify-between flex-wrap gap-2 mb-1"><p class="text-sm text-white/50">Financeiro</p>${editPlanBtn}</div>`;
   if (!lines.length) {
@@ -2463,6 +2512,58 @@ async function render() {
       if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); btn.disabled = false; btn.textContent = original; return; }
       toast(data.status === 'paid' ? 'Pagamento confirmado — obrigado!' : `Ainda não confirmado (status: ${data.status}).`);
       render();
+    });
+  });
+  content.querySelectorAll('[data-nf-upload]').forEach((input) => {
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const res = await attachInvoice(input.dataset.nfUpload, file);
+      if (res.error) { toast(res.error, { tone: 'error' }); e.target.value = ''; return; }
+      toast('Nota fiscal enviada — disponível no Financeiro da cliente.');
+      render();
+    });
+  });
+  // A card charge that went through (SumUp link, maquininha or the client's
+  // card on file): record it as received on the day it was charged and
+  // attach its nota fiscal in the same step, since every card sale needs one.
+  content.querySelectorAll('[data-card-charged]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const line = finState.lines.find((l) => l.id === btn.dataset.cardCharged);
+      if (!line) return;
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const modal = openModal({
+        title: 'Cobrança no cartão + nota fiscal',
+        bodyHtml: `
+          <p class="text-sm mb-1">${brl(line.amount_cents / 100)} <span class="text-white/40">· Cartão de crédito</span></p>
+          <p class="text-xs text-white/40 mb-4">${escHtml(line.label || 'Parcela')}</p>
+          <label class="text-xs text-white/50 block mb-1" for="card-date">Data em que foi cobrado no cartão</label>
+          <input type="date" id="card-date" class="field text-sm mb-4" value="${today}" max="${today}" />
+          <label class="text-xs text-white/50 block mb-1" for="card-nf">Nota fiscal (PDF, imagem ou XML)</label>
+          <input type="file" id="card-nf" accept="application/pdf,image/*,.xml" class="field text-sm mb-1" />
+          <p class="text-xs text-white/30 mb-5">Toda venda no cartão precisa de nota fiscal. Se ainda não tiver o arquivo, registre a cobrança agora e envie a nota depois pelo botão "Enviar nota fiscal".</p>
+          <div class="flex justify-end gap-2">
+            <button type="button" id="card-cancel" class="btn-text">Cancelar</button>
+            <button type="button" id="card-confirm" class="btn-primary" style="padding:8px 16px;font-size:12px;">Registrar</button>
+          </div>`,
+      });
+      modal.el.querySelector('#card-cancel').addEventListener('click', () => modal.close());
+      modal.el.querySelector('#card-confirm').addEventListener('click', async (ev) => {
+        const paidDate = modal.el.querySelector('#card-date').value;
+        const file = modal.el.querySelector('#card-nf').files[0];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate) || paidDate > today) { toast('Escolha a data da cobrança.', { tone: 'error' }); return; }
+        ev.target.disabled = true; ev.target.textContent = 'Salvando…';
+        const res = await markLinesReceived([line], btn.dataset.contractId, paidDate);
+        if (res.error) { toast(res.error, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = 'Registrar'; return; }
+        if (file) {
+          const nfRes = await attachInvoice(res.paymentId, file);
+          if (nfRes.error) { modal.close(); toast(`Cobrança registrada. ${nfRes.error}`, { tone: 'error' }); render(); return; }
+        }
+        modal.close();
+        toast(file ? 'Cobrança registrada com a nota fiscal.' : 'Cobrança registrada. Falta enviar a nota fiscal.');
+        render();
+      });
     });
   });
   content.querySelector('[data-edit-plan]')?.addEventListener('click', (e) => openPaymentPlanEditor(e.currentTarget.dataset.editPlan, Number(e.currentTarget.dataset.contractValue) || 0, finState.lines));

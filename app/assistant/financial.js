@@ -34,10 +34,13 @@ async function loadRealRows() {
   return rows;
 }
 
+// Card sales always need a nota fiscal: a SumUp checkout carries the line it
+// was for (intended_line), a charge recorded by hand carries its own method.
+const paidOnCard = (p) => p.method === 'cartao_credito' || p.intended_line?.method === 'cartao_credito';
+
 function realPaymentRow(p) {
   const nfStatus = p.invoice?.status || 'not_requested';
-  const soldOnCard = p.intended_line?.method === 'cartao_credito';
-  const owed = nfStatus !== 'issued' && (nfStatus === 'requested' || (p.status === 'paid' && soldOnCard));
+  const canUpload = nfStatus !== 'issued' && (nfStatus === 'requested' || p.status === 'paid');
   const fileOk = isValidHttpUrl(p.invoice?.signedUrl);
   return `
     <div class="flex items-center justify-between flex-wrap gap-3 py-3 border-b border-white/5 last:border-0">
@@ -51,10 +54,10 @@ function realPaymentRow(p) {
       <div class="flex items-center gap-3">
         <span class="badge ${NF_BADGE_CLASS[nfStatus]}">${NF_STATUS_LABEL[nfStatus]}</span>
         ${fileOk ? `<a ${externalLinkAttrs(p.invoice.signedUrl)} class="btn-text">Ver arquivo</a>` : ''}
-        ${owed ? `
+        ${canUpload ? `
           <label class="btn-ghost" style="padding:7px 14px;font-size:12px;cursor:pointer;">
             Enviar Nota Fiscal
-            <input type="file" accept="application/pdf,image/*" data-nf-upload="${p.client_id}:${p.id}" class="hidden" />
+            <input type="file" accept="application/pdf,image/*,.xml" data-nf-upload="${p.client_id}:${p.id}" class="hidden" />
           </label>
         ` : ''}
       </div>
@@ -65,7 +68,7 @@ function realPaymentRow(p) {
 async function renderReal() {
   const rows = await loadRealRows();
   const nfStatusOf = (p) => p.invoice?.status || 'not_requested';
-  const owed = rows.filter((p) => nfStatusOf(p) !== 'issued' && (nfStatusOf(p) === 'requested' || (p.status === 'paid' && p.intended_line?.method === 'cartao_credito')));
+  const owed = rows.filter((p) => nfStatusOf(p) !== 'issued' && (nfStatusOf(p) === 'requested' || (p.status === 'paid' && paidOnCard(p))));
   const rest = rows.filter((p) => !owed.includes(p));
 
   content.innerHTML = `
