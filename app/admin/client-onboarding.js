@@ -2322,11 +2322,12 @@ async function render() {
     financeiro: `
       ${!partyInfo?.submitted ? registrationLinkCard({ tokenActive, latestToken }) : ''}
       ${partyInfo?.submitted ? partyInfoSummary(partyInfo) : ''}
-      ${partyInfo?.submitted ? card(`
+      ${card(`
         <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
             <p class="text-sm text-white/50 mb-1">Contrato</p>
             <p class="text-xs" style="color:var(--muted);">${contract ? (CONTRACT_STATUS_LABEL[contract.status] || contract.status) : 'Nenhum contrato preparado ainda.'}</p>
+            ${!partyInfo?.submitted && !['signed', 'completed'].includes(contract?.status) ? '<p class="text-xs mt-1" style="color:var(--muted);">Pode preparar e editar o contrato antes do cadastro: os dados dela entram sozinhos quando ela preencher.</p>' : ''}
             ${contract?.body_text && !contract.autentique_document_id && !['signed', 'completed'].includes(contract.status)
               ? (contract.admin_reviewed_at
                 ? `<p class="text-xs mt-1" style="color:var(--gold);">✓ Revisado pela Nay em ${formatDateTime(contract.admin_reviewed_at)} — pode enviar para assinatura</p>`
@@ -2337,7 +2338,7 @@ async function render() {
             ? `<button id="prepare-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Preparar contrato</button>`
             : `<a href="contract.html?client_id=${clientId}" class="btn-ghost">${['signed', 'completed'].includes(contract.status) ? 'Ver contrato' : 'Acompanhar contrato'}</a>`}
         </div>
-      `, 'mb-6') : ''}
+      `, 'mb-6')}
       ${status.nextAction === 'send_invite' ? card(`
         <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
