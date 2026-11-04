@@ -437,6 +437,13 @@ async function render() {
   const isAdminUser = profile.role === 'admin';
   const reviewed = !!contract.admin_reviewed_at;
   const canSend = isAdminUser || reviewed;
+  // The contract can be prepared and edited before the cadastro; its
+  // CONTRATANTE paragraph and signature name are filled in by the database
+  // the moment she submits it (fill_contract_from_cadastro). Sending waits
+  // for that, so nothing goes out with [CPF]/[ENDEREÇO] placeholders.
+  const cadastroDone = !!partyInfo?.submitted;
+  const cadastroBanner = cadastroDone || sentViaAutentique ? ''
+    : `<div class="mb-4 px-4 py-3 rounded-xl text-sm text-white/70" style="border:1px dashed var(--line);background:rgba(255,255,255,.03);">A cliente ainda não preencheu o cadastro. Pode editar e revisar o contrato normalmente: quando ela enviar, o parágrafo <b>CONTRATANTE</b> e o nome na assinatura são preenchidos sozinhos com os dados dela, sem mexer no resto do texto.</div>`;
   const reviewBanner = sentViaAutentique ? '' : reviewed
     ? `<div class="mb-4 px-4 py-3 rounded-xl text-sm" style="border:1px solid rgba(220,199,168,.35);background:rgba(220,199,168,.08);color:var(--gold);">✓ Revisado pela Nay em ${new Date(contract.admin_reviewed_at).toLocaleString('pt-BR')} — pronto para enviar para assinatura.</div>`
     : isAdminUser
@@ -448,6 +455,7 @@ async function render() {
   // download-and-reupload path (any other e-sign platform, or if the
   // Autentique secret isn't configured yet).
   content.innerHTML = header + card(`
+    ${cadastroBanner}
     ${reviewBanner}
     <p class="text-sm text-white/50 mb-1">${isAdminUser ? 'Revise o texto antes de enviar para assinatura.' : 'Texto do contrato'}</p>
     <p class="text-xs text-white/20 mb-3">${isAdminUser ? 'O texto abaixo é totalmente editável — para casos específicos (dispensar multa de cancelamento, ajustar uma cláusula para esta cliente, etc.), edite diretamente aqui. Depois de enviado para assinatura, o texto já enviado não pode mais ser alterado por aqui.' : 'Somente leitura: os ajustes no texto são feitos pela Nay.'}</p>
@@ -468,6 +476,9 @@ async function render() {
            ${isDemo ? '' : '<button id="get-sign-link" class="btn-ghost">Ela não achou o e-mail? Pegar link de assinatura</button>'}
          </div>
          <div id="sign-link-box" class="mt-4"></div>`
+      : !cadastroDone
+        ? `<button class="btn-primary" disabled style="opacity:.45;cursor:not-allowed;">Enviar para Assinatura via Autentique</button>
+           <p class="text-xs mt-2" style="color:var(--terracotta);">Libera quando a cliente preencher o cadastro: os dados dela entram no contrato automaticamente.</p>`
       : canSend
         ? `<button id="${isDemo ? 'send-autentique-demo' : 'send-autentique'}" class="btn-primary">${isDemo ? 'Simular Envio para Assinatura' : 'Enviar para Assinatura via Autentique'}</button>`
         : `<button class="btn-primary" disabled style="opacity:.45;cursor:not-allowed;">Enviar para Assinatura via Autentique</button>
