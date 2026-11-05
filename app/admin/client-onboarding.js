@@ -1045,10 +1045,20 @@ async function loadFinanceiro(contract) {
       if (!nfByLine.has(a.payment_line_id)) nfByLine.set(a.payment_line_id, { paymentId: a.payment_id, invoice: invoiceByPayment.get(a.payment_id) || null });
     });
   }
+  // Recebimentos: what she actually paid (amount, day, method), each with
+  // the installments it was deducted from — often not what the contract
+  // schedule said (two months at once, a different amount, an early Pix).
+  const paid = (payments || []).filter((p) => p.status === 'paid');
+  const { data: recAllocs } = paid.length
+    ? await supabase.from('payment_allocations').select('payment_id, amount_cents, contract_payment_lines(label, method, due_date)').in('payment_id', paid.map((p) => p.id))
+    : { data: [] };
+  const receipts = paid.map((p) => ({ ...p, allocations: (recAllocs || []).filter((a) => a.payment_id === p.id) }))
+    .sort((a, b) => new Date(b.paid_at || b.created_at) - new Date(a.paid_at || a.created_at));
   return {
     lines: (lines || []).slice().sort((a, b) => new Date(a.due_date) - new Date(b.due_date)),
     paymentByLine,
     nfByLine,
+    receipts,
     pixKey: tenantPix?.pix_key || null,
     pixQrUrl: tenantPix?.pix_qr_code_url || null,
   };
@@ -1381,13 +1391,119 @@ function openPaymentPlanEditor(contractId, contractValueCents, currentLines) {
   draw();
 }
 
+// Spreads a received amount over the open installments: same payment
+// method first, then any other, oldest due date first; never more than a
+// line still owes. Returns the split plus whatever didn't fit.
+function planAllocation(lines, amountCents, method) {
+  const open = lines.filter((l) => l.outstanding_cents > 0)
+    .sort((a, b) => (a.method === method ? 0 : 1) - (b.method === method ? 0 : 1) || new Date(a.due_date) - new Date(b.due_date));
+  let left = amountCents;
+  const parts = [];
+  for (const l of open) {
+    if (left <= 0) break;
+    const take = Math.min(left, l.outstanding_cents);
+    parts.push({ line: l, amount_cents: take });
+    left -= take;
+  }
+  return { parts, leftover: left };
+}
+
+function receiptsBlock(receipts) {
+  if (!receipts.length) return '';
+  return `
+    <div class="mt-5 pt-4" style="border-top:1px solid var(--line);">
+      <p class="text-xs uppercase mb-2" style="color:var(--muted);letter-spacing:.12em;">Recebimentos</p>
+      ${receipts.map((r) => `
+        <div class="flex items-start justify-between gap-3 flex-wrap py-2 border-b border-white/5 last:border-0">
+          <div class="min-w-0">
+            <p class="text-sm">${brl(r.amount_cents / 100)} · ${FIN_METHOD_LABEL[r.method] || 'A combinar'} · ${r.paid_at ? formatDate(r.paid_at) : '—'}</p>
+            <p class="text-xs text-white/30 mt-0.5">${r.allocations.length ? r.allocations.map((a) => `${brl(a.amount_cents / 100)} em ${escHtml(a.contract_payment_lines?.label || 'parcela')}`).join(' · ') : 'Sem parcela vinculada'}${r.internal_note ? ` · ${escHtml(r.internal_note)}` : ''}</p>
+          </div>
+          ${!isAssistant ? `<button type="button" data-delete-receipt="${r.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+// "Registrar recebimento": record what actually came in — any amount, any
+// day, any method — and deduct it from the open installments (see
+// planAllocation). One payments row plus one payment_allocations row per
+// installment it covers, the same ledger "Marcar como recebida" writes, so
+// Já pago / Falta pagar / Em atraso and the reports follow it everywhere.
+function openReceiptModal(contractId, lines) {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const totalOpen = lines.reduce((s, l) => s + Math.max(0, l.outstanding_cents), 0);
+  const modal = openModal({
+    title: 'Registrar recebimento',
+    bodyHtml: `
+      <p class="text-xs text-white/40 mb-4">O que ela realmente pagou, mesmo que seja diferente do contrato. O valor é abatido das parcelas em aberto (primeiro as da mesma forma de pagamento, das mais antigas para as mais novas). Em aberto: ${brl(totalOpen / 100)}.</p>
+      <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+        <div><label class="text-xs text-white/50 block mb-1" for="rc-amount">Valor recebido (R$)</label><input id="rc-amount" type="number" step="0.01" min="0" class="field text-sm" /></div>
+        <div><label class="text-xs text-white/50 block mb-1" for="rc-date">Data do pagamento</label><input id="rc-date" type="date" class="field text-sm" value="${today}" max="${today}" /></div>
+        <div><label class="text-xs text-white/50 block mb-1" for="rc-method">Forma</label><select id="rc-method" class="field text-sm">${Object.entries(FIN_METHOD_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+      </div>
+      <label class="text-xs text-white/50 block mt-3 mb-1" for="rc-note">Observação (opcional)</label>
+      <input id="rc-note" class="field text-sm" placeholder="Ex.: adiantou as parcelas de setembro e outubro" />
+      <label class="text-xs text-white/50 block mt-3 mb-1" for="rc-nf">Nota fiscal (opcional; obrigatória para cartão)</label>
+      <input id="rc-nf" type="file" accept="application/pdf,image/*,.xml" class="field text-sm" />
+      <div id="rc-preview" class="mt-4 text-xs text-white/60"></div>
+      <div class="flex justify-end gap-2 mt-5">
+        <button type="button" id="rc-cancel" class="btn-text">Cancelar</button>
+        <button type="button" id="rc-save" class="btn-primary" style="padding:8px 16px;font-size:12px;">Registrar</button>
+      </div>`,
+  });
+  const $ = (id) => modal.el.querySelector(`#${id}`);
+  const cents = () => Math.round((parseFloat(String($('rc-amount').value).replace(',', '.')) || 0) * 100);
+  const preview = () => {
+    const amount = cents();
+    if (!amount) { $('rc-preview').innerHTML = ''; return; }
+    const { parts, leftover } = planAllocation(lines, amount, $('rc-method').value);
+    $('rc-preview').innerHTML = `<p class="mb-1" style="color:var(--muted);">Será abatido de:</p>${parts.map((p) => `<p>· ${brl(p.amount_cents / 100)} em ${escHtml(p.line.label || FIN_METHOD_LABEL[p.line.method] || 'parcela')} (venc. ${formatDate(p.line.due_date)})${p.amount_cents < p.line.outstanding_cents ? ' · parcial' : ''}</p>`).join('')}${leftover > 0 ? `<p class="mt-1" style="color:var(--terracotta);">${brl(leftover / 100)} a mais do que o saldo em aberto. Ajuste o valor ou o plano de pagamento.</p>` : ''}`;
+  };
+  $('rc-amount').addEventListener('input', preview);
+  $('rc-method').addEventListener('change', preview);
+  $('rc-cancel').addEventListener('click', () => modal.close());
+  $('rc-save').addEventListener('click', async (ev) => {
+    const amount = cents();
+    const paidDate = $('rc-date').value;
+    const method = $('rc-method').value;
+    if (!(amount > 0)) { toast('Informe o valor recebido.', { tone: 'error' }); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate) || paidDate > today) { toast('Escolha a data do pagamento.', { tone: 'error' }); return; }
+    const { parts, leftover } = planAllocation(lines, amount, method);
+    if (leftover > 0) { toast('O valor passa do saldo em aberto. Ajuste o valor ou o plano de pagamento.', { tone: 'error' }); return; }
+    ev.target.disabled = true; ev.target.textContent = 'Salvando…';
+    const note = $('rc-note').value.trim();
+    const { data: payment, error: payErr } = await supabase.from('payments').insert({
+      client_id: clientId, contract_id: contractId, amount_cents: amount, status: 'paid', method,
+      paid_at: `${paidDate}T12:00:00-03:00`, due_date: parts[0]?.line.due_date || paidDate, currency: 'BRL', provider: 'manual',
+      description: 'Recebimento registrado manualmente', internal_note: note || null,
+    }).select('id').single();
+    if (payErr) { toast(payErr.message, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = 'Registrar'; return; }
+    const { error: allocErr } = await supabase.from('payment_allocations').insert(parts.map((p) => ({ payment_id: payment.id, payment_line_id: p.line.id, amount_cents: p.amount_cents })));
+    if (allocErr) {
+      await supabase.from('payments').delete().eq('id', payment.id);
+      toast(allocErr.message, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = 'Registrar'; return;
+    }
+    const file = $('rc-nf').files[0];
+    if (file) {
+      const nfRes = await attachInvoice(payment.id, file);
+      if (nfRes.error) { modal.close(); toast(`Recebimento registrado. ${nfRes.error}`, { tone: 'error' }); render(); return; }
+    }
+    modal.close();
+    toast(`Recebimento de ${brl(amount / 100)} registrado.`);
+    render();
+  });
+}
+
 function financeiroCard(finState, contractId, contract) {
   if (!finState) return '';
   if (finState.error) return card('<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar o financeiro agora.</p>', 'mb-6');
   const { lines, paymentByLine } = finState;
   currentNfByLine = finState.nfByLine || new Map();
   const editPlanBtn = !isAssistant && contractId ? `<button type="button" data-edit-plan="${contractId}" data-contract-value="${contract?.value_cents ?? ''}" class="btn-text" style="font-size:12px;">Editar plano de pagamento</button>` : '';
-  const header = `<div class="flex items-center justify-between flex-wrap gap-2 mb-1"><p class="text-sm text-white/50">Financeiro</p>${editPlanBtn}</div>`;
+  const receiveBtn = contractId && lines.some((l) => l.outstanding_cents > 0)
+    ? `<button type="button" data-register-receipt="${contractId}" class="btn-primary" style="padding:7px 14px;font-size:12px;">Registrar recebimento</button>` : '';
+  const header = `<div class="flex items-center justify-between flex-wrap gap-2 mb-1"><p class="text-sm text-white/50">Financeiro</p><div class="flex items-center gap-3 flex-wrap">${receiveBtn}${editPlanBtn}</div></div>`;
   if (!lines.length) {
     return card(`${header}<p class="text-sm mt-3" style="color:var(--muted);">Nenhuma parcela do plano de pagamento assinado ainda.</p>`, 'mb-6');
   }
@@ -1407,6 +1523,7 @@ function financeiroCard(finState, contractId, contract) {
     ${header}
     ${hasPix ? pixKeyBlock(finState) : ''}
     <div class="mt-2">${sectionsHtml}</div>
+    ${receiptsBlock(finState.receipts || [])}
   `, 'mb-6');
 }
 
@@ -2569,6 +2686,17 @@ async function render() {
         toast(file ? 'Cobrança registrada com a nota fiscal.' : 'Cobrança registrada. Falta enviar a nota fiscal.');
         render();
       });
+    });
+  });
+  content.querySelector('[data-register-receipt]')?.addEventListener('click', (e) => openReceiptModal(e.currentTarget.dataset.registerReceipt, finState.lines));
+  content.querySelectorAll('[data-delete-receipt]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const r = (finState.receipts || []).find((x) => x.id === btn.dataset.deleteReceipt);
+      if (!r || !confirm(`Excluir o recebimento de ${brl(r.amount_cents / 100)} de ${r.paid_at ? formatDate(r.paid_at) : '—'}? As parcelas que ele cobria voltam a ficar em aberto.`)) return;
+      const { error } = await supabase.from('payments').delete().eq('id', r.id);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      toast('Recebimento excluído.');
+      render();
     });
   });
   content.querySelector('[data-edit-plan]')?.addEventListener('click', (e) => openPaymentPlanEditor(e.currentTarget.dataset.editPlan, Number(e.currentTarget.dataset.contractValue) || 0, finState.lines));
