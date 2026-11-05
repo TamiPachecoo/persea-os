@@ -541,20 +541,24 @@ function renderRealFilters() {
 // site_stats() returns the period's aggregates in one call. Single gold
 // hue throughout: every chart here is one series (or a ranked list), and
 // the numbers are always written next to the bars.
-const SITE_LABEL = { naymurta: 'naymurta.com', experience: 'Site do evento' };
+const SITE_LABEL = { naymurta: 'naymurta.com', experience: 'Site do evento e páginas da aula' };
 const DEVICE_LABEL = { mobile: 'Celular', desktop: 'Computador', tablet: 'Tablet' };
 // 'instagram' / 'facebook' / 'linkedin' are also set by site-track when the
 // visit opens inside those apps, so the bio link can stay plain naymurta.com.
 const SOURCE_LABEL = { direto: 'Direto (link, WhatsApp, digitado)', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', 'google.com': 'Google' };
-const PAGE_LABEL = { '/': 'Página inicial', '/index.html': 'Página inicial', '/resultados/': 'Formulário de resultados', '/aplicacao/': 'Aplicação da mentoria', '/preparacao.html': 'Formulário de preparação' };
+const PAGE_LABEL = { '/': 'Página inicial', '/index.html': 'Página inicial', '/resultados/': 'Formulário de resultados', '/aplicacao/': 'Aplicação da mentoria', '/preparacao.html': 'Formulário de preparação', '/roteiro-stories': 'Roteiro de Stories (QR da aula)' };
 const siteFilters = { days: 30 };
 let siteData = null;
 
 async function loadSiteStats() {
   const to = new Date(); to.setDate(to.getDate() + 1); to.setHours(0, 0, 0, 0);
   const from = new Date(to); from.setDate(from.getDate() - siteFilters.days);
-  const { data, error } = await supabase.rpc('site_stats', { p_from: from.toISOString(), p_to: to.toISOString() });
-  return error ? { error: error.message } : { ...data, from, to };
+  const [{ data, error }, { count: roteiroLeads }] = await Promise.all([
+    supabase.rpc('site_stats', { p_from: from.toISOString(), p_to: to.toISOString() }),
+    // New leads created by the roteiro's form (roteiro-lead writes this note).
+    supabase.from('leads').select('id', { count: 'exact', head: true }).ilike('notes', '%Roteiro de Stories%').gte('created_at', from.toISOString()).lt('created_at', to.toISOString()),
+  ]);
+  return error ? { error: error.message } : { ...data, from, to, roteiroLeads: roteiroLeads || 0 };
 }
 
 const escH = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -605,8 +609,22 @@ function renderSite() {
   const devices = (siteData.devices || []).map((r) => ({ label: DEVICE_LABEL[r.device] || r.device, n: r.visits })).sort((a, b) => b.n - a.n);
   const sources = (siteData.sources || []).map((r) => ({ label: SOURCE_LABEL[r.source] || r.source, n: r.n }));
   const pages = (siteData.pages || []).map((r) => ({ label: PAGE_LABEL[r.path] || r.path, sub: SITE_LABEL[r.site], n: r.n }));
+  // Roteiro de Stories (app.naymurta.com/roteiro-stories, QR code of the class).
+  const rClicks = (label) => (siteData.clicks || []).filter((c) => c.label === label).reduce((n, c) => n + c.n, 0);
+  const rViews = (siteData.pages || []).filter((p) => p.path === '/roteiro-stories').reduce((n, p) => n + p.n, 0);
+  const rGenerated = rClicks('Roteiro: gerou no ChatGPT') + rClicks('Roteiro: gerou no Claude') + rClicks('Roteiro: copiou o comando');
+  const rStat = (n, label) => `<div><p class="text-2xl font-serif" style="color:var(--gold);">${n}</p><p class="text-xs text-white/40">${label}</p></div>`;
+  const roteiro = card(`
+    <div class="flex items-baseline justify-between gap-3 flex-wrap mb-4"><p class="text-sm text-white/50">Roteiro de Stories <span class="text-xs text-white/30">(QR code da aula de Visibilidade)</span></p><a href="crm.html" class="text-xs" style="color:var(--gold);">Ver leads no CRM →</a></div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      ${rStat(rViews, 'acessos à página')}
+      ${rStat(rClicks('Roteiro: deixou os dados'), 'deixaram nome, WhatsApp e Instagram')}
+      ${rStat(siteData.roteiroLeads || 0, (siteData.roteiroLeads === 1 ? 'novo lead' : 'novos leads') + ' no CRM')}
+      ${rStat(rGenerated, 'roteiros gerados')}
+    </div>`, 'mb-4');
   return head + `
     <div class="grid sm:grid-cols-2 gap-4 mb-4">${tile('naymurta')}${tile('experience')}</div>
+    ${roteiro}
     ${card(`<p class="text-sm text-white/50 mb-4">Visitas por dia <span class="text-xs text-white/30">(os dois sites; passe o mouse numa barra para ver o dia)</span></p>${dailyChart(siteData)}`, 'mb-4')}
     ${card(`<p class="text-sm text-white/50 mb-4">Onde clicaram</p>${barList(clicks, 'Nenhum clique ainda neste período.')}`, 'mb-4')}
     <div class="grid md:grid-cols-3 gap-4">

@@ -1,7 +1,7 @@
 // Public tracker endpoint for Nay's sites: one page view or one click per
 // call, written to site_events (staff-only). The site comes from the
-// Origin header, so only naymurta.com and perseaexperience.naymurta.com
-// can write; the device type is worked out here from the user agent and
+// Origin header, so only naymurta.com, perseaexperience.naymurta.com and
+// the event pages on app.naymurta.com can write; the device type is worked out here from the user agent and
 // the user agent itself is not stored. No IP, no cookie. Visits opened
 // inside the Instagram/Facebook apps are tagged with that source.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -10,6 +10,8 @@ const SITES: Record<string, string> = {
   "https://naymurta.com": "naymurta",
   "https://www.naymurta.com": "naymurta",
   "https://perseaexperience.naymurta.com": "experience",
+  // Event pages served by the app (Roteiro de Stories, QR code of the class).
+  "https://app.naymurta.com": "experience",
 };
 function corsHeadersFor(req: Request) {
   const origin = req.headers.get("Origin") || "";

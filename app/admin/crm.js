@@ -248,6 +248,7 @@ function applicationBlock(l) {
     </details>`;
 }
 
+const escL = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function realLeadRow(l) {
   const waHref = l.phone ? `https://wa.me/55${l.phone.replace(/\D/g, '')}` : null;
   return `
@@ -255,7 +256,9 @@ function realLeadRow(l) {
       <div class="min-w-0" style="flex:1 1 220px;">
         <p class="font-medium break-words">${l.full_name || '(sem nome)'}</p>
         <p class="text-xs text-white/30 break-words">${l.email || 'sem e-mail'} · ${l.phone || 'sem telefone'}</p>
+        ${l.instagram ? `<p class="text-xs mt-0.5"><a href="https://instagram.com/${encodeURIComponent(l.instagram.replace(/^@+/, ''))}" target="_blank" rel="noopener" style="color:var(--gold);">@${escL(l.instagram.replace(/^@+/, ''))}</a></p>` : ''}
         <p class="text-xs text-white/20 mt-1">${LEAD_SOURCE_LABEL[l.source] || l.source} · recebido ${formatDate(l.created_at)}</p>
+        ${l.notes ? `<p class="text-xs text-white/40 mt-1" style="white-space:pre-line;">${escL(l.notes)}</p>` : ''}
         ${applicationBlock(l)}
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">

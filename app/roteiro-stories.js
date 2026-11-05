@@ -1,7 +1,24 @@
 // Oficina prática (PERSEA Experience · Visibilidade): the participant answers the
 // diagnosis, and we hand the full strategist prompt, with her answers filled in,
 // to ChatGPT or Claude. Answers stay only on her phone (localStorage).
+// Before the questions she leaves name, WhatsApp and Instagram (roteiro-lead
+// Edge Function → a new lead in the CRM). Views and button clicks go to
+// site-track, so Relatórios → Site counts accesses to this page.
 const KEY = 'persea-roteiro-stories';
+const WHO_KEY = 'persea-roteiro-who';
+const FN = 'https://bletlyuptkppacjcbcvw.supabase.co/functions/v1/';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_37D7JJzhUDCUwtHtYA4gjw_jiSXDMxu';
+const post = (fn, body) => fetch(FN + fn, {
+  method: 'POST', keepalive: true,
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`, apikey: SUPABASE_PUBLISHABLE_KEY },
+  body: JSON.stringify(body),
+});
+let sessionId = '';
+try { sessionId = sessionStorage.getItem('persea-sid') || ''; if (!sessionId) { sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('persea-sid', sessionId); } } catch (e) { sessionId = Math.random().toString(36).slice(2); }
+const track = (kind, label) => {
+  const q = new URLSearchParams(location.search);
+  post('site-track', { kind, label, path: '/roteiro-stories', referrer: document.referrer, utm_source: q.get('utm_source') || '', session_id: sessionId }).catch(() => {});
+};
 const IDS = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7'];
 const QUESTIONS = [
   'Qual é a minha profissão ou área de atuação?',
@@ -97,6 +114,7 @@ async function copy(text) {
 async function send(target) {
   const p = buildPrompt();
   if (!p) return;
+  track('click', target === 'gpt' ? 'Roteiro: gerou no ChatGPT' : target === 'claude' ? 'Roteiro: gerou no Claude' : 'Roteiro: copiou o comando');
   const ok = await copy(p);
   $('done').classList.add('on');
   if (!target) { toast(ok ? 'Comando copiado.' : 'Não foi possível copiar automaticamente.'); return; }
@@ -110,5 +128,34 @@ $('gpt').addEventListener('click', () => send('gpt'));
 $('claude').addEventListener('click', () => send('claude'));
 $('copy').addEventListener('click', () => send(null));
 
+// Gate: name, WhatsApp and Instagram before the roteiro opens (once per phone).
+const who = { get() { try { return JSON.parse(localStorage.getItem(WHO_KEY) || 'null'); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(WHO_KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } } };
+const openRoteiro = () => { $('gate').classList.add('hidden'); $('roteiro').classList.remove('hidden'); };
+
+$('gate').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('name').value.trim(), phone = $('phone').value.trim(), instagram = $('insta').value.trim();
+  const err = $('gateErr'); err.classList.remove('on'); err.textContent = '';
+  const fail = (msg, el) => { err.textContent = msg; err.classList.add('on'); el.focus(); };
+  if (name.length < 2) return fail('Escreva o seu nome.', $('name'));
+  if (phone.replace(/\D/g, '').length < 10) return fail('Informe o seu WhatsApp com DDD.', $('phone'));
+  if (!instagram.replace(/^@+/, '')) return fail('Informe o seu Instagram.', $('insta'));
+  const btn = $('gateGo'); btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    const res = await post('roteiro-lead', { name, phone, instagram, website: $('website').value });
+    if (res.status === 400) {
+      const data = await res.json().catch(() => ({}));
+      btn.disabled = false; btn.textContent = 'Acessar o roteiro';
+      return fail(data.error || 'Confira os dados.', $('name'));
+    }
+  } catch (e2) { /* offline or blocked: never stand between her and the roteiro */ }
+  who.set({ name, phone, instagram });
+  track('click', 'Roteiro: deixou os dados');
+  openRoteiro();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+track('view');
+if (who.get()) openRoteiro();
 load();
 paint();

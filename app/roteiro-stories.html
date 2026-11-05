@@ -29,6 +29,12 @@
   .q label b{display:block;font-family:var(--sans);font-weight:400;font-size:11px;letter-spacing:.32em;color:var(--beige);margin-bottom:8px}
   .q small{display:block;margin-top:6px;font-size:13px;line-height:1.5;color:var(--faint)}
   textarea{width:100%;min-height:84px;margin-top:14px;padding:14px 16px;border:1px solid var(--line);border-radius:2px;background:rgba(5,12,9,.45);color:var(--cream);font:inherit;font-size:16px;line-height:1.5;resize:vertical}
+  .in{width:100%;margin-top:10px;padding:14px 16px;border:1px solid var(--line);border-radius:2px;background:rgba(5,12,9,.45);color:var(--cream);font:inherit;font-size:16px}
+  .in:focus{outline:none;border-color:var(--beige);background:rgba(5,12,9,.65)}
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  .gate label{display:block;margin-top:20px;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--beige)}
+  .gate small{display:block;margin-top:14px;font-size:12px;line-height:1.6;color:var(--faint)}
+  .hidden{display:none!important}
   textarea:focus{outline:none;border-color:var(--beige);background:rgba(5,12,9,.65)}
   .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
   .chips button{padding:10px 14px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--cream);font:inherit;font-size:14px;cursor:pointer}
@@ -53,6 +59,21 @@
   <div class="brand">PERSEA Experience · Oficina prática</div>
   <h1>Seu roteiro de <em>6 stories</em></h1>
   <p class="lead">Responda às 8 perguntas com o máximo de detalhe. No final, a inteligência artificial transforma suas respostas em uma sequência de stories pronta para publicar, com enquete e mensagem de direct.</p>
+  <form class="gate" id="gate" novalidate>
+    <p class="lead" style="margin-top:22px;">Antes de começar, deixe seus dados para a equipe da Nay acompanhar o seu roteiro.</p>
+    <label for="name">Nome</label>
+    <input class="in" id="name" autocomplete="name" required>
+    <label for="phone">WhatsApp com DDD</label>
+    <input class="in" id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(31) 99999-9999" required>
+    <label for="insta">Instagram</label>
+    <input class="in" id="insta" autocapitalize="off" autocorrect="off" placeholder="@seuperfil" required>
+    <input class="hp" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <p class="err" id="gateErr"></p>
+    <button class="btn" type="submit" id="gateGo" style="margin-top:28px;">Acessar o roteiro</button>
+    <small>Seus dados ficam só com a equipe da Nay. As respostas do roteiro ficam apenas no seu celular.</small>
+  </form>
+
+  <div id="roteiro" class="hidden">
   <div class="steps" id="steps"></div>
 
   <form id="form" novalidate>
@@ -81,6 +102,7 @@
   <div class="done" id="done">
     <h2>Seu comando foi copiado.</h2>
     <p>Se a conversa abrir sem o texto, toque no campo de mensagem, escolha <b>Colar</b> e envie. A IA vai devolver os 6 stories e a mensagem de direct. Se ela pedir para deixar alguma resposta mais específica, responda por lá mesmo.</p>
+  </div>
   </div>
   <footer>Nay Murta · PERSEA</footer>
 </div>
