@@ -17,6 +17,7 @@
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, signOut } from '../shared/supabase-auth.js';
 import { mergeContractTemplate } from '../shared/contract-merge.js';
+import { splitInstallments } from '../shared/installments.js';
 import { renderContractPrintHtml } from '../shared/contract-print.js';
 import { card, toast, functionErrorMessage, renderShell, emailTypoSuggestion } from '../shared/ui.js';
 // Reusing the same program/duration/payment-method vocabulary the rest of
@@ -140,7 +141,7 @@ function paymentLineRowHtml(line = {}) {
         ${PAYMENT_METHODS.map((m) => `<option value="${m}" ${line.method === m ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}
       </select>
       <input type="date" class="field text-sm" style="width:150px;" data-line-date value="${line.due_date || ''}" />
-      <input type="text" class="field text-sm" style="flex:1; min-width:120px;" data-line-label placeholder="Nota (opcional — ex.: Entrada)" value="${line.label || ''}" />
+      <input type="text" class="field text-sm" style="flex:1; min-width:120px;" data-line-label placeholder="${line.method === 'permuta' ? 'O que será trocado (ex.: sessão de botox)' : 'Nota (opcional — ex.: Entrada)'}" value="${line.label || ''}" />
       <button type="button" class="btn-text" data-remove-line>Remover</button>
     </div>
   `;
@@ -173,8 +174,23 @@ function renderCommercialTermsForm(contract, isRevision) {
           <p class="text-xs text-white/40">Pagamentos Acordados</p>
           <p class="text-xs text-white/30">Total: <strong id="lines-total" style="color:var(--gold);">R$ 0,00</strong></p>
         </div>
+        <div class="p-3 mb-3" style="border:1px solid var(--line);border-radius:8px;">
+          <p class="text-xs text-white/50 mb-2">Dividir em parcelas iguais <span class="text-white/30">— gera as parcelas abaixo; depois ajuste a forma de pagamento de cada uma, se precisar.</span></p>
+          <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));">
+            <div><label class="text-xs text-white/40 block mb-1">Valor total (R$)</label><input type="number" min="0" step="0.01" class="field text-sm" id="split-total" /></div>
+            <div><label class="text-xs text-white/40 block mb-1">Nº de parcelas</label><input type="number" min="1" max="60" step="1" class="field text-sm" id="split-count" value="12" /></div>
+            <div><label class="text-xs text-white/40 block mb-1">1º vencimento</label><input type="date" class="field text-sm" id="split-first" /></div>
+            <div><label class="text-xs text-white/40 block mb-1">Forma</label><select class="field text-sm" id="split-method">${PAYMENT_METHODS.map((m) => `<option value="${m}" ${m === 'pix' ? 'selected' : ''}>${PAYMENT_METHOD_LABEL[m]}</option>`).join('')}</select></div>
+          </div>
+          <p class="text-xs text-white/40 mt-2" id="split-preview"></p>
+          <button type="button" id="split-go" class="btn-ghost mt-2" style="padding:7px 14px;font-size:12px;">Gerar parcelas</button>
+        </div>
         <div id="payment-lines">${lines.map((l) => paymentLineRowHtml(l)).join('')}</div>
-        <button type="button" id="add-line" class="btn-text mt-1">+ Adicionar Pagamento</button>
+        <div class="flex gap-4 flex-wrap mt-1">
+          <button type="button" id="add-line" class="btn-text">+ Adicionar Pagamento</button>
+          <button type="button" id="add-permuta" class="btn-text">+ Adicionar permuta</button>
+        </div>
+        <p class="text-xs text-white/30 mt-1">Permuta: parte do valor paga com um serviço ou produto. Descreva o que será trocado na nota; a data pode ficar em branco se for combinada depois.</p>
       </div>
       <div class="flex justify-end gap-3 pt-2">
         ${isRevision ? `<button type="button" id="cancel-terms-edit" class="btn-ghost">Cancelar</button>` : ''}
@@ -206,6 +222,54 @@ function wireCommercialTermsForm(contract, { partyInfo, client, isRevision } = {
   form.querySelector('#add-line').addEventListener('click', () => {
     linesEl.insertAdjacentHTML('beforeend', paymentLineRowHtml());
   });
+  form.querySelector('#add-permuta').addEventListener('click', () => {
+    dropEmptyRows();
+    linesEl.insertAdjacentHTML('beforeend', paymentLineRowHtml({ method: 'permuta' }));
+    linesEl.lastElementChild.querySelector('[data-line-amount]').focus();
+  });
+  // Rows nobody filled in yet (the blank first row) make way for generated ones.
+  function dropEmptyRows() {
+    [...linesEl.querySelectorAll('.payment-line-row')].forEach((row) => {
+      if (!(parseFloat(row.querySelector('[data-line-amount]').value) > 0)) row.remove();
+    });
+  }
+  // "Dividir em parcelas iguais": total + number of installments → one row
+  // per installment, monthly from the first due date, each one editable.
+  const splitVals = () => ({
+    total: Math.round((parseFloat(form.querySelector('#split-total').value) || 0) * 100),
+    count: parseInt(form.querySelector('#split-count').value, 10) || 0,
+    first: form.querySelector('#split-first').value,
+    method: form.querySelector('#split-method').value,
+  });
+  const splitPreview = () => {
+    const v = splitVals();
+    const el = form.querySelector('#split-preview');
+    if (!(v.total > 0) || !(v.count >= 1)) { el.textContent = ''; return; }
+    const parts = splitInstallments(v.total, v.count);
+    const brlC = (c) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    el.textContent = parts[0].amount_cents === parts[parts.length - 1].amount_cents
+      ? `${v.count}x de ${brlC(parts[0].amount_cents)}`
+      : `${v.count}x de cerca de ${brlC(parts[parts.length - 1].amount_cents)} (os centavos que sobram vão nas primeiras parcelas)`;
+  };
+  ['#split-total', '#split-count'].forEach((id) => form.querySelector(id).addEventListener('input', splitPreview));
+  form.querySelector('#split-go').addEventListener('click', () => {
+    const v = splitVals();
+    if (!(v.total > 0)) { toast('Informe o valor total a dividir.', { tone: 'error' }); return; }
+    if (!(v.count >= 1 && v.count <= 60)) { toast('Informe o número de parcelas (1 a 60).', { tone: 'error' }); return; }
+    // Named by position only ("Parcela 2/12"): the method can still change per row.
+    const parts = splitInstallments(v.total, v.count, { firstDue: v.first, method: v.method, label: 'Parcela' })
+      .map((p) => (v.method === 'permuta' ? { ...p, label: '' } : p)); // a permuta's note says what is traded
+    dropEmptyRows();
+    linesEl.insertAdjacentHTML('beforeend', parts.map((p) => paymentLineRowHtml(p)).join(''));
+    recalcTotal();
+    toast(`${parts.length} ${parts.length === 1 ? 'parcela gerada' : 'parcelas geradas'}. Ajuste a forma de cada uma, se precisar.`);
+  });
+  // Placeholder of the note follows the method (permuta asks what is traded).
+  linesEl.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-line-method]')) return;
+    const note = e.target.closest('.payment-line-row').querySelector('[data-line-label]');
+    note.placeholder = e.target.value === 'permuta' ? 'O que será trocado (ex.: sessão de botox)' : 'Nota (opcional — ex.: Entrada)';
+  });
   form.querySelector('[name="program"]').addEventListener('change', (e) => {
     form.querySelector('[name="duration"]').disabled = e.target.value !== 'persea';
   });
@@ -226,6 +290,7 @@ function wireCommercialTermsForm(contract, { partyInfo, client, isRevision } = {
       label: row.querySelector('[data-line-label]').value.trim() || null,
     })).filter((l) => l.amount_cents > 0);
     if (!lines.length) { toast('Adicione ao menos um pagamento com valor.', { tone: 'error' }); return; }
+    if (lines.some((l) => l.method === 'permuta' && !l.label)) { toast('Descreva na nota o que será trocado em cada permuta.', { tone: 'error' }); return; }
     const valueCents = lines.reduce((s, l) => s + l.amount_cents, 0);
 
     const { error: cErr } = await supabase.from('contracts').update({

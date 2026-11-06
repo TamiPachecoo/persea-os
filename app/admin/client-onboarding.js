@@ -28,6 +28,7 @@ import {
 } from '../shared/ui.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { loadActiveObligations } from '../shared/financial-model.js';
+import { splitInstallments } from '../shared/installments.js';
 import { loadValueAssessment } from '../shared/value-analysis-model.js';
 import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS, fmtBRL } from '../shared/value-analysis-schema.js';
 import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArchetypeResults } from '../shared/archetype-model.js';
@@ -1356,15 +1357,29 @@ function openPaymentPlanEditor(contractId, contractValueCents, currentLines) {
               <span class="text-xs text-white/40">Parcela ${i + 1}${r.locked ? ' · recebida' : ''}</span>
               ${r.locked ? '' : `<button type="button" data-remove="${i}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Remover</button>`}
             </div>
-            <input data-f="label" class="field text-sm mb-2" placeholder="Descrição (ex.: Entrada por transferência)" value="${escHtml(r.label)}" ${r.locked ? 'disabled' : ''} />
+            <input data-f="label" class="field text-sm mb-2" placeholder="${r.method === 'permuta' ? 'O que será trocado (ex.: sessão de botox)' : 'Descrição (ex.: Entrada por transferência)'}" value="${escHtml(r.label)}" ${r.locked ? 'disabled' : ''} />
             <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));">
               <div><label class="text-xs text-white/40 block mb-1">Valor (R$)</label><input data-f="amount" type="number" step="0.01" min="0" class="field text-sm" value="${reais(r.amount_cents)}" ${r.locked ? 'disabled' : ''} /></div>
               <div><label class="text-xs text-white/40 block mb-1">Forma</label><select data-f="method" class="field text-sm" ${r.locked ? 'disabled' : ''}>${methodOptions(r.method)}</select></div>
-              <div><label class="text-xs text-white/40 block mb-1">Vencimento</label><input data-f="due" type="date" class="field text-sm" value="${r.due_date || ''}" ${r.locked ? 'disabled' : ''} /></div>
+              <div><label class="text-xs text-white/40 block mb-1">${r.method === 'permuta' ? 'Usar até (opcional)' : 'Vencimento'}</label><input data-f="due" type="date" class="field text-sm" value="${r.due_date || ''}" ${r.locked ? 'disabled' : ''} /></div>
             </div>
           </div>`).join('')}
       </div>
-      <button type="button" data-add class="btn-ghost mt-3" style="padding:7px 14px;font-size:12px;">+ Adicionar parcela</button>
+      <div class="flex gap-2 flex-wrap mt-3">
+        <button type="button" data-add class="btn-ghost" style="padding:7px 14px;font-size:12px;">+ Adicionar parcela</button>
+        <button type="button" data-add-permuta class="btn-ghost" style="padding:7px 14px;font-size:12px;">+ Adicionar permuta</button>
+      </div>
+      <details class="mt-4 p-3" style="border:1px solid var(--line);border-radius:8px;" ${rows.some((r) => !r.locked && r.amount_cents > 0) ? '' : 'open'}>
+        <summary class="text-xs text-white/60" style="cursor:pointer;">Dividir em parcelas iguais</summary>
+        <p class="text-xs text-white/30 mt-2 mb-2">Substitui as parcelas ainda não recebidas por N parcelas iguais, mensais. Depois ajuste a forma de pagamento de cada uma, se precisar.</p>
+        <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));">
+          <div><label class="text-xs text-white/40 block mb-1">Valor total (R$)</label><input data-split="total" type="number" step="0.01" min="0" class="field text-sm" value="${contractValueCents ? reais(Math.max(0, contractValueCents - rows.filter((r) => r.locked).reduce((t, r) => t + r.amount_cents, 0))) : ''}" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Nº de parcelas</label><input data-split="count" type="number" min="1" max="60" step="1" class="field text-sm" value="12" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">1º vencimento</label><input data-split="first" type="date" class="field text-sm" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Forma</label><select data-split="method" class="field text-sm">${methodOptions('pix')}</select></div>
+        </div>
+        <button type="button" data-split-go class="btn-ghost mt-2" style="padding:7px 14px;font-size:12px;">Gerar parcelas</button>
+      </details>
       <div class="mt-5 pt-4 flex items-center justify-between flex-wrap gap-3" style="border-top:1px solid var(--line);">
         <div data-total>${totalHtml()}</div>
         <div class="flex gap-2">
@@ -1380,17 +1395,44 @@ function openPaymentPlanEditor(contractId, contractValueCents, currentLines) {
       rows.push({ seq: nextSeq(), label: '', amount_cents: 0, method: last?.method || 'pix', due_date: '', locked: false });
       draw();
     });
+    root.querySelector('[data-add-permuta]').addEventListener('click', () => {
+      readInputs();
+      rows.push({ seq: nextSeq(), label: '', amount_cents: 0, method: 'permuta', due_date: '', locked: false });
+      draw();
+    });
+    root.querySelectorAll('[data-f="method"]').forEach((el) => el.addEventListener('change', () => { readInputs(); draw(); }));
+    root.querySelector('[data-split-go]').addEventListener('click', () => {
+      readInputs();
+      const val = (k) => root.querySelector(`[data-split="${k}"]`).value;
+      const total = Math.round((parseFloat(String(val('total')).replace(',', '.')) || 0) * 100);
+      const count = parseInt(val('count'), 10) || 0;
+      if (!(total > 0)) { toast('Informe o valor total a dividir.', { tone: 'error' }); return; }
+      if (!(count >= 1 && count <= 60)) { toast('Informe o número de parcelas (1 a 60).', { tone: 'error' }); return; }
+      const method = val('method');
+      if (method !== 'permuta' && !val('first')) { toast('Informe a data do 1º vencimento.', { tone: 'error' }); return; }
+      // Named by position only ("Parcela 2/12"): the method can still change per row.
+      const parts = splitInstallments(total, count, { firstDue: val('first'), method, label: 'Parcela' })
+        .map((p) => (method === 'permuta' ? { ...p, label: '' } : p)); // a permuta's note says what is traded
+      const kept = rows.filter((r) => r.locked);
+      rows.length = 0;
+      rows.push(...kept);
+      parts.forEach((p) => rows.push({ seq: nextSeq(), label: p.label, amount_cents: p.amount_cents, method: p.method, due_date: p.due_date, locked: false }));
+      draw();
+      toast(`${parts.length} ${parts.length === 1 ? 'parcela gerada' : 'parcelas geradas'}. Confira e salve o plano.`);
+    });
     root.querySelector('[data-cancel]').addEventListener('click', () => modal.close());
     root.querySelector('[data-save]').addEventListener('click', async (ev) => {
       readInputs();
       if (!rows.length) { toast('Inclua ao menos uma parcela.', { tone: 'error' }); return; }
-      const bad = rows.findIndex((r) => !r.locked && (!(r.amount_cents > 0) || !r.due_date));
+      const bad = rows.findIndex((r) => !r.locked && (!(r.amount_cents > 0) || (!r.due_date && r.method !== 'permuta')));
       if (bad !== -1) { toast(`Parcela ${bad + 1}: preencha valor e vencimento.`, { tone: 'error' }); return; }
+      const noWhat = rows.findIndex((r) => !r.locked && r.method === 'permuta' && !r.label.trim());
+      if (noWhat !== -1) { toast(`Parcela ${noWhat + 1}: descreva o que será trocado na permuta.`, { tone: 'error' }); return; }
       const sum = rows.reduce((s, r) => s + r.amount_cents, 0);
       if (contractValueCents && sum !== contractValueCents
         && !confirm(`O total do plano (${brl(sum / 100)}) é diferente do valor do contrato (${brl(contractValueCents / 100)}). Salvar mesmo assim?`)) return;
       ev.target.disabled = true; ev.target.textContent = 'Salvando…';
-      const newLines = rows.map((r) => ({ seq: r.seq, label: r.label.trim() || null, amount_cents: r.amount_cents, method: r.method, due_date: r.due_date }));
+      const newLines = rows.map((r) => ({ seq: r.seq, label: r.label.trim() || null, amount_cents: r.amount_cents, method: r.method, due_date: r.due_date || '' }));
       const { error } = await supabase.rpc('renegotiate_payment_plan', {
         p_contract_id: contractId, p_new_lines: newLines, p_reason: 'Plano de pagamento reorganizado',
       });
