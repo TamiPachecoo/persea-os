@@ -21,6 +21,11 @@ function renderBlock(block) {
   }
 
   if (trimmed === 'MENTORIA PERSEA') return `<h1>${escapeHtml(trimmed)}</h1>`;
+  // C3 layout (Nov 2026): title lines and the Quadro's section headings are
+  // short, single-line and all caps ("QUADRO DE DADOS DA CONTRATAÇÃO",
+  // "A. DADOS DA CONTRATANTE", "BÔNUS INCLUÍDOS NA CONTRATAÇÃO").
+  if (trimmed === 'PERSEA | FATOR N' || trimmed === 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS') return `<h1>${escapeHtml(trimmed)}</h1>`;
+  if (!trimmed.includes('\n') && trimmed.length <= 60 && !/[a-zà-ú]/.test(trimmed) && /[A-Z]/.test(trimmed)) return `<p class="section-label">${escapeHtml(trimmed)}</p>`;
   if (HEADER_LINES.has(trimmed)) return `<p class="section-label">${escapeHtml(trimmed)}</p>`;
   if (CLAUSE_RE.test(trimmed)) return `<h2>${escapeHtml(trimmed)}</h2>`;
 

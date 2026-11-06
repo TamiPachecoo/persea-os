@@ -117,7 +117,8 @@ function assembleCondicoesPagamento(contract) {
       // Permuta: paid with a service or product, used when agreed — no
       // installment dates in the clause. The line's note says what it is.
       if (g.method === 'permuta') {
-        const what = g.label ? ` (${g.label.replace(/^permuta\s*[—–-]\s*/i, '')})` : '';
+        const desc = (g.label || '').replace(/^permuta\s*[—–-]?\s*/i, '').replace(/\s*\(?\d+\/\d+\)?\s*$/, '').trim();
+        const what = desc ? ` (${desc})` : '';
         return g.count === 1
           ? `${amount} em permuta${what}, com data de utilização a combinar`
           : `${g.count} (${g.count === 3 ? 'três' : g.count}) permutas de ${amount} cada${what}, com datas de utilização a combinar`;

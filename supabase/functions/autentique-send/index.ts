@@ -112,9 +112,12 @@ async function bodyTextToPdf(bodyText: string): Promise<Uint8Array> {
   for (const block of blocks) {
     const trimmed = block.trim();
     if (!trimmed) continue;
-    if (trimmed === "MENTORIA PERSEA") {
+    // C3 layout (Nov 2026): title lines centered; the Quadro's short, all-caps
+    // section headings ("A. DADOS DA CONTRATANTE") in bold like the clauses.
+    const isCapsHeading = !trimmed.includes("\n") && trimmed.length <= 60 && !/[a-zà-ú]/.test(trimmed) && /[A-Z]/.test(trimmed);
+    if (trimmed === "MENTORIA PERSEA" || trimmed === "PERSEA | FATOR N" || trimmed === "CONTRATO DE PRESTAÇÃO DE SERVIÇOS") {
       drawParagraph(trimmed, { bold: true, center: true, size: 14 });
-    } else if (/^CLÁUSULA\b/i.test(trimmed) || trimmed === "DAS PARTES" || trimmed === "TESTEMUNHAS:") {
+    } else if (/^CLÁUSULA\b/i.test(trimmed) || isCapsHeading) {
       drawParagraph(trimmed, { bold: true });
     } else if (/_{3,}/.test(trimmed)) {
       for (const line of trimmed.split("\n")) drawParagraph(line);

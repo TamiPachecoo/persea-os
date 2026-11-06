@@ -1,0 +1,194 @@
+PERSEA | FATOR N
+
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+
+Pelo presente instrumento particular, de um lado:
+
+CONTRATADA: FATOR N, inscrita no CNPJ sob nº 45.397.917/0001-00, com sede na Rua Paracatu, nº 1154, sala 510, Santo Agostinho, Belo Horizonte/MG, neste ato representada por Nayana Murta Martins.
+
+E, de outro lado:
+
+CONTRATANTE: conforme identificação e dados informados no Quadro de Dados da Contratação, parte integrante deste instrumento.
+
+As partes celebram o presente Contrato de Prestação de Serviços, mediante as condições abaixo.
+
+QUADRO DE DADOS DA CONTRATAÇÃO
+
+A. DADOS DA CONTRATANTE
+
+{{CONTRATANTE_LINE}}
+
+B. PROGRAMA E CONDIÇÕES COMERCIAIS
+
+Programa/Produto: MENTORIA PERSEA
+
+Modalidade: Grupo
+
+Duração: 1 (um) ano
+
+Investimento total: {{VALOR_TOTAL}}
+
+Forma de pagamento e vencimentos: {{CONDICOES_PAGAMENTO}}.
+
+Prazo de desistência contratual: 30 (trinta) dias, contados do início da vigência.
+
+C. ENTREGAS CONTRATADAS
+
+01. Encontros individuais: 04 (quatro) encontros individuais de orientação estratégica com Nayana Murta, conforme programação definida entre as partes.
+
+02. Projeto de Imagem Pessoal: 01 (um) projeto individual de imagem pessoal, desenvolvido por especialista da equipe FATOR N, considerando os objetivos profissionais, características e direcionamento estratégico da CONTRATANTE.
+
+03. Guia de Produções: 01 (um) guia personalizado contendo 60 (sessenta) opções de produções, construídas ao longo do contrato, de acordo com as orientações e estratégias definidas para a CONTRATANTE.
+
+04. Kit de Marca para Projeção Digital: 01 (um) conjunto de materiais personalizados para fortalecer a comunicação e a apresentação da marca pessoal da CONTRATANTE nos ambientes digitais, incluindo 12 templates editáveis para Instagram ou revisão do perfil do Linkedin.
+
+D. ACESSOS E PARTICIPAÇÃO
+
+01. Encontros em grupo: 02 (dois) encontros em grupo por mês, durante o período de vigência do contrato, totalizando até 24 (vinte e quatro) encontros, com orientação estratégica, troca de experiências e esclarecimento de dúvidas.
+
+02. Plataforma PERSEA: acesso à plataforma de aulas PERSEA pelo período de 12 (doze) meses, incluindo os conteúdos gravados e materiais disponibilizados no ambiente, conforme a estrutura vigente do programa.
+
+BÔNUS INCLUÍDOS NA CONTRATAÇÃO
+
+03. Ingresso PERSEA Experience: 01 (um) ingresso para participação na segunda edição do PERSEA Experience, prevista para 2027, conforme data, local e programação a serem divulgados pela CONTRATADA.
+
+04. Gravação de Podcast: 01 (uma) participação em gravação de podcast em Belo Horizonte/MG, prevista para 2027, em data e formato a serem definidos e comunicados pela CONTRATADA.
+
+CLÁUSULA 1 | Do objeto
+
+1.1. O presente contrato tem como objeto a prestação dos serviços correspondentes ao programa, produto ou modalidade identificados no Quadro de Dados da Contratação.
+
+1.2. Os serviços, entregas, encontros, materiais, acessos e demais condições contratadas são exclusivamente aqueles descritos no Quadro de Dados da Contratação.
+
+1.3. Qualquer serviço ou entrega não previsto no Quadro será considerado adicional e dependerá de contratação específica.
+
+CLÁUSULA 2 | Da vigência e do acesso
+
+2.1. O prazo de vigência será aquele indicado no Quadro de Dados da Contratação, iniciando-se na data da assinatura deste instrumento ou do pagamento da primeira parcela, o que ocorrer primeiro.
+
+2.2. Os acessos às plataformas, materiais, grupos e demais ambientes digitais estarão disponíveis durante o período indicado no Quadro, respeitadas as condições específicas de cada modalidade.
+
+2.3. O encerramento do prazo contratado implica o término dos acessos e das entregas vinculadas ao programa, salvo disposição expressa em contrário no Quadro.
+
+2.4. A ausência de participação ou a não utilização dos serviços disponibilizados pela CONTRATADA não gera, por si só, direito à extensão do prazo ou à restituição de valores.
+
+CLÁUSULA 3 | Das obrigações da CONTRATANTE
+
+3.1. São obrigações da CONTRATANTE:
+
+a) Fornecer informações verdadeiras e necessárias à execução dos serviços;
+
+b) Realizar os pagamentos nos prazos estabelecidos;
+
+c) Participar dos encontros e atividades, quando previstos na modalidade contratada;
+
+d) Respeitar os direitos autorais, a propriedade intelectual e a confidencialidade dos materiais e informações disponibilizados;
+
+e) Manter seus dados de contato atualizados;
+
+f) Agir com respeito perante a CONTRATADA, seus profissionais e demais participantes.
+
+CLÁUSULA 4 | Das obrigações da CONTRATADA
+
+4.1. São obrigações da CONTRATADA:
+
+a) Executar os serviços e disponibilizar as entregas previstas no Quadro de Dados da Contratação;
+
+b) Disponibilizar os acessos e materiais contratados, conforme as condições estabelecidas;
+
+c) Conduzir os encontros e atividades previstos, observando o calendário e as condições de cada modalidade;
+
+d) Informar eventuais alterações necessárias na programação;
+
+e) Preservar a confidencialidade das informações recebidas da CONTRATANTE;
+
+f) Atuar com diligência e boa-fé na execução dos serviços.
+
+CLÁUSULA 5 | Dos encontros e atividades
+
+5.1. Os encontros individuais ou coletivos serão realizados conforme a quantidade, frequência, duração e formato definidos no Quadro de Dados da Contratação.
+
+5.2. A ausência da CONTRATANTE em encontro previamente agendado, sem comunicação dentro do prazo informado pela CONTRATADA, não gera obrigação automática de reposição ou extensão do contrato.
+
+5.3. Caso a CONTRATADA precise cancelar ou alterar um encontro, deverá comunicar a CONTRATANTE e providenciar o reagendamento ou uma alternativa equivalente.
+
+5.4. A participação em encontros coletivos pressupõe respeito à privacidade e à confidencialidade das informações compartilhadas pelos demais participantes.
+
+CLÁUSULA 6 | Do investimento e das condições de pagamento
+
+6.1. Pela prestação dos serviços, a CONTRATANTE pagará à CONTRATADA o valor total indicado no Quadro de Dados da Contratação, conforme a forma e os prazos ali estabelecidos.
+
+6.2. Em caso de atraso no pagamento, poderão ser aplicados:
+
+a) Multa de 2% (dois por cento) sobre o valor em atraso;
+
+b) Juros de mora de 1% (um por cento) ao mês, calculados proporcionalmente aos dias de atraso.
+
+6.3. Em caso de inadimplência superior a 15 (quinze) dias, a CONTRATADA poderá suspender temporariamente os acessos e a participação nas atividades, mediante comunicação à CONTRATANTE.
+
+6.4. A suspensão por inadimplência não elimina a obrigação de pagamento dos valores vencidos e demais encargos previstos neste contrato.
+
+CLÁUSULA 7 | Das despesas adicionais
+
+7.1. Despesas não previstas no Quadro de Dados da Contratação, como deslocamentos, hospedagem, alimentação, contratação de terceiros, locações, roupas, acessórios e outros serviços complementares, não estão incluídas no investimento contratado.
+
+7.2. Caso sejam necessárias, essas despesas deverão ser previamente apresentadas e aprovadas pela CONTRATANTE.
+
+CLÁUSULA 8 | Da propriedade intelectual e da confidencialidade
+
+8.1. Os métodos, metodologias, ferramentas, materiais didáticos, aulas, documentos, modelos, apresentações e demais conteúdos desenvolvidos ou disponibilizados pela CONTRATADA constituem propriedade intelectual da FATOR N, protegida pela legislação aplicável.
+
+8.2. É proibido à CONTRATANTE copiar, reproduzir, comercializar, distribuir, compartilhar ou disponibilizar a terceiros os materiais e métodos da CONTRATADA sem autorização prévia e expressa.
+
+8.3. Os materiais personalizados e entregas desenvolvidos especificamente para a CONTRATANTE poderão ser utilizados em sua própria atividade profissional ou empresarial, respeitados os direitos da CONTRATADA e de terceiros.
+
+8.4. As partes comprometem-se a manter sigilo sobre informações estratégicas, comerciais, pessoais e profissionais às quais tenham acesso em razão deste contrato.
+
+8.5. A obrigação de confidencialidade também se aplica às informações compartilhadas entre participantes de encontros coletivos e grupos vinculados ao programa.
+
+CLÁUSULA 9 | Da rescisão e do cancelamento
+
+9.1. O presente contrato poderá ser encerrado por acordo entre as partes ou nas demais hipóteses previstas na legislação aplicável.
+
+9.2. Após o prazo legal de arrependimento, quando aplicável, a CONTRATANTE poderá solicitar a rescisão antecipada mediante comunicação formal à CONTRATADA, com antecedência mínima de 30 (trinta) dias. Durante o aviso prévio, o contrato permanecerá vigente, sendo mantidas as obrigações de ambas as partes.
+
+9.3. Em caso de rescisão antecipada após o prazo de desistência contratual previsto no Quadro de Dados da Contratação, o valor total devido será calculado pela soma de:
+
+a) Valor proporcional ao período efetivamente utilizado, considerando o prazo total de vigência do contrato; e
+
+b) Compensação correspondente a 30% (trinta por cento) do valor proporcional ao período restante, ainda não utilizado.
+
+9.4. Do valor total apurado serão descontados os pagamentos já realizados pela CONTRATANTE. Caso os pagamentos sejam superiores ao valor devido, a diferença será restituída pela CONTRATADA. Caso sejam inferiores, a diferença deverá ser paga pela CONTRATANTE. A apuração será apresentada por meio de memória de cálculo, e eventual restituição ou pagamento complementar ocorrerá em até 30 (trinta) dias.
+
+9.5. Durante o prazo de desistência contratual indicado no Quadro de Dados da Contratação, a CONTRATANTE poderá solicitar a rescisão sem aplicação da compensação de 30% prevista nesta cláusula, com restituição integral dos valores pagos, no prazo de até 30 (trinta) dias após a formalização do pedido.
+
+CLÁUSULA 10 | Da proteção de dados e do uso de imagem
+
+10.1. Os dados pessoais fornecidos pela CONTRATANTE serão utilizados pela CONTRATADA para a execução deste contrato, comunicação, disponibilização de serviços, processamento de pagamentos e cumprimento de obrigações legais, observada a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018).
+
+10.2. A CONTRATANTE autoriza, de forma gratuita, a CONTRATADA a captar, utilizar e divulgar sua imagem, voz, nome e depoimentos, registrados durante encontros, eventos, gravações, produções de conteúdo e demais atividades relacionadas ao programa contratado. A autorização contempla a utilização desses registros em materiais institucionais, publicitários e promocionais da FATOR N e do PERSEA, incluindo redes sociais, sites, apresentações, campanhas, materiais digitais e demais canais de comunicação da CONTRATADA.
+
+10.3. A CONTRATADA compromete-se a utilizar os registros de forma respeitosa, sem alterar seu contexto ou associá-los a conteúdos que possam prejudicar a imagem ou reputação da CONTRATANTE.
+
+10.4. A autorização não implica pagamento de cachê ou remuneração pelo uso dos registros e poderá ser revogada pela CONTRATANTE mediante comunicação formal, respeitados os usos já realizados e os limites legais aplicáveis.
+
+CLÁUSULA 11 | Da ausência de garantia de resultados
+
+11.1. A CONTRATADA compromete-se a executar os serviços e disponibilizar as entregas contratadas com diligência e conforme as condições estabelecidas neste instrumento.
+
+11.2. A CONTRATANTE reconhece que resultados financeiros, comerciais, profissionais, de vendas, audiência ou crescimento dependem de fatores diversos, incluindo suas próprias decisões, ações e condições de mercado.
+
+11.3. Dessa forma, a CONTRATADA não garante resultados específicos.
+
+{{CIDADE}}/MG, {{DATA_ASSINATURA}}.
+
+___________________________          ___________________________
+CONTRATADA                           CONTRATANTE
+FATOR N Gestão de Imagem          {{CONTRATANTE_NOME}}
+Nayana Murta Martins
+
+TESTEMUNHAS:
+
+__________________          __________________
+Nome:                       Nome:
+CPF:                        CPF:
