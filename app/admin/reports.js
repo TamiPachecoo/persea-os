@@ -386,7 +386,9 @@ function realView() {
     .sort((a, b) => b.paid_at.localeCompare(a.paid_at));
   const lines = realData.lines.filter((l) => inProgram(l.client));
   const today = isoDay(new Date());
-  const open = lines.filter((l) => l.outstanding_cents > 0);
+  // Permuta installments are settled in services, not money: they stay out of
+  // what is still to be received in cash.
+  const open = lines.filter((l) => l.outstanding_cents > 0 && l.method !== 'permuta');
   const dueInPeriod = open.filter((l) => l.due_date >= fromS && l.due_date <= toS).sort((a, b) => a.due_date.localeCompare(b.due_date));
   const overdue = open.filter((l) => l.due_date < today);
   // Permuta settles part of a contract with a service or product instead of

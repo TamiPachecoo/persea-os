@@ -1010,12 +1010,12 @@ function phaseBreakdownCard(state, journey) {
 // derives the amount/client server-side from the payment line itself —
 // see that function's own header) and sumup-verify (the existing manual
 // reconciliation path) — no new payment infrastructure.
-const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito', boleto: 'Boleto', transferencia: 'Transferência' };
+const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito', boleto: 'Boleto', transferencia: 'Transferência', permuta: 'Permuta' };
 // Receipts can also be a permuta: part of the contract settled with a
 // service or product instead of money. It lowers what she owes like any
 // receipt, but Relatórios keeps it out of the cash received. Plan lines
-// never use it (their method check doesn't allow it).
-const RECEIPT_METHOD_LABEL = { ...FIN_METHOD_LABEL, permuta: 'Permuta' };
+// can carry it too (e.g. 3 botox sessions whose dates are agreed later).
+const RECEIPT_METHOD_LABEL = FIN_METHOD_LABEL;
 
 async function loadFinanceiro(contract) {
   if (!contract) return null;
@@ -1238,7 +1238,7 @@ function financeiroLineRow(line, payment, contractId, opts = {}) {
           <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''} · ${methodLabel}
             ${!isAssistant ? `<button type="button" data-edit-line="${line.id}" class="btn-text" style="font-size:11px;padding:0 0 0 6px;">Editar</button>` : ''}
           </p>
-          <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.method === 'cartao_credito' ? ' · acompanhe as parcelas pelo painel da SumUp' : ''}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
+          <p class="text-xs text-white/30 mt-0.5">${line.method === 'permuta' ? `Permuta · data a combinar${line.due_date ? ` (até ${formatDate(line.due_date)})` : ''}` : `Vencimento ${formatDate(line.due_date)}`}${line.method === 'cartao_credito' ? ' · acompanhe as parcelas pelo painel da SumUp' : ''}${line.allocated_cents > 0 && !isPaid ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
         </div>
         ${actionHtml}
       </div>
@@ -2359,7 +2359,7 @@ function buildMessage(kind, { client, partyInfo, finState, meetings }) {
   const sign = isNay ? 'Com carinho,\nNay' : `Com carinho,\n${senderFirst} · Equipe PERSEA`;
   const meeting = meetings.find((m) => m.id === msgState.meetingId) || meetings[0];
   const lines = finState?.lines || [];
-  const openLines = lines.filter((l) => l.outstanding_cents > 0);
+  const openLines = lines.filter((l) => l.outstanding_cents > 0 && l.method !== 'permuta'); // no payment reminders for a permuta
   const line = openLines.find((l) => l.id === msgState.lineId) || openLines[0];
   const meetingText = (m) => `*${m.title}*, ${fmtDayLong(m.item_date)}, às *${fmtHour(m.item_date)}*`;
   switch (kind) {

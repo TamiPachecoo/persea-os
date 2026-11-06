@@ -40,7 +40,7 @@ function installmentRow(line) {
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p class="text-sm">${brl(line.amount_cents / 100)}${line.label ? ` · ${line.label}` : ''}</p>
-          <p class="text-xs text-white/30 mt-0.5">Vencimento ${formatDate(line.due_date)}${line.allocated_cents > 0 && line.effective_status !== 'paid' ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
+          <p class="text-xs text-white/30 mt-0.5">${line.method === 'permuta' ? 'Permuta · data a combinar' : `Vencimento ${formatDate(line.due_date)}`}${line.allocated_cents > 0 && line.effective_status !== 'paid' ? ` · ${brl(line.allocated_cents / 100)} já alocado` : ''}</p>
         </div>
         <span class="badge ${INSTALLMENT_BADGE_CLASS[line.effective_status] || 'badge-locked'}">${INSTALLMENT_STATUS_LABEL[line.effective_status] || line.effective_status}</span>
       </div>
@@ -115,7 +115,7 @@ async function render() {
 
   const { aReceberCents, emAtrasoCents } = summarizeObligations(lines || []);
   const recebidoCents = (payments || []).filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount_cents, 0);
-  const nextDue = (lines || []).filter((l) => l.effective_status !== 'paid').sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0];
+  const nextDue = (lines || []).filter((l) => l.effective_status !== 'paid' && l.method !== 'permuta').sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0];
 
   content.innerHTML = `
     <div class="mb-8">

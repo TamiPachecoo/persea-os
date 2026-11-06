@@ -5,7 +5,7 @@
 // the template text itself (see docs/... — Nay edits the template row
 // directly if her own business details ever change).
 const PAYMENT_METHOD_LABEL = {
-  cartao_credito: 'Cartão de Crédito', boleto: 'Boleto', pix: 'Pix', transferencia: 'Transferência',
+  cartao_credito: 'Cartão de Crédito', boleto: 'Boleto', pix: 'Pix', transferencia: 'Transferência', permuta: 'Permuta',
 };
 const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
@@ -108,12 +108,20 @@ function assembleCondicoesPagamento(contract) {
         last.dates.push(line.due_date || null);
         last.count += 1;
       } else {
-        groups.push({ amount_cents: line.amount_cents, method: line.method, count: 1, dates: [line.due_date || null] });
+        groups.push({ amount_cents: line.amount_cents, method: line.method, count: 1, dates: [line.due_date || null], label: line.label || null });
       }
     }
     const phrases = groups.map((g) => {
       const amount = formatBRL(g.amount_cents);
       const method = methodLabel(g.method);
+      // Permuta: paid with a service or product, used when agreed — no
+      // installment dates in the clause. The line's note says what it is.
+      if (g.method === 'permuta') {
+        const what = g.label ? ` (${g.label.replace(/^permuta\s*[—–-]\s*/i, '')})` : '';
+        return g.count === 1
+          ? `${amount} em permuta${what}, com data de utilização a combinar`
+          : `${g.count} (${g.count === 3 ? 'três' : g.count}) permutas de ${amount} cada${what}, com datas de utilização a combinar`;
+      }
       const allDated = g.dates.every(Boolean);
       if (g.count === 1) {
         const dateSuffix = g.dates[0] ? ` em ${new Date(`${g.dates[0]}T00:00:00`).toLocaleDateString('pt-BR')}` : '';

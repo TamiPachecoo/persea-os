@@ -525,8 +525,8 @@ export const PAYMENT_STATUS_LABEL = { paid: 'Pago', pending: 'Pendente', overdue
 
 // How the client is actually paying — captured at closing, drives the
 // generated installment schedule below.
-export const PAYMENT_METHODS = ['cartao_credito', 'boleto', 'pix', 'transferencia'];
-export const PAYMENT_METHOD_LABEL = { cartao_credito: 'Cartão de Crédito', boleto: 'Boleto', pix: 'Pix', transferencia: 'Transferência' };
+export const PAYMENT_METHODS = ['cartao_credito', 'boleto', 'pix', 'transferencia', 'permuta'];
+export const PAYMENT_METHOD_LABEL = { cartao_credito: 'Cartão de Crédito', boleto: 'Boleto', pix: 'Pix', transferencia: 'Transferência', permuta: 'Permuta' };
 
 export const EXPENSE_CATEGORIES = ['ferramentas', 'marketing', 'equipe', 'outros'];
 export const EXPENSE_CATEGORY_LABEL = { ferramentas: 'Ferramentas', marketing: 'Marketing', equipe: 'Equipe', outros: 'Outros' };
