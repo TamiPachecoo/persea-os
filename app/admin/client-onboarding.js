@@ -607,7 +607,10 @@ async function prepareContract(client, btn) {
   try {
     const { data: existing } = await supabase.from('contracts').select('id').eq('client_id', clientId).maybeSingle();
     if (existing) { location.href = `contract.html?client_id=${clientId}`; return; }
-    const { error } = await supabase.from('contracts').insert({ client_id: clientId, status: 'info_pending' });
+    // A cadastro sent before the contract existed must not leave it stuck as
+    // "aguardando informações" (happened with Monique).
+    const { data: party } = await supabase.from('party_info').select('submitted').eq('client_id', clientId).maybeSingle();
+    const { error } = await supabase.from('contracts').insert({ client_id: clientId, status: party?.submitted ? 'info_received' : 'info_pending' });
     if (error) {
       // A unique-violation here means another request (a near-simultaneous
       // click, or a retry) already created the row — that's a real success,
