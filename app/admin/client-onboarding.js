@@ -1011,6 +1011,11 @@ function phaseBreakdownCard(state, journey) {
 // see that function's own header) and sumup-verify (the existing manual
 // reconciliation path) — no new payment infrastructure.
 const FIN_METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito', boleto: 'Boleto', transferencia: 'Transferência' };
+// Receipts can also be a permuta: part of the contract settled with a
+// service or product instead of money. It lowers what she owes like any
+// receipt, but Relatórios keeps it out of the cash received. Plan lines
+// never use it (their method check doesn't allow it).
+const RECEIPT_METHOD_LABEL = { ...FIN_METHOD_LABEL, permuta: 'Permuta' };
 
 async function loadFinanceiro(contract) {
   if (!contract) return null;
@@ -1401,9 +1406,11 @@ function openPaymentPlanEditor(contractId, contractValueCents, currentLines) {
 // Spreads a received amount over the open installments: same payment
 // method first, then any other, oldest due date first; never more than a
 // line still owes. Returns the split plus whatever didn't fit.
-function planAllocation(lines, amountCents, method) {
+// A permuta has no installment of its own: it comes off the last
+// installments (fromEnd) or the next ones, as chosen in the modal.
+function planAllocation(lines, amountCents, method, { fromEnd = false } = {}) {
   const open = lines.filter((l) => l.outstanding_cents > 0)
-    .sort((a, b) => (a.method === method ? 0 : 1) - (b.method === method ? 0 : 1) || new Date(a.due_date) - new Date(b.due_date));
+    .sort((a, b) => (a.method === method ? 0 : 1) - (b.method === method ? 0 : 1) || (fromEnd ? -1 : 1) * (new Date(a.due_date) - new Date(b.due_date)));
   let left = amountCents;
   const parts = [];
   for (const l of open) {
@@ -1422,12 +1429,14 @@ function reconciliationLine(contract, lines, receipts) {
   const contractCents = contract?.value_cents;
   if (contractCents == null) return '';
   const received = receivedTotal(receipts);
+  const permuta = receivedTotal(receipts.filter((r) => r.method === 'permuta'));
   const planned = lines.reduce((s, l) => s + l.amount_cents, 0);
   const left = contractCents - received;
   return `
     <div class="mt-3 p-3 rounded flex flex-wrap gap-x-6 gap-y-1 text-sm" style="border:1px solid var(--line);background:rgba(255,255,255,.02);">
       <span><span class="text-white/40 text-xs">Contrato</span> ${brl(contractCents / 100)}</span>
-      <span><span class="text-white/40 text-xs">Recebido</span> ${brl(received / 100)}</span>
+      <span><span class="text-white/40 text-xs">Recebido</span> ${brl((received - permuta) / 100)}</span>
+      ${permuta ? `<span><span class="text-white/40 text-xs">Permuta</span> ${brl(permuta / 100)}</span>` : ''}
       <span style="color:${left < 0 ? 'var(--terracotta)' : left === 0 ? 'var(--gold)' : 'inherit'};"><span class="text-white/40 text-xs">${left < 0 ? 'Recebido a mais' : 'Falta receber'}</span> ${brl(Math.abs(left) / 100)}${left === 0 ? ' ✓' : ''}</span>
       ${planned !== contractCents ? `<span class="w-full text-xs" style="color:var(--terracotta);">As parcelas do plano somam ${brl(planned / 100)}, diferente do contrato. Ajuste em "Editar plano de pagamento".</span>` : ''}
       ${left < 0 ? '<span class="w-full text-xs" style="color:var(--terracotta);">O total recebido passou do valor do contrato. Confira se algum recebimento foi lançado duas vezes.</span>' : ''}
@@ -1442,7 +1451,7 @@ function receiptsBlock(receipts) {
       ${receipts.map((r) => `
         <div class="flex items-start justify-between gap-3 flex-wrap py-2 border-b border-white/5 last:border-0">
           <div class="min-w-0">
-            <p class="text-sm">${brl(r.amount_cents / 100)} · ${FIN_METHOD_LABEL[r.method] || 'A combinar'} · ${r.paid_at ? formatDate(r.paid_at) : '—'}</p>
+            <p class="text-sm">${brl(r.amount_cents / 100)} · ${r.method === 'permuta' ? '<span style="color:var(--gold);">Permuta</span>' : (RECEIPT_METHOD_LABEL[r.method] || 'A combinar')} · ${r.paid_at ? formatDate(r.paid_at) : '—'}</p>
             <p class="text-xs text-white/30 mt-0.5">${r.allocations.length ? r.allocations.map((a) => `${brl(a.amount_cents / 100)} em ${escHtml(a.contract_payment_lines?.label || 'parcela')}`).join(' · ') : 'Sem parcela vinculada'}${r.internal_note ? ` · ${escHtml(r.internal_note)}` : ''}</p>
           </div>
           ${!isAssistant ? `<div class="flex gap-3"><button type="button" data-edit-receipt="${r.id}" class="btn-text" style="font-size:11px;">Editar</button><button type="button" data-delete-receipt="${r.id}" class="btn-text" style="font-size:11px;color:var(--terracotta);">Excluir</button></div>` : ''}
@@ -1471,12 +1480,17 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
       <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
         <div><label class="text-xs text-white/50 block mb-1" for="rc-amount">Valor recebido (R$)</label><input id="rc-amount" type="number" step="0.01" min="0" class="field text-sm" /></div>
         <div><label class="text-xs text-white/50 block mb-1" for="rc-date">Data do pagamento</label><input id="rc-date" type="date" class="field text-sm" value="${today}" max="${today}" /></div>
-        <div><label class="text-xs text-white/50 block mb-1" for="rc-method">Forma</label><select id="rc-method" class="field text-sm">${Object.entries(FIN_METHOD_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+        <div><label class="text-xs text-white/50 block mb-1" for="rc-method">Forma</label><select id="rc-method" class="field text-sm">${Object.entries(RECEIPT_METHOD_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
       </div>
-      <label class="text-xs text-white/50 block mt-3 mb-1" for="rc-note">Observação (opcional)</label>
+      <div id="rc-permuta" class="mt-3 p-3 rounded hidden" style="border:1px solid var(--line);">
+        <p class="text-xs text-white/50 mb-2">Permuta: parte do contrato paga com um serviço ou produto, sem dinheiro. O valor sai do que ela deve, mas não entra no caixa nos Relatórios.</p>
+        <label class="text-xs text-white/50 block mb-1" for="rc-from">Abater de</label>
+        <select id="rc-from" class="field text-sm"><option value="end">Últimas parcelas do plano</option><option value="next">Próximas parcelas a vencer</option></select>
+      </div>
+      <label class="text-xs text-white/50 block mt-3 mb-1" for="rc-note" id="rc-note-label">Observação (opcional)</label>
       <input id="rc-note" class="field text-sm" placeholder="Ex.: adiantou as parcelas de setembro e outubro" />
-      ${editing ? '' : `<label class="text-xs text-white/50 block mt-3 mb-1" for="rc-nf">Nota fiscal (opcional; obrigatória para cartão)</label>
-      <input id="rc-nf" type="file" accept="application/pdf,image/*,.xml" class="field text-sm" />`}
+      ${editing ? '' : `<div id="rc-nf-wrap"><label class="text-xs text-white/50 block mt-3 mb-1" for="rc-nf">Nota fiscal (opcional; obrigatória para cartão)</label>
+      <input id="rc-nf" type="file" accept="application/pdf,image/*,.xml" class="field text-sm" /></div>`}
       <div id="rc-preview" class="mt-4 text-xs text-white/60"></div>
       <div class="flex justify-end gap-2 mt-5">
         <button type="button" id="rc-cancel" class="btn-text">Cancelar</button>
@@ -1491,10 +1505,20 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
     $('rc-note').value = editing.internal_note || '';
   }
   const cents = () => Math.round((parseFloat(String($('rc-amount').value).replace(',', '.')) || 0) * 100);
+  const isPermuta = () => $('rc-method').value === 'permuta';
+  const allocOpts = () => ({ fromEnd: isPermuta() && $('rc-from').value === 'end' });
+  const syncPermuta = () => {
+    const on = isPermuta();
+    $('rc-permuta').classList.toggle('hidden', !on);
+    $('rc-nf-wrap')?.classList.toggle('hidden', on);
+    $('rc-note-label').textContent = on ? 'O que foi trocado (obrigatório)' : 'Observação (opcional)';
+    $('rc-note').placeholder = on ? 'Ex.: ensaio fotográfico para a marca da Nay' : 'Ex.: adiantou as parcelas de setembro e outubro';
+  };
   const preview = () => {
+    syncPermuta();
     const amount = cents();
     if (!amount) { $('rc-preview').innerHTML = ''; return; }
-    const { parts, leftover } = planAllocation(lines, amount, $('rc-method').value);
+    const { parts, leftover } = planAllocation(lines, amount, $('rc-method').value, allocOpts());
     const over = contractLeft != null && amount > contractLeft;
     $('rc-preview').innerHTML = `${parts.length ? `<p class="mb-1" style="color:var(--muted);">Será abatido de:</p>${parts.map((p) => `<p>· ${brl(p.amount_cents / 100)} em ${escHtml(p.line.label || FIN_METHOD_LABEL[p.line.method] || 'parcela')} (venc. ${formatDate(p.line.due_date)})${p.amount_cents < p.line.outstanding_cents ? ' · parcial' : ''}</p>`).join('')}` : ''}${over
       ? `<p class="mt-1" style="color:var(--terracotta);">Passa do valor do contrato em ${brl((amount - contractLeft) / 100)}. Confira o valor ou se este pagamento já foi registrado.</p>`
@@ -1502,6 +1526,8 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
   };
   $('rc-amount').addEventListener('input', preview);
   $('rc-method').addEventListener('change', preview);
+  $('rc-from').addEventListener('change', preview);
+  syncPermuta();
   $('rc-cancel').addEventListener('click', () => modal.close());
   $('rc-save').addEventListener('click', async (ev) => {
     const amount = cents();
@@ -1509,7 +1535,8 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
     const method = $('rc-method').value;
     if (!(amount > 0)) { toast('Informe o valor recebido.', { tone: 'error' }); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate) || paidDate > today) { toast('Escolha a data do pagamento.', { tone: 'error' }); return; }
-    const { parts } = planAllocation(lines, amount, method);
+    if (method === 'permuta' && !$('rc-note').value.trim()) { toast('Descreva o que foi trocado na permuta.', { tone: 'error' }); $('rc-note').focus(); return; }
+    const { parts } = planAllocation(lines, amount, method, allocOpts());
     if (contractLeft != null && amount > contractLeft) { toast(`Passa do valor do contrato em ${brl((amount - contractLeft) / 100)}.`, { tone: 'error' }); return; }
     const label = editing ? 'Salvar' : 'Registrar';
     ev.target.disabled = true; ev.target.textContent = 'Salvando…';
@@ -1526,7 +1553,7 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
     } else {
       const { data: payment, error: payErr } = await supabase.from('payments').insert({
         ...fields, client_id: clientId, contract_id: contractId, status: 'paid', currency: 'BRL', provider: 'manual',
-        description: 'Recebimento registrado manualmente',
+        description: method === 'permuta' ? 'Permuta' : 'Recebimento registrado manualmente',
       }).select('id').single();
       if (payErr) { toast(payErr.message, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = label; return; }
       paymentId = payment.id;
@@ -1538,7 +1565,7 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
         toast(allocErr.message, { tone: 'error' }); ev.target.disabled = false; ev.target.textContent = label; return;
       }
     }
-    const file = !editing && $('rc-nf').files[0];
+    const file = !editing && method !== 'permuta' && $('rc-nf').files[0];
     if (file) {
       const nfRes = await attachInvoice(paymentId, file);
       if (nfRes.error) { modal.close(); toast(`Recebimento registrado. ${nfRes.error}`, { tone: 'error' }); render(); return; }

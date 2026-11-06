@@ -313,7 +313,7 @@ function wireEvents() {
 // same source Financeiro and each client's page use). The MockDB reports
 // above (impact, adherence, engagement and the demo financial summary)
 // are not rendered in production — they would show sample numbers.
-const METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito', transferencia: 'Transferência', boleto: 'Boleto' };
+const METHOD_LABEL = { pix: 'PIX', cartao_credito: 'Cartão de crédito', transferencia: 'Transferência', boleto: 'Boleto', permuta: 'Permuta' };
 const methodLabel = (m) => METHOD_LABEL[m] || (m ? m : 'Não informado');
 // Local (Brazil) calendar day, never UTC: a payment at 22h on the 31st
 // belongs to the 31st, and a 'YYYY-MM-DD' due date is not shifted a day back.
@@ -389,26 +389,30 @@ function realView() {
   const open = lines.filter((l) => l.outstanding_cents > 0);
   const dueInPeriod = open.filter((l) => l.due_date >= fromS && l.due_date <= toS).sort((a, b) => a.due_date.localeCompare(b.due_date));
   const overdue = open.filter((l) => l.due_date < today);
-  return { from, to, receipts, lines, open, dueInPeriod, overdue };
+  // Permuta settles part of a contract with a service or product instead of
+  // money: it lowers what the client owes, but it is not cash received.
+  const cash = receipts.filter((p) => p.method !== 'permuta');
+  const permutaSum = receipts.filter((p) => p.method === 'permuta').reduce((s, p) => s + p.amount_cents, 0);
+  return { from, to, receipts, cash, permutaSum, lines, open, dueInPeriod, overdue };
 }
 
 function renderRealFinancial() {
   if (realData?.error) return card(`<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar os dados financeiros: ${realData.error}</p>`, 'mb-8');
   const v = realView();
-  const received = v.receipts.reduce((s, p) => s + p.amount_cents, 0);
+  const received = v.cash.reduce((s, p) => s + p.amount_cents, 0);
   const dueSum = v.dueInPeriod.reduce((s, l) => s + l.outstanding_cents, 0);
   const overdueSum = v.overdue.reduce((s, l) => s + l.outstanding_cents, 0);
   const openSum = v.open.reduce((s, l) => s + l.outstanding_cents, 0);
-  const byMonth = sumBy(v.receipts, (p) => paidDay(p).slice(0, 7), (p) => p.amount_cents);
+  const byMonth = sumBy(v.cash, (p) => paidDay(p).slice(0, 7), (p) => p.amount_cents);
   const months = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b));
   const maxMonth = Math.max(1, ...months.map(([, c]) => c));
-  const byMethod = [...sumBy(v.receipts, (p) => methodLabel(p.method), (p) => p.amount_cents).entries()].sort((a, b) => b[1] - a[1]);
+  const byMethod = [...sumBy(v.cash, (p) => methodLabel(p.method), (p) => p.amount_cents).entries()].sort((a, b) => b[1] - a[1]);
   const clientIds = new Set([...v.receipts.map((p) => p.client.id), ...v.open.map((l) => l.client.id)]);
   const byClient = [...clientIds].map((id) => {
     const name = (v.receipts.find((p) => p.client.id === id) || v.open.find((l) => l.client.id === id)).client.full_name;
     return {
       id, name,
-      received: v.receipts.filter((p) => p.client.id === id).reduce((s, p) => s + p.amount_cents, 0),
+      received: v.cash.filter((p) => p.client.id === id).reduce((s, p) => s + p.amount_cents, 0),
       open: v.open.filter((l) => l.client.id === id).reduce((s, l) => s + l.outstanding_cents, 0),
       overdue: v.overdue.filter((l) => l.client.id === id).reduce((s, l) => s + l.outstanding_cents, 0),
     };
@@ -428,6 +432,7 @@ function renderRealFinancial() {
         ${kpi('Em atraso (hoje)', brlC(overdueSum), overdueSum ? 'color:var(--terracotta);' : '')}
         ${kpi('Saldo total a receber', brlC(openSum))}
       </div>
+      ${v.permutaSum ? `<p class="text-xs text-white/40 mt-4">Permuta no período: <b>${brlC(v.permutaSum)}</b> abatido de contratos em serviços ou produtos. Não entra no Recebido.</p>` : ''}
     `, 'mb-6')}
     <div class="grid md:grid-cols-2 gap-6 mb-6">
       ${card(`
@@ -502,7 +507,7 @@ function exportReal(kind) {
         const name = (v.receipts.find((p) => p.client.id === id) || v.open.find((l) => l.client.id === id)).client.full_name;
         return {
           client: name,
-          received: centsBR(v.receipts.filter((p) => p.client.id === id).reduce((s, p) => s + p.amount_cents, 0)),
+          received: centsBR(v.cash.filter((p) => p.client.id === id).reduce((s, p) => s + p.amount_cents, 0)),
           open: centsBR(v.open.filter((l) => l.client.id === id).reduce((s, l) => s + l.outstanding_cents, 0)),
           overdue: centsBR(v.overdue.filter((l) => l.client.id === id).reduce((s, l) => s + l.outstanding_cents, 0)),
         };
