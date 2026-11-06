@@ -9,6 +9,10 @@ const PAYMENT_METHOD_LABEL = {
 };
 const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 
+// Installment counts in words, as the contract writes them: "8 (oito)".
+const EXTENSO = ['zero', 'uma', 'duas', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte', 'vinte e uma', 'vinte e duas', 'vinte e três', 'vinte e quatro'];
+const porExtenso = (n) => EXTENSO[n] || String(n);
+
 function formatBRL(cents) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -121,7 +125,7 @@ function assembleCondicoesPagamento(contract) {
         const what = desc ? ` (${desc})` : '';
         return g.count === 1
           ? `${amount} em permuta${what}, com data de utilização a combinar`
-          : `${g.count} (${g.count === 3 ? 'três' : g.count}) permutas de ${amount} cada${what}, com datas de utilização a combinar`;
+          : `${g.count} (${porExtenso(g.count)}) permutas de ${amount} cada${what}, com datas de utilização a combinar`;
       }
       const allDated = g.dates.every(Boolean);
       if (g.count === 1) {
@@ -131,10 +135,10 @@ function assembleCondicoesPagamento(contract) {
       if (allDated && isMonthlyCadence(g.dates)) {
         const first = new Date(`${g.dates[0]}T00:00:00`);
         const day = first.getDate();
-        return `${g.count} (${g.count === 12 ? 'doze' : g.count}) parcelas mensais de ${amount} via ${method}, com início em ${first.toLocaleDateString('pt-BR')} e vencimento todo dia ${day}`;
+        return `${g.count} (${porExtenso(g.count)}) parcelas mensais de ${amount} via ${method}, com início em ${first.toLocaleDateString('pt-BR')} e vencimento todo dia ${day}`;
       }
       if (!allDated && g.dates.every((d) => !d)) {
-        return `${g.count} (${g.count === 12 ? 'doze' : g.count}) parcelas de ${amount}, sem juros, via ${method}`;
+        return `${g.count} (${porExtenso(g.count)}) parcelas de ${amount}, sem juros, via ${method}`;
       }
       // Same amount/method but dates don't form a clean monthly cadence
       // (or only some lines carry one) — never assert a pattern that isn't
@@ -162,7 +166,7 @@ function assembleCondicoesPagamento(contract) {
     const shares = splitCentsExact(balance, installments);
     const allEqual = shares.every((c) => c === shares[0]);
     const perInstallment = allEqual ? formatBRL(shares[0]) : `${formatBRL(shares[0])} (a última de ${formatBRL(shares[shares.length - 1])})`;
-    return `${installments} (${installments === 12 ? 'doze' : installments}) parcelas de ${perInstallment}, sem juros, via ${methodLabel(contract.payment_method)}`;
+    return `${installments} (${porExtenso(installments)}) parcelas de ${perInstallment}, sem juros, via ${methodLabel(contract.payment_method)}`;
   };
   if (down > 0) {
     const downClause = `entrada de ${formatBRL(down)} via ${methodLabel(contract.down_payment_method)}`;

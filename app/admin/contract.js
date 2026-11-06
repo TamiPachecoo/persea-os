@@ -41,6 +41,8 @@ const legacyId = params.get('legacy_id');
 // This flag is the missing "go back and revise" entry point; see the
 // "Editar Condições Comerciais" button in render()'s header.
 let editingTerms = false;
+// Set by the contract-text view; asks before discarding unsaved text edits.
+let confirmLeaveText = () => true;
 
 const STATUS_LABEL = {
   info_pending: 'Aguardando informações', info_received: 'Informações recebidas',
@@ -554,19 +556,31 @@ async function render() {
     <button id="upload" class="btn-ghost">Enviar Contrato Assinado</button>
   `);
 
+  // Unsaved edits to the text used to vanish silently on reload or when
+  // opening "Editar Condições Comerciais" (reported with Leidiane): warn first.
+  const bodyEl = document.getElementById('body');
+  let savedBody = bodyEl?.value ?? '';
+  const dirty = () => bodyEl && bodyEl.value !== savedBody;
+  window.onbeforeunload = (ev) => { if (dirty()) { ev.preventDefault(); ev.returnValue = ''; } };
+  confirmLeaveText = () => !dirty() || confirm('Há alterações no texto do contrato que ainda não foram salvas. Sair sem salvar?');
+  // An update that matches no row (blocked by a permission rule) returns no
+  // error: ask for the row back so "salvo" only shows when it really saved.
+  const saveBody = async (fields) => {
+    const { data, error } = await supabase.from('contracts').update(fields).eq('id', contract.id).select('id');
+    if (error) return error.message;
+    if (!data?.length) return 'Não foi possível salvar: o contrato não foi alterado no sistema (permissão ou contrato já enviado). Recarregue a página.';
+    savedBody = fields.body_text ?? savedBody;
+    return null;
+  };
   document.getElementById('save')?.addEventListener('click', async () => {
-    const body = document.getElementById('body').value;
-    const { error } = await supabase.from('contracts').update({ body_text: body }).eq('id', contract.id);
-    if (error) { toast(error.message, { tone: 'error' }); return; }
+    const err = await saveBody({ body_text: bodyEl.value });
+    if (err) { toast(err, { tone: 'error' }); return; }
     toast('Alterações salvas.');
   });
   document.getElementById('save-review')?.addEventListener('click', async (e) => {
-    const body = document.getElementById('body').value;
     e.target.disabled = true;
-    const { error } = await supabase.from('contracts').update({
-      body_text: body, admin_reviewed_at: new Date().toISOString(), admin_reviewed_by: profile.id,
-    }).eq('id', contract.id);
-    if (error) { toast(error.message, { tone: 'error' }); e.target.disabled = false; return; }
+    const err = await saveBody({ body_text: bodyEl.value, admin_reviewed_at: new Date().toISOString(), admin_reviewed_by: profile.id });
+    if (err) { toast(err, { tone: 'error' }); e.target.disabled = false; return; }
     toast('Contrato revisado — a assistente já pode enviar para assinatura.');
     render();
   });
@@ -740,6 +754,8 @@ content.addEventListener('change', async (e) => {
 // lives inside `header`, present on every branch once terms are complete.
 content.addEventListener('click', (e) => {
   if (e.target.id !== 'edit-commercial-terms') return;
+  if (!confirmLeaveText()) return;
+  window.onbeforeunload = null;
   editingTerms = true;
   render();
 });
