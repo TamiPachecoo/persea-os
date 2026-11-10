@@ -1701,7 +1701,14 @@ async function loadImageProject() {
     supabase.from('image_guides').select('*').eq('client_id', clientId),
     supabase.from('digital_kits').select('*').eq('client_id', clientId).maybeSingle(),
   ]);
-  return { guideBySlug: Object.fromEntries((guides || []).map((g) => [g.slug, g])), kit: kit || null };
+  // Uploaded files open through a short-lived signed link (private bucket).
+  const sign = async (row) => {
+    if (!row?.file_path) return row;
+    const { data } = await supabase.storage.from(MATERIALS_BUCKET).createSignedUrl(row.file_path, 3600);
+    return { ...row, signedFileUrl: data?.signedUrl || null };
+  };
+  const signedGuides = await Promise.all((guides || []).map(sign));
+  return { guideBySlug: Object.fromEntries(signedGuides.map((g) => [g.slug, g])), kit: await sign(kit) || null };
 }
 
 function deliverableStatus(row) {
@@ -1722,7 +1729,8 @@ function imageDeliverableRow({ key, label, row, isKit }) {
       ${row?.summary ? `<p class="text-xs text-white/30 mb-2">${row.summary}</p>` : ''}
       <div class="flex items-center gap-2 flex-wrap">
         <button type="button" data-edit-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-ghost">Editar</button>
-        ${isValidHttpUrl(row?.file_url) ? `<a ${externalLinkAttrs(row.file_url)} class="btn-text">Ver arquivo ↗</a>` : ''}
+        ${row?.signedFileUrl ? `<a ${externalLinkAttrs(row.signedFileUrl)} class="btn-text">📄 ${escHtml(row.file_name || 'Arquivo')} ↗</a>` : ''}
+        ${isValidHttpUrl(row?.file_url) ? `<a ${externalLinkAttrs(row.file_url)} class="btn-text">Ver link ↗</a>` : ''}
         ${isValidHttpUrl(row?.canva_url) ? `<a ${externalLinkAttrs(row.canva_url)} class="btn-text">Abrir no Canva ↗</a>` : ''}
         ${!isAssistant && hasContent && !row?.delivered_at ? `<button type="button" data-approve-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-primary" style="padding:6px 14px;font-size:12px;">Aprovar e Entregar</button>` : ''}
         ${!isAssistant && row?.delivered_at ? `<button type="button" data-revert-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-text" style="color:var(--terracotta);">Reverter entrega</button>` : ''}
@@ -1751,7 +1759,16 @@ function openDeliverableModal({ key, label, row, isKit }) {
           <textarea name="summary" rows="2" class="field text-sm">${data.summary || ''}</textarea>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Link do Arquivo</label>
+          <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação — até 50 MB; a cliente abre direto na plataforma)</span></label>
+          ${data.file_path ? `<div class="flex items-center gap-3 flex-wrap mb-2 text-sm">
+            ${data.signedFileUrl ? `<a ${externalLinkAttrs(data.signedFileUrl)} class="btn-text" style="display:inline;">📄 ${escHtml(data.file_name || 'Arquivo')} ↗</a>` : `<span>📄 ${escHtml(data.file_name || 'Arquivo')}</span>`}
+            <label class="text-xs text-white/50 flex items-center gap-1"><input type="checkbox" name="remove_file" /> Remover arquivo</label>
+          </div>` : ''}
+          <input type="file" name="file" accept="image/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.xls,.xlsx,.zip" class="field text-sm" />
+          ${data.file_path ? '<p class="text-xs text-white/30 mt-1">Escolher um novo arquivo substitui o atual.</p>' : ''}
+        </div>
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link <span class="text-white/20">(opcional — use só se o material não puder ser enviado como arquivo)</span></label>
           <input name="file_url" class="field text-sm" value="${data.file_url || ''}" placeholder="https://..." />
         </div>
         <div>
@@ -1774,6 +1791,24 @@ function openDeliverableModal({ key, label, row, isKit }) {
     e.preventDefault();
     const fd = new FormData(e.target);
     const payload = { summary: fd.get('summary') || null, file_url: fd.get('file_url') || null, canva_url: fd.get('canva_url') || null };
+    const saveBtn = e.target.querySelector('[type=submit]');
+    saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
+    const fail = (msg) => { toast(msg, { tone: 'error' }); saveBtn.disabled = false; saveBtn.textContent = 'Salvar'; };
+    // New file → upload first, then point the row at it; the old file is
+    // removed only after the row is saved, so a failure never loses either.
+    const file = fd.get('file');
+    const oldPath = data.file_path || null;
+    let newPath = null;
+    if (file && file.size) {
+      if (file.size > 50 * 1024 * 1024) { fail(`${file.name} passa de 50 MB.`); return; }
+      const ext = (file.name.match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
+      newPath = `${clientId}/materials/${isKit ? 'kit' : key}-${crypto.randomUUID()}${ext}`;
+      const { error: upErr } = await supabase.storage.from(MATERIALS_BUCKET).upload(newPath, file, { contentType: file.type || undefined, upsert: false });
+      if (upErr) { fail('Não foi possível enviar o arquivo.'); return; }
+      payload.file_path = newPath; payload.file_name = file.name.slice(0, 200);
+    } else if (fd.get('remove_file')) {
+      payload.file_path = null; payload.file_name = null;
+    }
     let error;
     if (isKit) {
       ({ error } = await supabase.from('digital_kits').upsert({ client_id: clientId, ...payload }, { onConflict: 'client_id' }));
@@ -1781,9 +1816,14 @@ function openDeliverableModal({ key, label, row, isKit }) {
       payload.note = fd.get('note') || null;
       ({ error } = await supabase.from('image_guides').upsert({ client_id: clientId, slug: key, ...payload }, { onConflict: 'client_id,slug' }));
     }
-    if (error) { toast('Não foi possível salvar agora — se você é assistente, lembre-se que só a Nay pode aprovar/entregar.', { tone: 'error' }); return; }
+    if (error) {
+      if (newPath) await supabase.storage.from(MATERIALS_BUCKET).remove([newPath]);
+      fail('Não foi possível salvar agora — se você é assistente, lembre-se que só a Nay pode aprovar/entregar.');
+      return;
+    }
+    if (oldPath && (newPath || payload.file_path === null)) await supabase.storage.from(MATERIALS_BUCKET).remove([oldPath]);
     close();
-    toast('Material atualizado.');
+    toast(newPath ? 'Arquivo enviado.' : 'Material atualizado.');
     render();
   });
 }

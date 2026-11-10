@@ -119,15 +119,26 @@ async function renderDeliveredMaterials() {
     const { data: signed } = await supabase.storage.from('client-shared-files').createSignedUrl(kit.file_path, 3600);
     if (signed?.signedUrl) kit.file_url = signed.signedUrl;
   }
+  // An uploaded file wins over a link: it opens straight in the platform
+  // (signed link to the private bucket) instead of sending her to Drive.
+  const GUIDE_LABEL = { paleta_cores: 'Cartela de Cores', guia_producoes_completo: 'Guia de Produções', guia_looks_mensal: 'Guia de Produções (Mensal)', ferramentas_nova_imagem: 'Ferramentas para Nova Imagem', moodboard_ensaio: 'Ensaio Fotográfico' };
+  const openable = (await Promise.all((guides || []).map(async (g) => {
+    let url = isValidHttpUrl(g.file_url) ? g.file_url : null;
+    if (g.file_path) {
+      const { data: signed } = await supabase.storage.from('client-shared-files').createSignedUrl(g.file_path, 3600);
+      if (signed?.signedUrl) url = signed.signedUrl;
+    }
+    return url ? { url, label: GUIDE_LABEL[g.slug] || g.summary || g.slug } : null;
+  }))).filter(Boolean);
   const hublaGranted = client.hubla_access_status === 'granted';
-  if (!(guides && guides.length) && !kit?.delivered_at && !hublaGranted) return '';
+  if (!openable.length && !kit?.delivered_at && !hublaGranted) return '';
 
   return card(`
     <p class="text-sm text-white/50 mb-4">Guias e Materiais da Nay</p>
     <div class="space-y-1">
-      ${(guides || []).filter((g) => isValidHttpUrl(g.file_url)).map((g) => `
-        <a ${externalLinkAttrs(g.file_url)} class="flex items-center justify-between py-2 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-2 px-2 rounded transition-colors">
-          <span>${g.summary || g.slug}</span>
+      ${openable.map((g) => `
+        <a ${externalLinkAttrs(g.url)} class="flex items-center justify-between py-2 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-2 px-2 rounded transition-colors">
+          <span>${g.label}</span>
           <span class="badge badge-completed">Entregue</span>
         </a>
       `).join('')}
