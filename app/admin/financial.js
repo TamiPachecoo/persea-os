@@ -60,8 +60,11 @@ function renderRealClientBilling(lines) {
     return card('<p class="text-sm" style="color:var(--muted);">Nenhum contrato financeiro ativo.</p>', 'mb-8');
   }
   const rows = Array.from(byClient.entries()).map(([clientId, { fullName, lines: clientLines }]) => {
-    const unpaid = clientLines.filter((l) => l.outstanding_cents > 0).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
-    const overdue = unpaid.some((l) => l.due_date < new Date().toISOString().slice(0, 10));
+    // Permutas have no real due date (used when agreed): never "Em atraso",
+    // and only shown as next when nothing in money is left.
+    const unpaid = clientLines.filter((l) => l.outstanding_cents > 0)
+      .sort((a, b) => (a.method === 'permuta') - (b.method === 'permuta') || new Date(a.due_date) - new Date(b.due_date));
+    const overdue = unpaid.some((l) => l.method !== 'permuta' && l.due_date < new Date().toISOString().slice(0, 10));
     return { clientId, fullName, next: unpaid[0], overdue };
   });
   return card(`

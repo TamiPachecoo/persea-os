@@ -60,7 +60,93 @@ async function loadRealClients() {
   await Promise.all(withStatus.filter((c) => c._status.label === 'Ativa').map(async (c) => {
     c._teamNextStep = await computeTeamNextStep(c, c.id);
   }));
+  // Engagement (last login, her own actions, meetings) — client_engagement()
+  // is staff-only; if it fails the list still shows, just without it.
+  const { data: eng } = await supabase.rpc('client_engagement');
+  const engById = new Map((eng || []).map((e) => [e.client_id, e]));
+  withStatus.forEach((c) => { c._eng = engagementOf(engById.get(c.id)); });
   return withStatus;
+}
+
+// "Interação" = the latest of her last login and her last own action.
+// Engajada: up to 7 days · Atenção: 8–21 days · Sem resposta: more than 21
+// days or never. Only meaningful once she is active on the platform.
+const DAY = 86400000;
+const ENG_LEVELS = {
+  engajada: { label: 'Engajada', color: '#8fae8b' },
+  atencao: { label: 'Atenção', color: '#d1a04f' },
+  sem_resposta: { label: 'Sem resposta', color: '#c4785c' },
+};
+function engagementOf(e) {
+  const times = [e?.last_login, e?.last_action].filter(Boolean).map((t) => new Date(t).getTime());
+  const last = times.length ? Math.max(...times) : null;
+  const days = last == null ? null : Math.floor((Date.now() - last) / DAY);
+  const level = days == null || days > 21 ? 'sem_resposta' : days > 7 ? 'atencao' : 'engajada';
+  return { ...(e || {}), lastInteraction: last, days, level, actions30: e?.actions_30d || 0 };
+}
+const daysText = (d) => (d == null ? 'nunca interagiu' : d === 0 ? 'interagiu hoje' : d === 1 ? 'há 1 dia' : `há ${d} dias`);
+const shortDate = (t) => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+function engagementLine(c) {
+  const e = c._eng;
+  if (!e || c._status.label !== 'Ativa') return '';
+  const lv = ENG_LEVELS[e.level];
+  const bits = [
+    `<span style="color:${lv.color};">● ${lv.label}</span>`,
+    `última interação ${daysText(e.days)}`,
+    `${e.actions30} ${e.actions30 === 1 ? 'ação' : 'ações'} em 30 dias`,
+    e.next_meeting ? `próximo encontro ${shortDate(e.next_meeting)}` : (e.last_meeting ? `último encontro ${shortDate(e.last_meeting)}` : 'sem encontros ainda'),
+  ];
+  return `<p class="text-xs text-white/40 mt-0.5">${bits.join(' · ')}</p>`;
+}
+
+// Top of Clientes: how engaged the active clients are, and how long since
+// each one last interacted (sorted: who needs a nudge first).
+function engagementPanel(clients) {
+  const active = clients.filter((c) => c._status.label === 'Ativa' && !c.is_demo && c._eng);
+  if (!active.length) return '';
+  const counts = Object.fromEntries(Object.keys(ENG_LEVELS).map((k) => [k, active.filter((c) => c._eng.level === k).length]));
+  const bar = Object.keys(ENG_LEVELS).filter((k) => counts[k]).map((k) => `<div title="${ENG_LEVELS[k].label}: ${counts[k]}" style="flex:${counts[k]};background:${ENG_LEVELS[k].color};height:10px;"></div>`).join('');
+  const sorted = [...active].sort((a, b) => (b._eng.days ?? 9999) - (a._eng.days ?? 9999));
+  const max = Math.max(1, ...sorted.map((c) => c._eng.days ?? 0), 30);
+  const rows = sorted.map((c) => {
+    const d = c._eng.days;
+    const w = d == null ? 100 : Math.max(2, Math.round((d / max) * 100));
+    return `<a href="client-onboarding.html?id=${c.id}" class="block hover:bg-white/5 -mx-2 px-2 py-1 rounded" title="${c.full_name}: ${daysText(d)}">
+      <div class="flex items-baseline justify-between gap-3 text-sm"><span class="truncate">${c.full_name}</span><span class="text-xs shrink-0" style="color:${ENG_LEVELS[c._eng.level].color};">${d == null ? 'nunca' : `${d} ${d === 1 ? 'dia' : 'dias'}`}</span></div>
+      <div style="height:4px;border-radius:4px;background:var(--line);margin-top:4px;"><div style="height:4px;border-radius:4px;width:${w}%;background:${ENG_LEVELS[c._eng.level].color};opacity:${d == null ? 0.45 : 0.9};"></div></div>
+    </a>`;
+  }).join('');
+  return card(`
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+      <p class="text-sm text-white/50">Engajamento das clientes ativas</p>
+      <p class="text-xs text-white/30">Interação = acesso à plataforma ou ação dela (fotos, tarefas, questionários, pedidos de encontro)</p>
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-3">
+      ${Object.entries(ENG_LEVELS).map(([k, v]) => `<div><p class="text-2xl font-serif" style="color:${v.color};">${counts[k]}</p><p class="text-xs text-white/40">${v.label} <span class="text-white/20">${k === 'engajada' ? '(até 7 dias)' : k === 'atencao' ? '(8 a 21 dias)' : '(mais de 21 dias)'}</span></p></div>`).join('')}
+    </div>
+    <div class="flex rounded overflow-hidden mb-5" style="gap:2px;">${bar}</div>
+    <p class="text-xs text-white/40 mb-2">Dias desde a última interação</p>
+    <div class="space-y-1">${rows}</div>
+  `, 'mb-6');
+}
+
+// Clients grouped by where they are: onboarding first, then Fase 1, 2, 3…
+function clientsByPhase(clients) {
+  const onboarding = clients.filter((c) => c._status.label !== 'Ativa');
+  const active = clients.filter((c) => c._status.label === 'Ativa');
+  const phases = [...new Set(active.map((c) => c.phase_index ?? 0))].sort((a, b) => a - b);
+  const group = (title, chip, list, note = '') => card(`
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+      <div class="flex items-center gap-2">${chip}<p class="text-sm text-white/60">${title}</p></div>
+      <span class="text-xs text-white/30">${list.length} cliente${list.length === 1 ? '' : 's'}</span>
+    </div>
+    ${note ? `<p class="text-xs text-white/20 mb-2">${note}</p>` : ''}
+    <div class="divide-y" style="border-color:var(--line);">${list.map(productionClientRow).join('')}</div>
+  `, 'mb-4');
+  return [
+    ...phases.map((ph) => group('', phaseChip(ph), active.filter((c) => (c.phase_index ?? 0) === ph).sort((a, b) => (b._eng?.days ?? 9999) - (a._eng?.days ?? 9999)))),
+    onboarding.length ? group('Em onboarding', '', onboarding, 'Cadastro, contrato ou convite ainda em andamento.') : '',
+  ].join('');
 }
 
 function productionClientRow(c) {
@@ -76,6 +162,7 @@ function productionClientRow(c) {
           ${c.is_demo ? '<span class="badge" style="background:rgba(196,90,60,.15); color:var(--terracotta); border-color:var(--terracotta);">Demo</span>' : ''}
         </div>
         <p class="text-xs text-white/30">${c.email || 'sem e-mail'}${tierLabel ? ` · ${tierLabel}` : ''}</p>
+        ${engagementLine(c)}
         ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
       <!-- Real gap found live on mobile: this block itself never wrapped
@@ -337,7 +424,7 @@ async function renderProductionCRM() {
           <button id="new-client" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Cliente</button>
         </div>
       `, 'mb-6')}
-      ${clients.length ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
+      ${clients.length ? engagementPanel(clients) + clientsByPhase(clients)
         : card('<p class="text-sm" style="color:var(--muted);">Nenhum cliente ainda. Clique em "Novo Cliente" para começar o cadastro da primeira cliente real.</p>')}
     `;
   }

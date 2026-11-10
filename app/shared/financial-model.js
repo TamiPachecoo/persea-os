@@ -45,7 +45,7 @@ export async function loadActiveObligations({ contractId = null, excludeDemo = f
   const enriched = lines.map((l) => {
     const allocated_cents = allocatedByLine[l.id] || 0;
     const outstanding_cents = l.amount_cents - allocated_cents;
-    const { status } = deriveLineEffectiveState({ amount_cents: l.amount_cents, allocated_cents, outstanding_cents, due_date: l.due_date });
+    const { status } = deriveLineEffectiveState({ amount_cents: l.amount_cents, allocated_cents, outstanding_cents, due_date: l.due_date, method: l.method });
     return { ...l, allocated_cents, outstanding_cents, effective_status: status };
   });
   return { lines: enriched };

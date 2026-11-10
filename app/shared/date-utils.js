@@ -37,7 +37,8 @@ export function deriveLineEffectiveState(line) {
   const outstanding = line.outstanding_cents ?? (line.amount_cents - (line.allocated_cents || 0));
   const partiallyPaid = (line.allocated_cents || 0) > 0 && outstanding > 0;
   if (outstanding <= 0) return { status: 'paid', outstandingCents: 0 };
-  const isPastDue = !!line.due_date && line.due_date < todayISOInBrazil();
+  // A permuta is used whenever the client and Nay agree: never "late".
+  const isPastDue = line.method !== 'permuta' && !!line.due_date && line.due_date < todayISOInBrazil();
   if (isPastDue) return { status: partiallyPaid ? 'partially_paid_overdue' : 'overdue', outstandingCents: outstanding };
   return { status: partiallyPaid ? 'partially_paid' : 'pending', outstandingCents: outstanding };
 }
