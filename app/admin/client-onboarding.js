@@ -1759,7 +1759,7 @@ function openDeliverableModal({ key, label, row, isKit }) {
           <textarea name="summary" rows="2" class="field text-sm">${data.summary || ''}</textarea>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação — até 50 MB; a cliente abre direto na plataforma)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação, vídeo — até ${SHARED_MAX_MB} MB; a cliente abre direto na plataforma)</span></label>
           ${data.file_path ? `<div class="flex items-center gap-3 flex-wrap mb-2 text-sm">
             ${data.signedFileUrl ? `<a ${externalLinkAttrs(data.signedFileUrl)} class="btn-text" style="display:inline;">📄 ${escHtml(data.file_name || 'Arquivo')} ↗</a>` : `<span>📄 ${escHtml(data.file_name || 'Arquivo')}</span>`}
             <label class="text-xs text-white/50 flex items-center gap-1"><input type="checkbox" name="remove_file" /> Remover arquivo</label>
@@ -1800,11 +1800,11 @@ function openDeliverableModal({ key, label, row, isKit }) {
     const oldPath = data.file_path || null;
     let newPath = null;
     if (file && file.size) {
-      if (file.size > 50 * 1024 * 1024) { fail(`${file.name} passa de 50 MB.`); return; }
+      if (file.size > SHARED_MAX_MB * 1024 * 1024) { fail(`${file.name} passa de ${SHARED_MAX_MB} MB.`); return; }
       const ext = (file.name.match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
       newPath = `${clientId}/materials/${isKit ? 'kit' : key}-${crypto.randomUUID()}${ext}`;
       const { error: upErr } = await supabase.storage.from(MATERIALS_BUCKET).upload(newPath, file, { contentType: file.type || undefined, upsert: false });
-      if (upErr) { fail('Não foi possível enviar o arquivo.'); return; }
+      if (upErr) { fail(uploadErrorMessage(upErr, file.name)); return; }
       payload.file_path = newPath; payload.file_name = file.name.slice(0, 200);
     } else if (fd.get('remove_file')) {
       payload.file_path = null; payload.file_name = null;
@@ -2072,7 +2072,12 @@ const canEditMeeting = (m) => !isAssistant || m.assigned_to === 'assistant';
 // student and meeting (<client>/<meeting>/...), the student can only read
 // her own folder (see migration meeting_shared_files).
 const SHARED_BUCKET = 'client-shared-files';
-const SHARED_MAX_MB = 25;
+// Files Nay shares with a client (meeting files, deliverables, E2/E4
+// materials). The bucket allows up to 500 MB (Pro plan); the project-wide
+// limit in Supabase → Storage → Settings must be at least this too.
+const SHARED_MAX_MB = 500;
+// Storage's own refusal says why (e.g. the project-wide size limit).
+const uploadErrorMessage = (err, name) => (/maximum allowed size|too large|413|Payload/i.test(err?.message || '') ? `${name} é maior do que o limite de envio configurado no Supabase (Storage → Settings).` : `Não foi possível enviar ${name}: ${err?.message || 'erro desconhecido'}.`);
 const isImageFile = (f) => /^image\//.test(f.type || '') || /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name || '');
 function sharedFilesHtml(m, fileUrls, editable) {
   const files = Array.isArray(m.shared_files) ? m.shared_files : [];
@@ -2192,13 +2197,13 @@ function wireMaterialSlots(materials) {
       const def = matDef(input.dataset.materialUpload);
       const f = input.files[0];
       if (!def || !f) return;
-      if (f.size > 50 * 1024 * 1024) { toast(`${f.name} passa de 50 MB.`, { tone: 'error' }); input.value = ''; return; }
+      if (f.size > SHARED_MAX_MB * 1024 * 1024) { toast(`${f.name} passa de ${SHARED_MAX_MB} MB.`, { tone: 'error' }); input.value = ''; return; }
       const label = content.querySelector(`[data-material-label="${def.key}"]`);
       if (label) { label.style.opacity = '.5'; label.style.pointerEvents = 'none'; }
       const ext = (f.name.match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
       const path = `${clientId}/materials/${def.key}-${crypto.randomUUID()}${ext}`;
       const { error: upErr } = await supabase.storage.from(MATERIALS_BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
-      if (upErr) { toast('Não foi possível enviar o arquivo.', { tone: 'error' }); render(); return; }
+      if (upErr) { toast(uploadErrorMessage(upErr, f.name), { tone: 'error' }); render(); return; }
       const old = materials?.[def.key]?.row?.file_path;
       const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_path: path, file_name: f.name.slice(0, 200) }, { onConflict: 'client_id' });
       if (error) { await supabase.storage.from(MATERIALS_BUCKET).remove([path]); toast('Não foi possível salvar o material.', { tone: 'error' }); render(); return; }
@@ -2251,7 +2256,7 @@ function wireEncontrosTab(encontros) {
         const ext = (f.name.match(/\.[a-z0-9]{1,8}$/i) || [''])[0].toLowerCase();
         const path = `${clientId}/${m.id}/${crypto.randomUUID()}${ext}`;
         const { error } = await supabase.storage.from(SHARED_BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
-        if (error) { toast(`Não foi possível enviar ${f.name}.`, { tone: 'error' }); continue; }
+        if (error) { toast(uploadErrorMessage(error, f.name), { tone: 'error' }); continue; }
         added.push({ path, name: f.name.slice(0, 200), type: f.type || '', size: f.size });
       }
       if (added.length) {
