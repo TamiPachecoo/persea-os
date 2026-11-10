@@ -13,7 +13,7 @@
 // for those anywhere in the schema).
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, progressBar, toast, formatDate, formatDateTime, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderPhaseTracker, wirePhaseTrackerNav } from '../shared/ui.js';
-import { loadProgramState, loadNextMeeting, loadPlaybookSummary } from '../shared/program-model.js';
+import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 import { supabase } from '../shared/supabase-client.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'program' });
@@ -139,30 +139,6 @@ function nextMeetingCard(meeting) {
   `, 'mb-8');
 }
 
-function playbookBonusCard() {
-  if (!client.personal_playbook_url && !client.business_playbook_url) return '';
-  return `
-    <p class="text-xs uppercase mt-10 mb-4" style="color:var(--muted); letter-spacing:.12em;">Também disponível</p>
-    ${client.personal_playbook_url ? card(`
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <p class="text-lg font-serif mb-1">Seu Playbook de Marca Pessoal</p>
-          <p class="text-sm text-white/40">Identidade, missão, posicionamento e pitch, tudo em um só lugar.</p>
-        </div>
-        <a ${externalLinkAttrs(client.personal_playbook_url)} class="btn-ghost shrink-0">Abrir Playbook ↗</a>
-      </div>
-    `, 'mb-5') : ''}
-    ${client.business_playbook_url ? card(`
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <p class="text-lg font-serif mb-1">Seu Business Playbook</p>
-          <p class="text-sm text-white/40">A análise do seu negócio e os pontos de foco para você perseguir.</p>
-        </div>
-        <a ${externalLinkAttrs(client.business_playbook_url)} class="btn-ghost shrink-0">Abrir ↗</a>
-      </div>
-    `, 'mb-5') : ''}
-  `;
-}
 
 // Her own contract decides how long she has (anual = 12 months, semestral =
 // 6), e.g. an Essencial client with a year of access; the program's standard
@@ -226,7 +202,6 @@ async function render() {
     <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">Sua Jornada</p>
     <div class="journey-phases">${phaseCardsHtml.join('')}</div>
 
-    ${playbookBonusCard()}
   `;
 
   content.querySelectorAll('[data-upgrade-interest]').forEach((btn) => {

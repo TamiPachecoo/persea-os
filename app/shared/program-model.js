@@ -28,7 +28,6 @@
 // from the real production Program Hub — see client/program.js.
 import { supabase } from './supabase-client.js';
 import { getLatestAttempt as getLatestArchetypeAttempt } from './archetype-model.js';
-import { getPublishedPlaybook, getQuizResult as getPlaybookQuizResult } from './playbook-model.js';
 import { isActivitySkipped, skippedPhaseSet } from './journey-skips.js';
 
 const STATUS_LABEL = {
@@ -245,10 +244,3 @@ export async function loadNextMeeting(clientId) {
   return data || null;
 }
 
-// Real Playbook availability, reusing shared/playbook-model.js — never a
-// second "is the playbook ready" check.
-export async function loadPlaybookSummary(clientId) {
-  const playbook = await getPublishedPlaybook(clientId);
-  const quizResult = playbook ? await getPlaybookQuizResult(clientId) : null;
-  return { published: Boolean(playbook), quizResult };
-}

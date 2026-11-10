@@ -158,7 +158,6 @@ function productionClientRow(c) {
       <div class="min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <p class="font-medium">${c.full_name}</p>
-          ${c.phase_index != null && c._teamNextStep ? phaseChip(c.phase_index) : ''}
           ${c.is_demo ? '<span class="badge" style="background:rgba(196,90,60,.15); color:var(--terracotta); border-color:var(--terracotta);">Demo</span>' : ''}
         </div>
         <p class="text-xs text-white/30">${c.email || 'sem e-mail'}${tierLabel ? ` · ${tierLabel}` : ''}</p>
@@ -306,8 +305,81 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
 // so a real lead is actually visible and actionable: see it, reach her
 // on WhatsApp/e-mail, move her stage forward.
 async function loadRealLeads() {
-  const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
-  return data || [];
+  const [{ data }, { data: notes }] = await Promise.all([
+    supabase.from('leads').select('*').order('created_at', { ascending: false }),
+    supabase.from('lead_interactions').select('*').order('occurred_at', { ascending: false }),
+  ]);
+  // Anotações (meetings, calls, follow-ups) — newest first, per lead.
+  const byLead = new Map();
+  (notes || []).forEach((n) => { if (!byLead.has(n.lead_id)) byLead.set(n.lead_id, []); byLead.get(n.lead_id).push(n); });
+  return (data || []).map((l) => ({ ...l, _notes: byLead.get(l.id) || [] }));
+}
+
+const todayISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+function leadNotesBlock(l) {
+  const notes = l._notes || [];
+  const item = (n) => `
+    <div class="py-1.5 flex items-start justify-between gap-2">
+      <p class="text-sm" style="white-space:pre-line;"><span class="text-xs text-white/30 mr-2">${formatDate(n.occurred_at)}</span>${escL(n.summary)}</p>
+      <button type="button" data-delete-note="${n.id}" class="btn-text shrink-0" style="font-size:11px;color:var(--terracotta);">Apagar</button>
+    </div>`;
+  return `
+    <details class="mt-2" ${notes.length ? '' : ''}>
+      <summary class="text-xs" style="color:var(--gold);cursor:pointer;">Anotações${notes.length ? ` (${notes.length})` : ''}${notes[0] ? ` · última em ${formatDate(notes[0].occurred_at)}` : ''}</summary>
+      <div class="mt-2 pl-3" style="border-left:1px solid var(--line);">
+        ${notes.map(item).join('')}
+        <form data-note-form="${l.id}" class="mt-2 space-y-2">
+          <textarea name="summary" rows="2" class="field text-sm" placeholder="Ex.: reunião hoje — quer começar em janeiro, pediu proposta do Essencial"></textarea>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input type="date" name="occurred_at" class="field text-sm" style="width:auto;" value="${todayISO()}" max="${todayISO()}" />
+            <button type="submit" class="btn-ghost" style="padding:6px 12px;font-size:11px;">Salvar anotação</button>
+          </div>
+        </form>
+      </div>
+    </details>`;
+}
+
+// "+ Novo lead": someone Nay met or who reached her outside the site forms.
+function openNewLeadModal() {
+  const { el, close } = openModal({
+    title: 'Novo lead',
+    bodyHtml: `
+      <form id="new-lead-form" class="space-y-3">
+        <div><label class="text-xs text-white/40 block mb-1">Nome *</label><input name="full_name" class="field" required /></div>
+        <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+          <div><label class="text-xs text-white/40 block mb-1">WhatsApp</label><input name="phone" type="tel" class="field" placeholder="(31) 99999-9999" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">E-mail</label><input name="email" type="email" class="field" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Instagram</label><input name="instagram" class="field" placeholder="@perfil" /></div>
+          <div><label class="text-xs text-white/40 block mb-1">Origem</label><select name="source" class="field">${LEAD_SOURCES.map((s) => `<option value="${s}" ${s === 'referral' ? 'selected' : ''}>${LEAD_SOURCE_LABEL[s]}</option>`).join('')}</select></div>
+          <div><label class="text-xs text-white/40 block mb-1">Estágio</label><select name="stage" class="field">${LEAD_STAGES.filter((s) => s !== 'convertido').map((s) => `<option value="${s}">${LEAD_STAGE_LABEL[s]}</option>`).join('')}</select></div>
+        </div>
+        <div><label class="text-xs text-white/40 block mb-1">Primeira anotação <span class="text-white/20">(opcional)</span></label><textarea name="note" rows="3" class="field text-sm" placeholder="Como chegou, o que conversaram, próximo passo"></textarea></div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" id="cancel-new-lead" class="btn-text">Cancelar</button>
+          <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar lead</button>
+        </div>
+      </form>`,
+  });
+  el.querySelector('#cancel-new-lead').addEventListener('click', close);
+  el.querySelector('#new-lead-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fullName = String(fd.get('full_name') || '').trim();
+    if (fullName.length < 2) { toast('Escreva o nome.', { tone: 'error' }); return; }
+    const btn = e.target.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Salvando…';
+    const clean = (k) => String(fd.get(k) || '').trim() || null;
+    const { data: lead, error } = await supabase.from('leads').insert({
+      full_name: fullName, phone: clean('phone'), email: clean('email'),
+      instagram: (clean('instagram') || '').replace(/^@+/, '') || null,
+      source: fd.get('source'), stage: fd.get('stage'), vip_group_status: 'not_in_group',
+    }).select('id').single();
+    if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; btn.textContent = 'Salvar lead'; return; }
+    const note = clean('note');
+    if (note) await supabase.from('lead_interactions').insert({ lead_id: lead.id, occurred_at: new Date().toISOString(), summary: note });
+    close();
+    toast('Lead adicionado.');
+    renderProductionCRM();
+  });
 }
 
 // Answers from naymurta.com/aplicacao (mentoria-application → leads.application).
@@ -347,6 +419,7 @@ function realLeadRow(l) {
         <p class="text-xs text-white/20 mt-1">${LEAD_SOURCE_LABEL[l.source] || l.source} · recebido ${formatDate(l.created_at)}</p>
         ${l.notes ? `<p class="text-xs text-white/40 mt-1" style="white-space:pre-line;">${escL(l.notes)}</p>` : ''}
         ${applicationBlock(l)}
+        ${leadNotesBlock(l)}
       </div>
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         ${waHref ? `<a href="${waHref}" target="_blank" rel="noopener" class="btn-ghost" style="padding:6px 12px;font-size:11px;">WhatsApp</a>` : ''}
@@ -381,11 +454,11 @@ function renderRealLeadsSection(leads) {
     return matchesSearch && matchesStage && notArchived;
   });
   return card(`
-    <div class="flex items-center justify-between mb-1">
-      <p class="text-sm text-white/50">Leads</p>
-      <span class="text-xs text-white/30">${filtered.length} de ${showConverted ? leads.length : openCount}</span>
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <p class="text-sm text-white/50">Leads <span class="text-xs text-white/30 ml-2">${filtered.length} de ${showConverted ? leads.length : openCount}</span></p>
+      <button type="button" id="new-lead" class="btn-primary" style="padding:8px 16px;font-size:12px;">+ Novo lead</button>
     </div>
-    <p class="text-xs text-white/20 mb-4">Contatos recebidos pelo formulário do site (naymurta.com) aparecem aqui automaticamente.</p>
+    <p class="text-xs text-white/20 mb-4">Contatos do site (naymurta.com) e do Roteiro de Stories entram aqui sozinhos; use "Novo lead" para quem chegou por outro caminho.</p>
     <div class="flex flex-wrap items-center gap-3 mb-4">
       <input id="lead-search" class="field text-sm" style="max-width:260px;" placeholder="Buscar por nome ou email..." value="${leadSearch}" />
       <select id="stage-filter" class="field text-sm" style="max-width:220px;">
@@ -443,6 +516,29 @@ async function renderProductionCRM() {
     searchEl.focus();
     searchEl.setSelectionRange(leadSearch.length, leadSearch.length);
     content.querySelector('#stage-filter').addEventListener('change', (e) => { stageFilter = e.target.value; renderProductionCRM(); });
+    content.querySelector('#new-lead')?.addEventListener('click', openNewLeadModal);
+    content.querySelectorAll('[data-note-form]').forEach((form) => form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const summary = String(fd.get('summary') || '').trim();
+      if (!summary) { toast('Escreva a anotação.', { tone: 'error' }); return; }
+      const day = String(fd.get('occurred_at') || todayISO());
+      const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+      const { error } = await supabase.from('lead_interactions').insert({ lead_id: form.dataset.noteForm, occurred_at: `${day}T12:00:00-03:00`, summary });
+      if (error) { toast(error.message, { tone: 'error' }); btn.disabled = false; return; }
+      toast('Anotação salva.');
+      keepOpenLead = form.dataset.noteForm;
+      renderProductionCRM();
+    }));
+    content.querySelectorAll('[data-delete-note]').forEach((btn) => btn.addEventListener('click', async () => {
+      if (!confirm('Apagar esta anotação?')) return;
+      const { error } = await supabase.from('lead_interactions').delete().eq('id', btn.dataset.deleteNote);
+      if (error) { toast(error.message, { tone: 'error' }); return; }
+      keepOpenLead = btn.closest('details')?.querySelector('[data-note-form]')?.dataset.noteForm || null;
+      renderProductionCRM();
+    }));
+    // Re-open the notes of the lead just edited (the list re-renders).
+    if (keepOpenLead) { const f = content.querySelector(`[data-note-form="${keepOpenLead}"]`); if (f) f.closest('details').open = true; keepOpenLead = null; }
     content.querySelectorAll('[data-lead-stage]').forEach((sel) => {
       sel.addEventListener('change', async (e) => {
         const lead = lastLoadedLeads.find((l) => l.id === sel.dataset.leadStage);
@@ -508,6 +604,7 @@ let section = new URLSearchParams(location.search).get('section') === 'leads' ? 
 let clientSearch = '';
 let leadSearch = '';
 let stageFilter = '';
+let keepOpenLead = null;
 let lastLoadedLeads = []; // set by renderProductionCRM whenever it loads real leads — lets the "Converter em Cliente" click handler look up the full row by id without re-fetching
 
 // --- Clientes, grouped by program -----------------------------------------

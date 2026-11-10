@@ -32,7 +32,6 @@ import { splitInstallments } from '../shared/installments.js';
 import { loadValueAssessment } from '../shared/value-analysis-model.js';
 import { SECTIONS, VALUE_ASSESSMENT_STATUS_LABEL, VALUE_ASSESSMENT_STATUS_BADGE_CLASS, fmtBRL } from '../shared/value-analysis-schema.js';
 import { getLatestAttempt, getAttemptResponses, getArchetypeQuestions, loadArchetypeResults } from '../shared/archetype-model.js';
-import { getVersions, getSections, createDraft, saveSectionContent, publishVersion, SECTION_DEFS } from '../shared/playbook-model.js';
 import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
 import { computeTeamNextStep, loadEncounterJourney } from '../shared/team-action-model.js';
 import { markHublaAccessGranted } from '../shared/hubla-model.js';
@@ -41,8 +40,6 @@ import { DIAGNOSTIC_TITLE, groupBySection } from '../shared/diagnostic-template.
 import { ENCOUNTER_MATERIALS, MATERIALS_BUCKET, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
 import { IMAGE_PHASE, skippedPhaseSet, applicableEncounters } from '../shared/journey-skips.js';
 
-const PLAYBOOK_STATUS_LABEL = { draft: 'Rascunho', published: 'Publicado', archived: 'Arquivado' };
-const PLAYBOOK_STATUS_BADGE = { draft: 'badge-progress', published: 'badge-completed', archived: 'badge-locked' };
 
 // Staff-side conversion of Business Survey / Brand Direction / Value
 // Analysis off MockDB (client-detail.js's MockDB.getBrandDirection/
@@ -90,7 +87,7 @@ document.body.innerHTML = renderShell({ role: profile.role, active: profile.role
 const content = document.getElementById('app-content');
 const isAssistant = profile.role === 'assistant';
 let activeTab = 'jornada';
-const ASSISTANT_HIDDEN_TABS = new Set(['pesquisa', 'playbook']);
+const ASSISTANT_HIDDEN_TABS = new Set(['pesquisa']);
 
 if (!clientId) {
   content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Falta o parâmetro ?id= na URL.</p>');
@@ -123,15 +120,13 @@ const ALL_TABS = [
   ['direcao-marca', 'Direção de Marca'],
   ['pesquisa', 'Precificação & Valor'],
   ['arquetipos', 'Arquétipos'],
-  ['playbook', 'Playbook'],
   ['projeto-imagem', 'Projeto de Imagem'],
 ];
 // Explicit per feedback: the assistant's CRM should show Jornada,
 // Financeiro, Direção de Marca, Arquétipos, and Projeto de Imagem (the
 // part of the program she's actually responsible for) — not Precificação
 // & Valor (Valor is already RLS-blocked for her — see this file's own
-// header comment; Precificação/business survey is bundled with it) or
-// Playbook.
+// header comment; Precificação/business survey is bundled with it).
 const TABS = isAssistant ? ALL_TABS.filter(([key]) => !ASSISTANT_HIDDEN_TABS.has(key)) : ALL_TABS;
 
 async function loadAll() {
@@ -412,105 +407,6 @@ function archetypeCard(state) {
   `, 'mb-6');
 }
 
-// Playbook — staff workflow (both admin and assistant: playbook_versions/
-// _sections real RLS grants both roles one combined ALL policy, not split
-// like Brand Direction — a pre-existing schema decision, respected as-is
-// here rather than narrowed or broadened). Editing only ever touches the
-// current draft; a published/archived version renders read-only, matching
-// the real client_read RLS which only ever exposes status='published'.
-async function loadPlaybookState() {
-  const versions = await getVersions(clientId);
-  const draft = versions.find((v) => v.status === 'draft');
-  const published = versions.find((v) => v.status === 'published');
-  const active = draft || published || null;
-  const sections = active ? await getSections(active.id) : {};
-  return { versions, draft, published, active, sections };
-}
-
-function playbookCard({ versions, draft, published, active, sections }) {
-  if (!versions.length) {
-    return card(`
-      <p class="text-sm text-white/50 mb-1">Playbook</p>
-      <p class="text-xs mb-4" style="color:var(--muted);">Nenhum Playbook criado ainda.</p>
-      <button id="create-draft" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Criar primeiro rascunho</button>
-    `, 'mb-6');
-  }
-
-  const isEditable = active && active.status === 'draft';
-  return card(`
-    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-      <p class="text-sm text-white/50">Playbook</p>
-      <div class="flex items-center gap-2">
-        ${versions.map((v) => `<span class="badge ${PLAYBOOK_STATUS_BADGE[v.status]}">v${v.version} — ${PLAYBOOK_STATUS_LABEL[v.status]}</span>`).join('')}
-      </div>
-    </div>
-    ${!draft && published ? `<div class="mb-4"><button id="create-draft" class="btn-ghost">Criar novo rascunho a partir do publicado</button></div>` : ''}
-    ${active ? `
-      <form id="playbook-form" class="space-y-4">
-        ${SECTION_DEFS.map(([key, label]) => `
-          <div>
-            <label class="text-xs text-white/40 block mb-1">${label}</label>
-            <textarea name="${key}" rows="3" class="field text-sm" ${isEditable ? '' : 'readonly'}>${sections[key] || ''}</textarea>
-          </div>
-        `).join('')}
-      </form>
-      ${isEditable ? `
-        <div class="flex justify-end pt-3">
-          <button id="publish-draft" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Publicar v${active.version}</button>
-        </div>
-      ` : ''}
-    ` : ''}
-  `, 'mb-6');
-}
-
-async function createPlaybookDraft() {
-  const btn = content.querySelector('#create-draft');
-  btn.disabled = true;
-  btn.textContent = 'Criando…';
-  try { await createDraft(clientId); toast('Rascunho criado.'); render(); }
-  catch { toast('Não foi possível criar o rascunho agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Criar rascunho'; }
-}
-
-let savingSection = null;
-async function saveSectionField(versionId, key, textarea) {
-  if (savingSection === key) return;
-  savingSection = key;
-  try { await saveSectionContent(versionId, key, textarea.value); }
-  catch { toast('Não foi possível salvar esta seção agora.', { tone: 'error' }); }
-  finally { savingSection = null; }
-}
-
-// A live E2E test found that clicking "Publicar" made the browser appear to
-// hang/lose connection — the native window.confirm() below blocks JS
-// execution synchronously waiting for a dialog response, which several
-// automated/embedded browser contexts never dismiss (no native dialog
-// surface to click), reading as a frozen page. Same delete-client modal
-// pattern (openModal, real Cancelar/confirm buttons) used elsewhere in this
-// file, so this is consistent with the rest of the app, not a one-off.
-function openPublishConfirmModal(versionId, versionNumber) {
-  const { el, close } = openModal({
-    title: 'Publicar Playbook',
-    bodyHtml: `
-      <p class="text-sm text-white/70 mb-4">Publicar a v${versionNumber}? A cliente passará a ver esta versão imediatamente.</p>
-      <div class="flex justify-end gap-3 pt-2">
-        <button type="button" id="cancel-publish" class="btn-ghost">Cancelar</button>
-        <button type="button" id="confirm-publish" class="btn-primary">Publicar</button>
-      </div>
-    `,
-  });
-  el.querySelector('#cancel-publish').addEventListener('click', close);
-  el.querySelector('#confirm-publish').addEventListener('click', async () => {
-    const btn = el.querySelector('#confirm-publish');
-    btn.disabled = true;
-    btn.textContent = 'Publicando…';
-    try { await publishVersion(clientId, versionId); close(); toast('Playbook publicado.'); render(); }
-    catch { toast('Não foi possível publicar agora.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Publicar'; }
-  });
-}
-
-function publishPlaybookDraft(versionId, versionNumber) {
-  openPublishConfirmModal(versionId, versionNumber);
-}
 
 const TIER_NAME = { premium: 'Persea Premium', essential: 'Persea Essencial' };
 
@@ -2570,12 +2466,11 @@ async function render() {
   currentClient = client;
   if (!client) { content.innerHTML = card('<p class="text-sm" style="color:var(--terracotta);">Cliente não encontrada.</p>'); return; }
 
-  const [surveyState, brandState, valueAssessment, archetypeState, playbookState, state, finState, internalProfile, journey, imageProject] = await Promise.all([
+  const [surveyState, brandState, valueAssessment, archetypeState, state, finState, internalProfile, journey, imageProject] = await Promise.all([
     loadBusinessSurvey(),
     loadBrandDirection(),
     !isAssistant ? loadValueAssessment(clientId) : Promise.resolve(null),
     loadArchetypeState(),
-    loadPlaybookState(),
     loadProgramState(clientId, client),
     loadFinanceiro(contract),
     loadInternalProfile(),
@@ -2669,7 +2564,6 @@ async function render() {
     // than hidden by omission.
     pesquisa: `${businessSurveyCard(surveyState)}${!isAssistant ? valueAnalysisCard(valueAssessment) : ''}`,
     arquetipos: archetypeCard(archetypeState),
-    playbook: playbookCard(playbookState),
   };
 
   content.innerHTML = `
@@ -2779,7 +2673,6 @@ async function render() {
   content.querySelector('#delete-client')?.addEventListener('click', () => openDeleteClientModal(client));
   content.querySelector('#bd-form')?.addEventListener('submit', saveBrandDirection);
   content.querySelector('#value-publish-form')?.addEventListener('submit', (e) => publishValueDeliverable(e, valueAssessment.id));
-  content.querySelector('#create-draft')?.addEventListener('click', createPlaybookDraft);
   content.querySelectorAll('[data-generate-checkout]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const original = btn.textContent;
@@ -2960,12 +2853,7 @@ async function render() {
     toast('Chave Pix atualizada.');
     render();
   });
-  if (playbookState.active && playbookState.active.status === 'draft') {
-    content.querySelectorAll('#playbook-form textarea').forEach((textarea) => {
-      textarea.addEventListener('blur', () => saveSectionField(playbookState.active.id, textarea.name, textarea));
-    });
-    content.querySelector('#publish-draft')?.addEventListener('click', () => publishPlaybookDraft(playbookState.active.id, playbookState.active.version));
-  }
+
 }
 
 render();
