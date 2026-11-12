@@ -176,10 +176,15 @@ export function encounterDetailHtml({ def, homework, deliverables, audience = 'a
         ${h.statusLabel ? `<span class="badge ${h.badgeClass}" style="flex:none;">${esc(h.statusLabel)}</span>` : ''}
       </li>`;
   }).join('') : '';
-  const section = (title, note, inner) => `
-    <div class="mb-5">
-      <p class="text-xs uppercase mb-1" style="color:var(--gold);letter-spacing:.1em;">${title}</p>
-      ${note ? `<p class="text-xs text-white/30 mb-2">${note}</p>` : ''}
+  // Color = who acts: blue = the student does it, gold = Nay/team
+  // prepares it, green = what the student receives. Same colors everywhere.
+  const section = (title, note, inner, tone, who) => `
+    <div class="enc-sec enc-sec-${tone} mb-4">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <p class="enc-sec-title">${title}</p>
+        ${who ? `<span class="enc-sec-who">${who}</span>` : ''}
+      </div>
+      ${note ? `<p class="text-xs mb-2" style="color:var(--muted);">${note}</p>` : ''}
       ${inner}
     </div>`;
   const list = (items) => `<ul>${items.map((t) => `<li class="text-sm py-1.5 border-b border-white/5 last:border-0 flex gap-2"><span style="color:var(--muted);">•</span><span>${esc(t)}</span></li>`).join('')}</ul>`;
@@ -195,17 +200,20 @@ export function encounterDetailHtml({ def, homework, deliverables, audience = 'a
       ${section(
         isClient ? 'Sua lição de casa — conclua antes deste encontro' : 'Lição de casa da aluna — antes do encontro',
         homework.length ? (homework[0].status == null ? 'Atividades do app que a aluna conclui antes deste encontro.' : `${hwDone} de ${homework.length} concluída${homework.length === 1 ? '' : 's'}. Não bloqueia o encontro, mas é importante chegar com tudo feito.`) : '',
-        homework.length ? `<ul>${hwRows}</ul>` : `<p class="text-sm text-white/30">${isClient ? 'Nenhuma atividade obrigatória antes deste encontro. É só comparecer!' : 'Sem atividade do app antes deste encontro.'}</p>`,
+        homework.length ? `<ul>${hwRows}</ul>` : `<p class="text-sm" style="color:var(--muted);">${isClient ? 'Nenhuma atividade obrigatória antes deste encontro. É só comparecer!' : 'Sem atividade do app antes deste encontro.'}</p>`,
+        'student', isClient ? 'Você faz' : 'Aluna faz',
       )}
       ${!isClient ? section(
         'Entregas da Nay e da equipe — prontas antes do encontro',
         '',
-        deliverables.prep.length ? list(deliverables.prep) : '<p class="text-sm text-white/30">Nada específico a preparar.</p>',
+        deliverables.prep.length ? list(deliverables.prep) : '<p class="text-sm" style="color:var(--muted);">Nada específico a preparar.</p>',
+        'team', 'Nay e equipe fazem',
       ) : ''}
       ${deliverables.released.length ? section(
         isClient ? 'O que você recebe neste encontro' : 'Liberado para a aluna neste encontro',
         '',
         list(deliverables.released),
+        'release', isClient ? 'Você recebe' : 'Aluna recebe',
       ) : ''}
     </div>`;
 }

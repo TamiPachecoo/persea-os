@@ -99,8 +99,8 @@ async function openEncounterModal(number, refs, here) {
     title: `Encontro ${number}`,
     bodyHtml: `
       ${encounterDetailHtml({ def, homework: homeworkFor(number, refs), deliverables: teamDeliverablesFor(number, refs), audience: 'admin' })}
-      <div class="mt-2">
-        <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.1em;">Quem está aqui agora (${here.length})</p>
+      <div class="enc-sec enc-sec-people">
+        <p class="enc-sec-title mb-2">Quem está aqui agora (${here.length})</p>
         <div id="enc-here">${here.length ? '<p class="text-xs text-white/30">Carregando a lição de casa de cada aluna…</p>' : '<p class="text-sm text-white/30">Nenhuma aluna neste encontro agora.</p>'}</div>
       </div>`,
   });
