@@ -15,6 +15,7 @@ import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { computeTeamNextStep } from '../shared/team-action-model.js';
+import { mountEncounterBoard } from './encounter-board.js';
 
 // Production Migration Batch 4: app.naymurta.com never shows MockDB
 // clients/leads. Real client creation + registration-link generation
@@ -490,6 +491,7 @@ async function renderProductionCRM() {
     content.innerHTML = header + renderRealLeadsSection(leads);
   } else {
     const clients = await loadRealClients();
+    lastLoadedClients = clients;
     content.innerHTML = header + `
       ${card(`
         <div class="flex items-center justify-between">
@@ -497,7 +499,7 @@ async function renderProductionCRM() {
           <button id="new-client" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Cliente</button>
         </div>
       `, 'mb-6')}
-      ${clients.length ? engagementPanel(clients) + clientsByPhase(clients)
+      ${clients.length ? '<div id="encounter-board"></div>' + engagementPanel(clients) + clientsByPhase(clients)
         : card('<p class="text-sm" style="color:var(--muted);">Nenhum cliente ainda. Clique em "Novo Cliente" para começar o cadastro da primeira cliente real.</p>')}
     `;
   }
@@ -586,8 +588,10 @@ async function renderProductionCRM() {
     // id=undefined on every single client created this way (harmless to
     // the client creation itself, but a real failed request every time).
     content.querySelector('#new-client').addEventListener('click', () => openCreateClientModal());
+    if (lastLoadedClients.length) mountEncounterBoard(content.querySelector('#encounter-board'), lastLoadedClients);
   }
 }
+let lastLoadedClients = [];
 
 const TIER_LABEL = { premium: 'Premium', essential: 'Essential' };
 const STAGE_CLASS = {

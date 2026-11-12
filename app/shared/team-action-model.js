@@ -31,6 +31,7 @@ import { supabase } from './supabase-client.js';
 import { getLatestAttempt } from './archetype-model.js';
 import { formatDateTime } from './ui.js';
 import { applicableEncounters, skippedPhaseSet } from './journey-skips.js';
+import { loadPlan, positionOf } from './encounter-journey.js';
 
 // Real gap found live (Ascensão da Marca): this whole module is built on
 // encounter_defs, the Persea-specific E1-E8 methodology table — a
@@ -51,17 +52,21 @@ export async function computeTeamNextStep(client, clientId) {
       kind: 'other_program',
     };
   }
-  const [{ data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype] = await Promise.all([
+  const [{ data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype, plan] = await Promise.all([
     supabase.from('agenda_items').select('id').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'completed'),
     supabase.from('agenda_items').select('item_date').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'upcoming').order('item_date', { ascending: true }).limit(1).maybeSingle(),
     supabase.from('questionnaires').select('status').eq('client_id', clientId).maybeSingle(),
     getLatestAttempt(clientId),
+    loadPlan(clientId),
   ]);
 
   // Her own encounter sequence: tier and skipped phases applied (Fase 2
-  // skipped → E2 is followed by E4), so "next" is the Nth one that applies.
+  // skipped → E2 is followed by E4), in the order Nay chose for her
+  // (client_encounter_plans), so "next" is the Nth one that applies — or
+  // the encounter Nay marked as current.
   const { data: allDefs } = await supabase.from('encounter_defs').select('*').order('number');
-  const nextDef = applicableEncounters(allDefs, client)[(completedMeetings || []).length] || null;
+  const sequence = applicableEncounters(allDefs, { ...client, _encounter_order: plan?.encounter_order });
+  const nextDef = positionOf(sequence, (completedMeetings || []).length, plan).def;
 
   if (!nextDef) {
     return { label: 'Encontros do plano concluídos', detail: 'Nenhum encontro pendente para o plano atual.', kind: 'done' };
@@ -105,22 +110,27 @@ export async function computeTeamNextStep(client, clientId) {
 // questionnaire/archetype gate is surfaced the same way it is above.
 export async function loadEncounterJourney(client, clientId) {
   if (!usesEncounterJourney(client)) return [];
-  const [{ data: defs }, { data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype] = await Promise.all([
+  const [{ data: defs }, { data: completedMeetings }, { data: upcoming }, { data: questionnaire }, archetype, plan] = await Promise.all([
     supabase.from('encounter_defs').select('*').order('number', { ascending: true }),
     supabase.from('agenda_items').select('id').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'completed'),
     supabase.from('agenda_items').select('item_date').eq('related_student_id', clientId).eq('type', 'individual_meeting').eq('status', 'upcoming').order('item_date', { ascending: true }).limit(1).maybeSingle(),
     supabase.from('questionnaires').select('status').eq('client_id', clientId).maybeSingle(),
     getLatestAttempt(clientId),
+    loadPlan(clientId),
   ]);
-  const completedCount = (completedMeetings || []).length;
   const intakeReady = questionnaire?.status === 'submitted' && archetype?.status === 'completed';
-  // Position in HER sequence (skipped-phase encounters don't count); those
-  // still listed, marked 'skipped', so Nay sees what was left out.
-  const applicable = applicableEncounters(defs, client);
+  // Position in HER sequence (skipped-phase encounters don't count), in the
+  // order Nay chose for her; those skipped are still listed, marked
+  // 'skipped', so Nay sees what was left out. A manual "current encounter"
+  // (client_encounter_plans.current_encounter) moves the position.
+  const applicable = applicableEncounters(defs, { ...client, _encounter_order: plan?.encounter_order });
+  const completedCount = positionOf(applicable, (completedMeetings || []).length, plan).index;
   const skipped = skippedPhaseSet(client);
+  const rank = (def) => { const i = applicable.findIndex((d) => d.number === def.number); return i === -1 ? 100 + def.number : i; };
 
   return (defs || [])
     .filter((def) => client.tier === 'premium' || !def.premium_only)
+    .sort((a, b) => rank(a) - rank(b))
     .map((def) => {
       if (skipped.has(Number(def.phase))) return { ...def, status: 'skipped' };
       const pos = applicable.findIndex((d) => d.number === def.number) + 1;

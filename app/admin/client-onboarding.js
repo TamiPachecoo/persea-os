@@ -39,6 +39,10 @@ import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, de
 import { DIAGNOSTIC_TITLE, groupBySection } from '../shared/diagnostic-template.js';
 import { ENCOUNTER_MATERIALS, MATERIALS_BUCKET, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
 import { IMAGE_PHASE, skippedPhaseSet, applicableEncounters } from '../shared/journey-skips.js';
+import {
+  loadEncounterRefs, loadPlan, savePlan, clientSequence, homeworkFor, teamDeliverablesFor,
+  activityStatusFromProgramState, homeworkProgress, encounterDetailHtml, studentTrackHtml,
+} from '../shared/encounter-journey.js';
 
 
 // Staff-side conversion of Business Survey / Brand Direction / Value
@@ -830,6 +834,122 @@ function phaseActivityRow(a) {
       </div>
     </div>
   `;
+}
+
+// --- Linha dos encontros (her order) + Nay's controls --------------------
+// The track shows her encounters in HER order (client_encounter_plans),
+// each with the homework the student finishes before it; clicking one opens
+// the full detail (homework status, the team's deliverables, what is
+// released). Nay can reorder and set the current encounter by hand.
+const JOURNEY_NODE_STATE = { completed: 'done', scheduled: 'current', pending: 'current', waiting_on_client: 'current', locked: 'upcoming' };
+const ACTIVITY_STAFF_TAB = { 'brand-extraction': 'questionarios', 'brand-direction': 'direcao-marca', 'business-survey': 'pesquisa', 'archetype-test': 'arquetipos', 'activity-guide': 'projeto-imagem', 'initial-images': 'projeto-imagem' };
+let encounterCtx = null; // { refs, plan, activityStatus, journey }
+
+function encounterTrackCard(journey, refs, activityStatus, plan) {
+  const nodes = journey.filter((e) => e.status !== 'skipped').map((e) => ({
+    def: e, state: JOURNEY_NODE_STATE[e.status] || 'upcoming',
+    hw: homeworkProgress(homeworkFor(e.number, refs, activityStatus)),
+  }));
+  if (!nodes.length) return '';
+  const cur = nodes.find((n) => n.state === 'current');
+  const subtitle = cur
+    ? `Agora: E${cur.def.number} · ${escHtml(cur.def.name)}${plan?.current_encounter ? ' (definido pela Nay)' : ''}`
+    : 'Todos os encontros concluídos';
+  return studentTrackHtml(nodes, { title: 'Linha dos encontros', subtitle });
+}
+
+function encounterPlanCard(client, refs, plan) {
+  if (isAssistant) return '';
+  const seq = clientSequence(refs.defs, client, plan);
+  if (!seq.length) return '';
+  const custom = !!plan?.encounter_order?.length;
+  return card(`
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <p class="text-sm text-white/50">Ordem dos encontros desta aluna</p>
+      ${custom ? '<span class="text-xs" style="color:var(--gold);">Ordem personalizada</span>' : '<span class="text-xs text-white/30">Ordem padrão</span>'}
+    </div>
+    <p class="text-xs text-white/30 mb-3">Use ↑ ↓ para mudar a ordem só para ela (ex.: E3 antes do E2). A lição de casa de cada encontro vai junto. Nada muda para as outras alunas.</p>
+    <form id="encounter-plan">
+      <div id="enc-order-list">
+        ${seq.map((d, i) => `
+          <div class="enc-order-row" data-order-number="${d.number}">
+            <span class="text-xs text-white/30" style="width:18px;">${i + 1}.</span>
+            <span class="text-sm flex-1"><b>E${d.number}</b> — ${escHtml(d.name)}</span>
+            <button type="button" class="enc-order-btn" data-order-move="-1" aria-label="Subir E${d.number}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="enc-order-btn" data-order-move="1" aria-label="Descer E${d.number}" ${i === seq.length - 1 ? 'disabled' : ''}>↓</button>
+          </div>`).join('')}
+      </div>
+      <div class="mt-4">
+        <label class="text-xs text-white/40 block mb-1">Encontro em que ela está agora</label>
+        <select name="current_encounter" class="field text-sm" style="width:auto;">
+          <option value="">Automático (pelos encontros realizados)</option>
+          ${seq.map((d) => `<option value="${d.number}" ${plan?.current_encounter === d.number ? 'selected' : ''}>E${d.number} — ${escHtml(d.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="flex justify-end gap-2 mt-4 flex-wrap">
+        ${custom ? '<button type="button" id="encounter-plan-reset" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Voltar à ordem padrão</button>' : ''}
+        <button type="submit" class="btn-primary" style="padding:8px 16px;font-size:12px;">Salvar ordem</button>
+      </div>
+    </form>
+  `, 'mb-6');
+}
+
+function wireEncounterTrack(root) {
+  if (!encounterCtx) return;
+  root.querySelectorAll('[data-encounter-open]').forEach((btn) => btn.addEventListener('click', () => {
+    const number = Number(btn.dataset.encounterOpen);
+    const def = encounterCtx.journey.find((e) => e.number === number) || encounterCtx.refs.defByNumber.get(number);
+    const { el, close } = openModal({
+      title: `Encontro ${number}`,
+      bodyHtml: encounterDetailHtml({
+        def,
+        homework: homeworkFor(number, encounterCtx.refs, encounterCtx.activityStatus),
+        deliverables: teamDeliverablesFor(number, encounterCtx.refs),
+        audience: isAssistant ? 'assistant' : 'admin',
+        positionLabel: { completed: 'Concluído', scheduled: `Agendado · ${def.scheduledAt ? formatDateTime(def.scheduledAt) : ''}`, pending: 'Próximo — a agendar', waiting_on_client: 'Próximo — aguardando a aluna', locked: 'Mais adiante' }[def.status] || '',
+      }) + `<div class="flex gap-3 flex-wrap mt-2">${(homeworkFor(number, encounterCtx.refs, encounterCtx.activityStatus)).map((h) => ACTIVITY_STAFF_TAB[h.slug] ? `<button type="button" class="btn-text" data-modal-tab="${ACTIVITY_STAFF_TAB[h.slug]}">Ver ${escHtml(h.title)} →</button>` : '').join('')}</div>`,
+    });
+    el.querySelectorAll('[data-modal-tab]').forEach((b) => b.addEventListener('click', () => { close(); activeTab = b.dataset.modalTab; render(); }));
+  }));
+
+  const form = root.querySelector('#encounter-plan');
+  if (!form) return;
+  const listEl = form.querySelector('#enc-order-list');
+  const refreshButtons = () => {
+    const rows = [...listEl.querySelectorAll('[data-order-number]')];
+    rows.forEach((r, i) => {
+      r.querySelector('span').textContent = `${i + 1}.`;
+      r.querySelector('[data-order-move="-1"]').disabled = i === 0;
+      r.querySelector('[data-order-move="1"]').disabled = i === rows.length - 1;
+    });
+  };
+  listEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-order-move]');
+    if (!b) return;
+    const row = b.closest('[data-order-number]');
+    if (b.dataset.orderMove === '-1' && row.previousElementSibling) listEl.insertBefore(row, row.previousElementSibling);
+    if (b.dataset.orderMove === '1' && row.nextElementSibling) listEl.insertBefore(row.nextElementSibling, row);
+    refreshButtons();
+  });
+  const save = async (order, current) => {
+    const { error } = await savePlan(clientId, { encounterOrder: order, currentEncounter: current }, profile.id);
+    if (error) { toast(`Não foi possível salvar: ${error.message}`, { tone: 'error' }); return false; }
+    toast('Ordem dos encontros salva — já aparece assim para a aluna e para a equipe.');
+    render();
+    return true;
+  };
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const order = [...listEl.querySelectorAll('[data-order-number]')].map((r) => Number(r.dataset.orderNumber));
+    const isDefault = order.every((n, i) => i === 0 || n > order[i - 1]);
+    const current = Number(new FormData(form).get('current_encounter')) || null;
+    const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+    if (!(await save(isDefault ? null : order, current))) btn.disabled = false;
+  });
+  form.querySelector('#encounter-plan-reset')?.addEventListener('click', async () => {
+    if (!confirm('Voltar à ordem padrão (E1, E2, E3…) para esta aluna?')) return;
+    await save(null, Number(new FormData(form).get('current_encounter')) || null);
+  });
 }
 
 const PHASE_STATUS_LABEL = { completed: 'Concluída', current: 'Fase atual', upcoming: 'Próxima', skipped: 'Não se aplica' };
@@ -1829,8 +1949,11 @@ async function loadEncontros() {
 function nextEncounterDef(m, encontros) {
   const n = encounterNumber(m.title);
   if (!n) return null;
-  // Her own sequence (tier + skipped phases): after E2, E4 if Fase 2 is skipped.
-  return applicableEncounters(encontros.encounterDefs, currentClient).find((d) => d.number > n) || null;
+  // Her own sequence (tier + skipped phases + the order Nay chose for her):
+  // after E2, E4 if Fase 2 is skipped; after E1, E3 if Nay moved E3 up.
+  const seq = applicableEncounters(encontros.encounterDefs, currentClient);
+  const i = seq.findIndex((d) => d.number === n);
+  return i >= 0 ? (seq[i + 1] || null) : (seq.find((d) => d.number > n) || null);
 }
 function nextEncounterHtml(m, encontros) {
   if (isAssistant || m.status === 'cancelled') return '';
@@ -2478,6 +2601,10 @@ async function render() {
     loadImageProject(),
   ]);
   const programSummaryHtml = await programSummaryCard(client, state);
+  // Linha dos encontros: her order + homework status (see encounterTrackCard).
+  const [encRefs, encPlan] = await Promise.all([loadEncounterRefs(), loadPlan(clientId)]);
+  currentClient._encounter_order = encPlan?.encounter_order || null;
+  encounterCtx = { refs: encRefs, plan: encPlan, activityStatus: activityStatusFromProgramState(state), journey };
   const encontros = activeTab === 'encontros' ? await loadEncontros() : null;
   jornadaMaterials = activeTab === 'jornada' ? await loadEncounterMaterials(supabase, clientId) : null;
   const extraction = activeTab === 'questionarios' ? await loadExtraction() : null;
@@ -2497,6 +2624,8 @@ async function render() {
     jornada: `
       ${nextActionCard(status.nextAction)}
       ${programSummaryHtml}
+      ${encounterTrackCard(journey, encRefs, encounterCtx.activityStatus, encPlan)}
+      ${encounterPlanCard(client, encRefs, encPlan)}
       ${journeyControlCard(client, state)}
       ${phaseBreakdownCard(state, journey)}
     `,
@@ -2593,6 +2722,7 @@ async function render() {
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });
+  if (activeTab === 'jornada') wireEncounterTrack(content);
   if (encontros) { wireEncontrosTab(encontros); wireMaterialSlots(encontros.materials); }
   if (jornadaMaterials) wireMaterialSlots(jornadaMaterials);
   if (messagesData) wireMessagesTab({ client, partyInfo, finState });

@@ -17,7 +17,14 @@ export function isActivitySkipped(client, slug, phaseId) {
   return s.has(Number(phaseId)) || (s.has(IMAGE_PHASE) && IMAGE_ACTIVITY_SLUGS.includes(slug));
 }
 // Encounter definitions that apply to her, in order (tier + skipped phases).
+// client._encounter_order (set by callers from client_encounter_plans — see
+// shared/encounter-journey.js) is the order Nay chose for this student;
+// without it the default E1, E2, E3… order is kept.
 export function applicableEncounters(defs, client) {
   const s = skippedPhaseSet(client);
-  return (defs || []).filter((d) => (client?.tier === 'premium' || !d.premium_only) && !s.has(Number(d.phase)));
+  const list = (defs || []).filter((d) => (client?.tier === 'premium' || !d.premium_only) && !s.has(Number(d.phase)));
+  const order = client?._encounter_order;
+  if (!order?.length) return list;
+  const idx = new Map(order.map((n, i) => [Number(n), i]));
+  return list.sort((a, b) => (idx.has(a.number) ? idx.get(a.number) : 100 + a.number) - (idx.has(b.number) ? idx.get(b.number) : 100 + b.number));
 }
