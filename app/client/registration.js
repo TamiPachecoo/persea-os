@@ -65,6 +65,12 @@ function confirmationView(fullName) {
   `;
 }
 
+// "@perfil", "perfil", "instagram.com/perfil" or the full link → "perfil".
+function instagramHandle(v) {
+  const m = String(v || '').trim().match(/^(?:https?:\/\/)?(?:www\.)?(?:instagram\.com\/)?@?([A-Za-z0-9._]{1,30})\/?(?:\?.*)?$/i);
+  return m ? m[1] : null;
+}
+
 function field(label, name, value, { type = 'text', required = true, placeholder = '', extra = '' } = {}) {
   return `
     <div>
@@ -120,6 +126,10 @@ function formShell(headerEyebrow, info, fullNameFallback, emailFallback, idPrefi
           <div class="grid sm:grid-cols-2 gap-4">
             ${field('Email', 'email', info.email || emailFallback, { type: 'email' })}
             ${field('WhatsApp', 'whatsapp', info.whatsapp, { placeholder: '(00) 00000-0000' })}
+          </div>
+          <div class="mt-4">
+            ${field('Instagram', 'instagram', info.instagram || '', { placeholder: '@seuperfil', extra: 'autocapitalize="off" autocomplete="off" spellcheck="false"' })}
+            <p class="text-xs mt-1" style="color:var(--muted);">O @ do seu perfil profissional. A equipe acompanha o seu Instagram durante a mentoria.</p>
           </div>
         </div>
 
@@ -238,7 +248,13 @@ function formViewProduction(client, partyInfo) {
       company_name: raw.companyName, email: raw.email, whatsapp: raw.whatsapp,
       cep: raw.cep, street: raw.street, number: raw.number, complement: raw.complement,
       neighborhood: raw.neighborhood, city: raw.city, state: raw.state,
+      instagram: raw.instagram,
     };
+    if (!instagramHandle(raw.instagram)) {
+      toast('Confira o seu Instagram: escreva o @ do perfil (ex.: @seuperfil).', { tone: 'error' });
+      e.target.querySelector('input[name="instagram"]')?.focus();
+      return;
+    }
     const submitBtn = e.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     const { data, error } = await supabase.functions.invoke('registration-submit', { body: { token, ...payload } });

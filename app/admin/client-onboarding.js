@@ -1775,7 +1775,15 @@ function openDeliverableModal({ key, label, row, isKit }) {
           <label class="text-xs text-white/40 block mb-1">Resumo <span class="text-white/20">(opcional)</span></label>
           <textarea name="summary" rows="2" class="field text-sm">${data.summary || ''}</textarea>
         </div>
+        ${isKit ? `
         <div>
+          <label class="text-xs text-white/40 block mb-1">Link do Kit Digital</label>
+          <input name="file_url" class="field text-sm" value="${escHtml(data.file_url || '')}" placeholder="https://www.canva.com/…" />
+          <p class="text-xs text-white/30 mt-1">O Kit Digital é entregue como link — é este link que a aluna abre no app. Confira se ele abre sem pedir login.</p>
+        </div>
+        <details>
+          <summary class="text-xs text-white/40 cursor-pointer">Ou enviar um arquivo (opcional)</summary>
+          <div class="mt-2">` : '<div>'}
           <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação, vídeo — até ${SHARED_MAX_MB} MB; abre direto na plataforma)</span></label>
           ${data.file_path ? `<div class="flex items-center gap-3 flex-wrap mb-2 text-sm">
             ${data.signedFileUrl ? `<a ${externalLinkAttrs(data.signedFileUrl)} class="btn-text" style="display:inline;">📄 ${escHtml(data.file_name || 'Arquivo')} ↗</a>` : `<span>📄 ${escHtml(data.file_name || 'Arquivo')}</span>`}
@@ -1783,11 +1791,12 @@ function openDeliverableModal({ key, label, row, isKit }) {
           </div>` : ''}
           <input type="file" name="file" accept="image/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.xls,.xlsx,.zip" class="field text-sm" />
           ${data.file_path ? '<p class="text-xs text-white/30 mt-1">Escolher um novo arquivo substitui o atual.</p>' : ''}
-        </div>
+        ${isKit ? '</div></details>' : '</div>'}
+        ${!isKit ? `
         <div>
           <label class="text-xs text-white/40 block mb-1">Link <span class="text-white/20">(opcional — use só se o material não puder ser enviado como arquivo)</span></label>
           <input name="file_url" class="field text-sm" value="${data.file_url || ''}" placeholder="https://..." />
-        </div>
+        </div>` : ''}
         <div>
           <label class="text-xs text-white/40 block mb-1">Link do Canva <span class="text-white/20">(opcional)</span></label>
           <input name="canva_url" class="field text-sm" value="${data.canva_url || ''}" placeholder="https://canva.com/..." />
@@ -1825,7 +1834,12 @@ function openDeliverableModal({ key, label, row, isKit }) {
       payload.file_path = newPath; payload.file_name = file.name.slice(0, 200);
     } else if (fd.get('remove_file')) {
       payload.file_path = null; payload.file_name = null;
+    } else if (isKit && payload.file_url && data.file_path) {
+      // Kit Digital is delivered as a link: a link replaces the old file
+      // (the student would otherwise keep seeing the file).
+      payload.file_path = null; payload.file_name = null;
     }
+    if (payload.file_url && !isValidHttpUrl(payload.file_url)) { fail('Cole um link completo, começando com https://'); if (newPath) await supabase.storage.from(MATERIALS_BUCKET).remove([newPath]); return; }
     let error;
     if (isKit) {
       ({ error } = await supabase.from('digital_kits').upsert({ client_id: clientId, ...payload }, { onConflict: 'client_id' }));
@@ -2039,8 +2053,9 @@ function materialSlotHtml(number, materials = {}) {
       ${has ? `<p class="text-sm mb-3">${url ? `<a ${externalLinkAttrs(url)} class="btn-text" style="display:inline;">📄 ${escHtml(row.file_name || (row.file_path ? 'Arquivo' : 'Abrir link'))} ↗</a>` : escHtml(row.file_name || 'Arquivo')}</p>`
         : `<p class="text-xs text-white/40 mb-3">Envie o ${def.label} antes do encontro; só aparece no app quando você liberar.</p>`}
       <div class="flex items-center gap-2 flex-wrap">
-        <label class="btn-ghost" style="padding:7px 14px;font-size:12px;cursor:pointer;" data-material-label="${def.key}">
-          ${has ? 'Substituir arquivo' : 'Enviar arquivo'}
+        ${def.key === 'kit' ? `<button type="button" class="btn-ghost" style="padding:7px 14px;font-size:12px;" data-material-link="${def.key}">${row?.file_url && !row?.file_path ? 'Trocar link' : 'Colar link do Kit'}</button>` : ''}
+        <label class="${def.key === 'kit' ? 'btn-text' : 'btn-ghost'}" style="${def.key === 'kit' ? 'font-size:12px;' : 'padding:7px 14px;font-size:12px;'}cursor:pointer;" data-material-label="${def.key}">
+          ${def.key === 'kit' ? (row?.file_path ? 'ou substituir arquivo' : 'ou enviar arquivo') : has ? 'Substituir arquivo' : 'Enviar arquivo'}
           <input type="file" accept="image/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.zip" data-material-upload="${def.key}" style="display:none;" />
         </label>
         ${isAssistant ? '<span class="text-xs text-white/30">A Nay libera no app.</span>'
@@ -2210,8 +2225,49 @@ function encontrosTabHtml(encontros) {
   `;
 }
 
+// The Kit Digital is delivered as a link (Canva, Drive…), not a file: the
+// link goes in file_url, which is what the student opens (see
+// shared/encounter-materials.js). Saving a link replaces an uploaded file.
+async function saveMaterialLink(def, materials, url) {
+  const old = materials?.[def.key]?.row?.file_path;
+  const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_url: url, file_path: null, file_name: null }, { onConflict: 'client_id' });
+  if (error) return error;
+  if (old) await supabase.storage.from(MATERIALS_BUCKET).remove([old]);
+  return null;
+}
+function openMaterialLinkModal(def, materials) {
+  const row = materials?.[def.key]?.row;
+  const { el, close } = openModal({
+    title: def.label,
+    bodyHtml: `
+      <form id="material-link-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Link do ${escHtml(def.label)}</label>
+          <input name="url" class="field" required placeholder="https://www.canva.com/…" value="${escHtml(row?.file_url || '')}" />
+          <p class="text-xs text-white/30 mt-1">Confira se o link está aberto para quem tiver o link (sem pedir login). ${row?.file_path ? 'Salvar o link substitui o arquivo enviado antes.' : ''}</p>
+        </div>
+        <div class="flex justify-end"><button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar link</button></div>
+      </form>`,
+  });
+  el.querySelector('#material-link-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = String(new FormData(e.target).get('url') || '').trim();
+    if (!isValidHttpUrl(url)) { toast('Cole um link completo, começando com https://', { tone: 'error' }); return; }
+    const btn = e.target.querySelector('[type=submit]'); btn.disabled = true;
+    const error = await saveMaterialLink(def, materials, url);
+    if (error) { btn.disabled = false; toast('Não foi possível salvar o link.', { tone: 'error' }); return; }
+    close();
+    toast(`Link do ${def.label} salvo.${row?.delivered_at ? '' : ' Só aparece no app quando a Nay liberar.'}`);
+    render();
+  });
+}
+
 function wireMaterialSlots(materials) {
   const matDef = (key) => Object.values(ENCOUNTER_MATERIALS).find((d) => d.key === key);
+  content.querySelectorAll('[data-material-link]').forEach((btn) => btn.addEventListener('click', () => {
+    const def = matDef(btn.dataset.materialLink);
+    if (def) openMaterialLinkModal(def, materials);
+  }));
   content.querySelectorAll('[data-material-upload]').forEach((input) => {
     input.addEventListener('change', async () => {
       const def = matDef(input.dataset.materialUpload);
@@ -2225,7 +2281,7 @@ function wireMaterialSlots(materials) {
       const { error: upErr } = await supabase.storage.from(MATERIALS_BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
       if (upErr) { toast(uploadErrorMessage(upErr, f.name), { tone: 'error' }); render(); return; }
       const old = materials?.[def.key]?.row?.file_path;
-      const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_path: path, file_name: f.name.slice(0, 200) }, { onConflict: 'client_id' });
+      const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_path: path, file_name: f.name.slice(0, 200), ...(def.key === 'kit' ? { file_url: null } : {}) }, { onConflict: 'client_id' });
       if (error) { await supabase.storage.from(MATERIALS_BUCKET).remove([path]); toast('Não foi possível salvar o material.', { tone: 'error' }); render(); return; }
       if (old && old !== path) await supabase.storage.from(MATERIALS_BUCKET).remove([old]);
       toast(`${def.label} enviado.${materials?.[def.key]?.row?.delivered_at ? '' : ' Só aparece no app quando você liberar.'}`);

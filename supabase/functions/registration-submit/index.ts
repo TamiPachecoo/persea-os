@@ -43,6 +43,12 @@ const ALLOWED_FIELDS = [
   "complement", "neighborhood", "city", "state",
 ];
 
+// "@perfil", "perfil", "instagram.com/perfil" or the full link → "perfil".
+function instagramHandle(v: unknown): string | null {
+  const m = String(v ?? "").trim().match(/^(?:https?:\/\/)?(?:www\.)?(?:instagram\.com\/)?@?([A-Za-z0-9._]{1,30})\/?(?:\?.*)?$/i);
+  return m ? m[1] : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
@@ -79,6 +85,16 @@ Deno.serve(async (req) => {
     const formEmail = String(fields.email || "").trim().toLowerCase();
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail)) {
       await admin.from("clients").update({ email: formEmail }).eq("id", tokenRow.client_id).or("email.is.null,email.eq.");
+    }
+
+    // Instagram (asked in the Cadastro since Nov/2026): saved as the
+    // profile link on clients.instagram_url — the same field Nay edits on
+    // the student's page. Filled only when empty (never overwrites Nay's).
+    // Optional here so an older, cached copy of the form still submits.
+    const igHandle = instagramHandle(fields.instagram);
+    if (igHandle) {
+      await admin.from("clients").update({ instagram_url: `https://www.instagram.com/${igHandle}/` })
+        .eq("id", tokenRow.client_id).or("instagram_url.is.null,instagram_url.eq.");
     }
 
     // One-time: consume the token only after the write succeeds, so a
