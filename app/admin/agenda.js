@@ -293,7 +293,7 @@ function calChip(it) {
   }
   return `
     <button type="button" data-agenda-item="${it.id}" class="cal-chip ${it.status !== 'upcoming' ? 'cal-chip-done' : ''}">
-      <span class="cal-chip-time">${formatTime(it.date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}
+      <span class="cal-chip-time">${formatTime(it.date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}${it.confirmation === 'confirmed' ? ' <span title="Confirmado pela aluna" style="color:#8fae8b;">✓</span>' : it.confirmation === 'reschedule' ? ' <span title="Pediu para remarcar" style="color:#d0705a;">↻</span>' : ''}
     </button>
   `;
 }
@@ -775,7 +775,7 @@ function buildItemsByDayReal(items) {
   const byDay = {};
   items.forEach((it) => {
     const key = dateKey(new Date(it.item_date));
-    (byDay[key] || (byDay[key] = [])).push({ id: it.id, date: it.item_date, title: it.title, type: it.type, status: it.status });
+    (byDay[key] || (byDay[key] = [])).push({ id: it.id, date: it.item_date, title: it.title, type: it.type, status: it.status, confirmation: it.confirmation_status });
   });
   googleEvents.forEach((e) => {
     const key = dateKeyForGoogleEvent(e);
