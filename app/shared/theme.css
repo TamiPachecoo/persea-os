@@ -907,3 +907,4 @@ a.enc-chip:hover{ transform:scale(1.12); }
 select, input, textarea{ color-scheme: dark; }
 select option, select optgroup{ background-color:#1a1512; color:var(--cream); }
 select option:checked{ background-color:#3a2c1c; color:var(--cream); }
+.cal-chip-nay{ border-left:3px solid #7fa3c4 !important; opacity:.92; }

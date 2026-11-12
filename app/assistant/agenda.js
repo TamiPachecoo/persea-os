@@ -26,7 +26,7 @@ const content = document.getElementById('app-content');
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MAX_CHIPS_PER_DAY = 3;
 
-const filters = { type: '', showCompleted: false };
+const filters = { type: '', showCompleted: false, showNay: true };
 // Same connection layer as admin/agenda.js — calendar_connections is keyed
 // by internal_user_id, not by tenant, so this is her own Google account,
 // entirely separate from Nay's. Set fresh on every render() from
@@ -507,19 +507,35 @@ let realClients = new Map();
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
 async function loadReal() {
-  const from = new Date(Date.now() - 2 * 3600e3).toISOString();
-  const to = new Date(Date.now() + 8 * 86400e3).toISOString();
-  const [{ data: items }, { data: clients }, { data: nayItems }] = await Promise.all([
+  const from = new Date(Date.now() - 12 * 3600e3).toISOString();
+  const to = new Date(Date.now() + NAY_DAYS * 86400e3).toISOString();
+  const [{ data: items }, { data: clients }, { data: nayItems }, google] = await Promise.all([
     supabase.from('agenda_items').select('*').eq('assigned_to', 'assistant').order('item_date'),
     supabase.from('clients').select('id, full_name').eq('is_demo', false).order('full_name'),
-    // Nay's own agenda (everything not assigned to the assistant), next 7 days.
+    // Nay's own agenda in the app (everything not assigned to the assistant).
     supabase.from('agenda_items').select('*').or('assigned_to.is.null,assigned_to.eq.nay').eq('status', 'upcoming')
       .gte('item_date', from).lte('item_date', to).order('item_date'),
+    // Nay's Google Calendar (read through her connection — Edge Function).
+    supabase.functions.invoke('nay-calendar-events', { body: { days: NAY_DAYS } }).then((r) => r.data || {}).catch(() => ({})),
   ]);
   realItems = items || [];
   realClients = new Map((clients || []).map((c) => [c.id, c.full_name]));
-  nayAgenda = nayItems || [];
-  const studentIds = [...new Set(nayAgenda.map((it) => it.related_student_id).filter(Boolean))];
+  nayGoogleState = google?.ok ? (google.connected ? 'ok' : 'not_connected') : 'error';
+  const appEntries = (nayItems || []).map((it) => ({
+    key: `a:${it.id}`, source: 'app', id: it.id, title: it.title, date: it.item_date, type: it.type,
+    client_id: it.related_student_id, online_link: it.online_link, all_day: false, private: false,
+    confirmation_status: it.confirmation_status, confirmation_by_name: it.confirmation_by_name,
+    confirmable: CONFIRMABLE.has(it.type) && !!it.related_student_id,
+  }));
+  const linkedGoogle = new Set((nayItems || []).map((it) => it.google_event_id).filter(Boolean));
+  const googleEntries = (google?.events || []).filter((e) => !linkedGoogle.has(e.id) && e.start).map((e) => ({
+    key: `g:${e.id}`, source: 'google', id: e.id, title: e.summary, date: e.all_day ? `${e.start}T00:00:00` : e.start, type: null,
+    client_id: e.client_id, online_link: e.meet_url, all_day: e.all_day, private: e.private,
+    confirmation_status: e.confirmation_status, confirmation_by_name: e.confirmation_by_name,
+    confirmable: !e.private && !e.all_day,
+  }));
+  nayEntries = [...appEntries, ...googleEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const studentIds = [...new Set(nayEntries.map((e) => e.client_id).filter(Boolean))];
   const { data: parties } = studentIds.length
     ? await supabase.from('party_info').select('client_id, whatsapp, social_name, full_name').in('client_id', studentIds)
     : { data: [] };
@@ -527,11 +543,17 @@ async function loadReal() {
 }
 
 // --- Agenda da Nay: confirmar encontros pelo WhatsApp --------------------
-// The assistant sees Nay's next 7 days and confirms each student meeting:
-// "Confirmar pelo WhatsApp" opens WhatsApp with the message ready (and
-// marks it as sent); then "Ela confirmou" / "Pediu para remarcar". Saved
-// with set_meeting_confirmation — she can't edit Nay's meetings otherwise.
-let nayAgenda = [];
+// The assistant sees Nay's agenda — both what is scheduled in the app and
+// Nay's Google Calendar (Edge Function nay-calendar-events, read-only; events
+// Nay marked private show only as "Ocupado") — and confirms each meeting:
+// "WhatsApp: confirmar" opens WhatsApp with the message ready (and marks it
+// as sent); then "Ela confirmou" / "Pediu para remarcar". App meetings are
+// saved with set_meeting_confirmation (she can't edit Nay's meetings);
+// Google events in calendar_event_confirmations. A Google event the system
+// couldn't match to a student gets a "Qual aluna?" picker.
+const NAY_DAYS = 45;
+let nayEntries = [];
+let nayGoogleState = 'ok';
 let partyByClient = new Map();
 const CONFIRMABLE = new Set(['individual_meeting', 'checkpoint', 'photo_review', 'class']);
 const CONF_LABEL = {
@@ -543,73 +565,123 @@ function waDigits(raw) {
   const d = String(raw || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
   return d.length >= 10 ? `55${d}` : '';
 }
-function confirmationMessage(it, me) {
-  const party = partyByClient.get(it.related_student_id) || {};
-  const first = String(party.social_name || party.full_name || realClients.get(it.related_student_id) || '').trim().split(/\s+/)[0];
+function confirmationMessage(e, me) {
+  const party = partyByClient.get(e.client_id) || {};
+  const first = String(party.social_name || party.full_name || realClients.get(e.client_id) || '').trim().split(/\s+/)[0];
   const sender = String(me?.full_name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] || 'Equipe PERSEA';
-  const d = new Date(it.item_date); const today = new Date(); const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
+  const d = new Date(e.date); const today = new Date(); const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
   const when = d.toDateString() === today.toDateString() ? 'hoje' : d.toDateString() === tomorrow.toDateString() ? 'amanhã'
     : d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const hour = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const link = /^https?:\/\//i.test(it.online_link || '') ? `\n\nLink da reunião: ${it.online_link}` : '';
-  return `Olá, ${first}! Aqui é a ${sender}, da equipe da Nay.\n\nPassando para confirmar o seu encontro com a Nay *${it.title}*, ${when}, às *${hour}*.${link}\n\nPode me confirmar se está tudo certo? 😊\n\nCom carinho,\n${sender} · Equipe PERSEA`;
+  const link = /^https?:\/\//i.test(e.online_link || '') ? `\n\nLink da reunião: ${e.online_link}` : '';
+  return `Olá, ${first}! Aqui é a ${sender}, da equipe da Nay.\n\nPassando para confirmar o seu encontro com a Nay${e.source === 'app' ? ` *${e.title}*` : ''}, ${when}, às *${hour}*.${link}\n\nPode me confirmar se está tudo certo? 😊\n\nCom carinho,\n${sender} · Equipe PERSEA`;
+}
+function nayEntryRow(e) {
+  const student = realClients.get(e.client_id);
+  const phone = e.confirmable && e.client_id ? waDigits(partyByClient.get(e.client_id)?.whatsapp) : '';
+  const conf = CONF_LABEL[e.confirmation_status];
+  const pickStudent = e.source === 'google' && e.confirmable && !e.client_id;
+  return `
+    <div class="py-2 border-b border-white/5 last:border-0">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <p class="text-sm"><span class="text-white/50">${e.all_day ? 'dia todo' : formatTime(e.date)}</span> · ${e.source === 'google' ? '<span title="Google Calendar da Nay" style="color:#7fa3c4;">📅</span>' : (AGENDA_TYPE_ICON[e.type] || '')} ${esc(e.title)}${student ? ` <span class="text-white/40">— ${esc(student)}</span>` : ''}</p>
+        ${conf ? `<span class="text-xs" style="color:${conf[1]};">${conf[0]}${e.confirmation_by_name ? ` · ${esc(e.confirmation_by_name)}` : ''}</span>` : e.confirmable && e.client_id ? '<span class="text-xs text-white/30">Não confirmado</span>' : ''}
+      </div>
+      ${pickStudent ? `
+        <div class="flex gap-2 items-center flex-wrap mt-2">
+          <span class="text-xs text-white/40">É encontro com qual aluna?</span>
+          <select class="field text-xs" style="width:auto;padding:4px 8px;" data-link-student="${esc(e.id)}">
+            <option value="">— escolher —</option>
+            ${[...realClients.entries()].map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('')}
+          </select>
+        </div>` : ''}
+      ${e.confirmable && e.client_id ? `
+        <div class="flex gap-2 flex-wrap mt-2">
+          ${phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(confirmationMessage(e, currentMe))}" target="_blank" rel="noopener" data-wa-confirm="${esc(e.key)}" class="btn-primary" style="padding:6px 12px;font-size:12px;">WhatsApp: confirmar</a>`
+            : '<span class="text-xs" style="color:#d0705a;">Sem WhatsApp no cadastro</span>'}
+          ${e.confirmation_status !== 'confirmed' ? `<button type="button" data-set-conf="confirmed" data-entry="${esc(e.key)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">✓ Ela confirmou</button>` : ''}
+          ${e.confirmation_status !== 'reschedule' ? `<button type="button" data-set-conf="reschedule" data-entry="${esc(e.key)}" class="btn-text" style="font-size:12px;">Pediu para remarcar</button>` : ''}
+          ${e.confirmation_status ? `<button type="button" data-set-conf="" data-entry="${esc(e.key)}" class="btn-text" style="font-size:12px;color:var(--muted);">Desfazer</button>` : ''}
+          ${e.source === 'google' ? `<button type="button" data-unlink-student="${esc(e.id)}" class="btn-text" style="font-size:11px;color:var(--muted);">não é ${esc(String(student || '').split(' ')[0] || 'ela')}?</button>` : ''}
+        </div>` : ''}
+    </div>`;
 }
 function nayAgendaCard() {
-  if (!nayAgenda.length) return card('<p class="text-sm text-white/50 mb-1">Agenda da Nay — próximos 7 dias</p><p class="text-xs text-white/30">Nada na agenda da Nay nos próximos 7 dias.</p>', 'mb-6');
+  const end7 = Date.now() + 7 * 86400e3;
+  const week = nayEntries.filter((e) => new Date(e.date).getTime() <= end7);
+  const googleNote = nayGoogleState === 'not_connected' ? '<p class="text-xs mb-3" style="color:#d0705a;">O Google Calendar da Nay não está conectado — aparecem só os encontros marcados no app.</p>'
+    : nayGoogleState === 'error' ? '<p class="text-xs mb-3" style="color:#d0705a;">Não foi possível ler o Google Calendar da Nay agora — aparecem só os encontros marcados no app.</p>' : '';
+  if (!week.length) return card(`<p class="text-sm text-white/50 mb-1">Agenda da Nay — próximos 7 dias</p>${googleNote}<p class="text-xs text-white/30">Nada na agenda da Nay nos próximos 7 dias.</p>`, 'mb-6');
   const byDay = new Map();
-  nayAgenda.forEach((it) => { const k = new Date(it.item_date).toDateString(); (byDay.get(k) || byDay.set(k, []).get(k)).push(it); });
-  const toConfirm = nayAgenda.filter((it) => CONFIRMABLE.has(it.type) && it.related_student_id && it.confirmation_status !== 'confirmed').length;
+  week.forEach((e) => { const k = new Date(e.date).toDateString(); (byDay.get(k) || byDay.set(k, []).get(k)).push(e); });
+  const toConfirm = week.filter((e) => e.confirmable && e.confirmation_status !== 'confirmed').length;
   return card(`
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
       <p class="text-sm text-white/50">Agenda da Nay — próximos 7 dias</p>
-      ${toConfirm ? `<span class="text-xs" style="color:var(--gold);">${toConfirm} encontro${toConfirm === 1 ? '' : 's'} para confirmar</span>` : '<span class="text-xs" style="color:#8fae8b;">Tudo confirmado ✓</span>'}
+      ${toConfirm ? `<span class="text-xs" style="color:var(--gold);">${toConfirm} para confirmar</span>` : '<span class="text-xs" style="color:#8fae8b;">Tudo confirmado ✓</span>'}
     </div>
-    <p class="text-xs text-white/30 mb-3">Confirme cada encontro com a aluna pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>
-    ${[...byDay.entries()].map(([k, items]) => `
+    <p class="text-xs text-white/30 mb-3">Inclui o Google Calendar da Nay (📅). Confirme cada encontro com a aluna pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>
+    ${googleNote}
+    ${[...byDay.entries()].map(([k, list]) => `
       <p class="text-xs uppercase mt-4 mb-1" style="color:var(--muted);letter-spacing:.1em;">${new Date(k).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-      ${items.map((it) => {
-        const student = realClients.get(it.related_student_id);
-        const confirmable = CONFIRMABLE.has(it.type) && it.related_student_id;
-        const phone = confirmable ? waDigits(partyByClient.get(it.related_student_id)?.whatsapp) : '';
-        const conf = CONF_LABEL[it.confirmation_status];
-        return `
-          <div class="py-2 border-b border-white/5 last:border-0">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
-              <p class="text-sm"><span class="text-white/50">${formatTime(it.item_date)}</span> · ${AGENDA_TYPE_ICON[it.type] || ''} ${esc(it.title)}${student ? ` <span class="text-white/40">— ${esc(student)}</span>` : ''}</p>
-              ${conf ? `<span class="text-xs" style="color:${conf[1]};">${conf[0]}${it.confirmation_by_name ? ` · ${esc(it.confirmation_by_name)}` : ''}</span>` : confirmable ? '<span class="text-xs text-white/30">Não confirmado</span>' : ''}
-            </div>
-            ${confirmable ? `
-              <div class="flex gap-2 flex-wrap mt-2">
-                ${phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(confirmationMessage(it, currentMe))}" target="_blank" rel="noopener" data-wa-confirm="${it.id}" class="btn-primary" style="padding:6px 12px;font-size:12px;">WhatsApp: confirmar</a>`
-                  : '<span class="text-xs" style="color:#d0705a;">Sem WhatsApp no cadastro</span>'}
-                ${it.confirmation_status !== 'confirmed' ? `<button type="button" data-set-conf="confirmed" data-item="${it.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">✓ Ela confirmou</button>` : ''}
-                ${it.confirmation_status !== 'reschedule' ? `<button type="button" data-set-conf="reschedule" data-item="${it.id}" class="btn-text" style="font-size:12px;">Pediu para remarcar</button>` : ''}
-                ${it.confirmation_status ? `<button type="button" data-set-conf="" data-item="${it.id}" class="btn-text" style="font-size:12px;color:var(--muted);">Desfazer</button>` : ''}
-              </div>` : ''}
-          </div>`;
-      }).join('')}`).join('')}
+      ${list.map(nayEntryRow).join('')}`).join('')}
   `, 'mb-6');
 }
 let currentMe = null;
-function wireNayAgenda(root) {
-  const setConf = async (id, status) => {
-    const { error } = await supabase.rpc('set_meeting_confirmation', { p_item: id, p_status: status || null });
+async function saveGoogleConfirmation(e, patch) {
+  const { error } = await supabase.from('calendar_event_confirmations').upsert({
+    google_event_id: e.id, event_start: e.date, event_title: e.title, client_id: e.client_id || null,
+    status: e.confirmation_status || null, ...patch,
+  }, { onConflict: 'google_event_id' });
+  return error;
+}
+function wireNayAgenda(root, onDone = renderReal) {
+  const entry = (key) => nayEntries.find((x) => x.key === key);
+  const setConf = async (e, status) => {
+    const error = e.source === 'app'
+      ? (await supabase.rpc('set_meeting_confirmation', { p_item: e.id, p_status: status || null })).error
+      : await saveGoogleConfirmation(e, { status: status || null });
     if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return false; }
     return true;
   };
   root.querySelectorAll('[data-wa-confirm]').forEach((a) => a.addEventListener('click', async () => {
-    const it = nayAgenda.find((x) => x.id === a.dataset.waConfirm);
-    if (!it) return;
-    supabase.from('client_message_log').insert({ client_id: it.related_student_id, kind: 'reminder', channel: 'whatsapp', body: confirmationMessage(it, currentMe), sent_by: currentMe?.id, sent_by_name: String(currentMe?.full_name || '').replace(/\(.*?\)/g, '').trim() || null }).then(() => {});
-    if (!it.confirmation_status) { await setConf(it.id, 'message_sent'); setTimeout(renderReal, 600); }
+    const e = entry(a.dataset.waConfirm);
+    if (!e) return;
+    supabase.from('client_message_log').insert({ client_id: e.client_id, kind: 'reminder', channel: 'whatsapp', body: confirmationMessage(e, currentMe), sent_by: currentMe?.id, sent_by_name: String(currentMe?.full_name || '').replace(/\(.*?\)/g, '').trim() || null }).then(() => {});
+    if (!e.confirmation_status) { await setConf(e, 'message_sent'); setTimeout(onDone, 600); }
   }));
   root.querySelectorAll('[data-set-conf]').forEach((b) => b.addEventListener('click', async () => {
+    const e = entry(b.dataset.entry);
+    if (!e) return;
     b.disabled = true;
-    if (await setConf(b.dataset.item, b.dataset.setConf)) {
+    if (await setConf(e, b.dataset.setConf)) {
       toast(b.dataset.setConf === 'confirmed' ? 'Encontro confirmado ✓' : b.dataset.setConf === 'reschedule' ? 'Marcado: pediu para remarcar. Avise a Nay.' : 'Desfeito.');
-      renderReal();
+      onDone();
     } else b.disabled = false;
   }));
+  root.querySelectorAll('[data-link-student]').forEach((sel) => sel.addEventListener('change', async () => {
+    const e = nayEntries.find((x) => x.source === 'google' && x.id === sel.dataset.linkStudent);
+    if (!e || !sel.value) return;
+    const error = await saveGoogleConfirmation(e, { client_id: sel.value });
+    if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return; }
+    toast('Aluna ligada ao evento.');
+    onDone();
+  }));
+  root.querySelectorAll('[data-unlink-student]').forEach((b) => b.addEventListener('click', async () => {
+    const e = nayEntries.find((x) => x.source === 'google' && x.id === b.dataset.unlinkStudent);
+    if (!e) return;
+    // Explicitly "no student" overrides the automatic match: store a null link.
+    const { error } = await supabase.from('calendar_event_confirmations').upsert({ google_event_id: e.id, event_start: e.date, event_title: e.title, client_id: null, status: null }, { onConflict: 'google_event_id' });
+    if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return; }
+    e.client_id = null; e.confirmation_status = null;
+    onDone();
+  }));
+}
+function openNayEntryModal(key) {
+  const e = nayEntries.find((x) => x.key === key);
+  if (!e) return;
+  const { el, close } = openModal({ title: 'Agenda da Nay', bodyHtml: nayEntryRow(e) });
+  wireNayAgenda(el, () => { close(); renderReal(); });
 }
 
 function realRow(it) {
@@ -641,6 +713,10 @@ function realCalendar() {
   realItems.filter((it) => filters.showCompleted || it.status === 'upcoming').forEach((it) => {
     const key = dateKey(new Date(it.item_date)); (byDay[key] || (byDay[key] = [])).push(it);
   });
+  if (filters.showNay) nayEntries.forEach((e) => {
+    const key = dateKey(new Date(e.date)); (byDay[key] || (byDay[key] = [])).push({ _nay: e });
+  });
+  Object.values(byDay).forEach((list) => list.sort((a, b) => new Date(a._nay ? a._nay.date : a.item_date) - new Date(b._nay ? b._nay.date : b.item_date)));
   const todayKey = dateKey(new Date());
   return card(`
     <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
@@ -650,6 +726,7 @@ function realCalendar() {
         <button type="button" id="cal-next" class="btn-ghost" style="padding:6px 12px;" aria-label="Próximo mês">›</button>
       </div>
       <div class="flex items-center gap-4">
+        <label class="flex items-center gap-2 text-xs" style="color:var(--muted);"><input type="checkbox" id="filter-nay" ${filters.showNay ? 'checked' : ''}/> Agenda da Nay</label>
         <label class="flex items-center gap-2 text-xs" style="color:var(--muted);"><input type="checkbox" id="filter-completed" ${filters.showCompleted ? 'checked' : ''}/> Mostrar concluídos</label>
         <button type="button" id="cal-today" class="btn-text">Hoje</button>
       </div>
@@ -662,7 +739,9 @@ function realCalendar() {
           <div class="cal-cell ${d.getMonth() === month ? '' : 'cal-cell-other-month'} ${key === todayKey ? 'cal-cell-today' : ''}" data-cal-day="${key}">
             <p class="cal-day-num">${d.getDate()}</p>
             <div class="cal-chips">
-              ${items.slice(0, MAX_CHIPS_PER_DAY).map((it) => `<button type="button" data-real-item="${it.id}" class="cal-chip ${it.status !== 'upcoming' ? 'cal-chip-done' : ''}"><span class="cal-chip-time">${formatTime(it.item_date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${esc(it.title)}</button>`).join('')}
+              ${items.slice(0, MAX_CHIPS_PER_DAY).map((it) => it._nay
+                ? `<button type="button" data-nay-chip="${esc(it._nay.key)}" class="cal-chip cal-chip-nay" title="Agenda da Nay"><span class="cal-chip-time">${it._nay.all_day ? '' : formatTime(it._nay.date)}</span> ${it._nay.confirmation_status === 'confirmed' ? '✓ ' : ''}${esc(it._nay.title)}</button>`
+                : `<button type="button" data-real-item="${it.id}" class="cal-chip ${it.status !== 'upcoming' ? 'cal-chip-done' : ''}"><span class="cal-chip-time">${formatTime(it.item_date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${esc(it.title)}</button>`).join('')}
               ${items.length > MAX_CHIPS_PER_DAY ? `<span class="cal-more">+${items.length - MAX_CHIPS_PER_DAY} mais</span>` : ''}
             </div>
           </div>`;
@@ -739,7 +818,9 @@ async function renderReal() {
   wireNayAgenda(content);
   content.querySelector('#real-new-item').addEventListener('click', () => openRealModal(null));
   content.querySelectorAll('[data-real-item]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openRealModal(b.dataset.realItem); }));
-  content.querySelectorAll('[data-cal-day]').forEach((cell) => cell.addEventListener('click', (e) => { if (!e.target.closest('[data-real-item]')) openRealModal(null, cell.dataset.calDay); }));
+  content.querySelectorAll('[data-nay-chip]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); openNayEntryModal(b.dataset.nayChip); }));
+  content.querySelector('#filter-nay')?.addEventListener('change', (e) => { filters.showNay = e.target.checked; renderReal(); });
+  content.querySelectorAll('[data-cal-day]').forEach((cell) => cell.addEventListener('click', (e) => { if (!e.target.closest('[data-real-item], [data-nay-chip]')) openRealModal(null, cell.dataset.calDay); }));
   content.querySelector('#cal-prev').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() - 1); renderReal(); });
   content.querySelector('#cal-next').addEventListener('click', () => { viewDate.setMonth(viewDate.getMonth() + 1); renderReal(); });
   content.querySelector('#cal-today').addEventListener('click', () => { viewDate = new Date(); viewDate.setDate(1); viewDate.setHours(0, 0, 0, 0); renderReal(); });

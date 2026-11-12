@@ -28,7 +28,7 @@ function chipHtml(s) {
     s.overridden ? 'Posição definida pela Nay' : '',
   ].filter(Boolean).join('\n');
   const cls = ['enc-chip', persea ? '' : 'enc-chip-alt', s.upcoming ? 'enc-chip-scheduled' : '', s.client.tier === 'premium' && persea ? 'enc-chip-premium' : ''].join(' ');
-  return `<a href="client-onboarding.html?id=${s.client.id}" class="${cls}" title="${esc(title)}" aria-label="${esc(title)}">${esc(initials(s.client.full_name))}${s.overridden ? '<span class="enc-chip-pin" aria-hidden="true">•</span>' : ''}</a>`;
+  return `<a href="/admin/client-onboarding.html?id=${s.client.id}" class="${cls}" title="${esc(title)}" aria-label="${esc(title)}">${esc(initials(s.client.full_name))}${s.overridden ? '<span class="enc-chip-pin" aria-hidden="true">•</span>' : ''}</a>`;
 }
 
 export async function mountEncounterBoard(container, clients) {
@@ -114,7 +114,7 @@ async function openEncounterModal(number, refs, here) {
     const p = homeworkProgress(hw);
     const missing = hw.filter((h) => !h.completed).map((h) => h.title);
     return `
-      <a href="client-onboarding.html?id=${s.client.id}" class="block py-2 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-2 px-2 rounded">
+      <a href="/admin/client-onboarding.html?id=${s.client.id}" class="block py-2 border-b border-white/5 last:border-0 hover:bg-white/5 -mx-2 px-2 rounded">
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <span class="text-sm">${esc(s.client.full_name)}${s.persea ? '' : ` <span class="text-xs" style="color:#7fa3c4;">· ${esc(PROGRAM_SHORT[s.client.program_slug] || 'outro programa')}</span>`}</span>
           <span class="text-xs" style="color:${p.total && p.done === p.total ? '#8fae8b' : 'var(--gold)'};">${p.total ? `Lição de casa ${p.done}/${p.total}` : 'Sem lição de casa'}${s.upcoming ? ` · agendado ${formatDateTime(s.upcoming.item_date)}` : ' · a agendar'}</span>

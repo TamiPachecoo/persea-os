@@ -47,6 +47,12 @@ let calendarConnected = false;
 // connected Google Calendar shows up in the actual day squares, not just
 // in the separate list at the top of the page.
 let googleEvents = [];
+let googleConfirmations = new Map();
+async function loadGoogleConfirmations(ids) {
+  if (!ids.length) return new Map();
+  const { data } = await supabase.from('calendar_event_confirmations').select('google_event_id, status').in('google_event_id', ids);
+  return new Map((data || []).filter((r) => r.status).map((r) => [r.google_event_id, r.status]));
+}
 // Which month the grid is currently showing — always normalized to day 1 so
 // setMonth() never overflows into the wrong month on short months.
 let viewDate = new Date();
@@ -287,7 +293,7 @@ function calChip(it) {
   if (it.source === 'google') {
     return `
       <a href="${it.html_link || '#'}" target="_blank" rel="noopener" data-google-event class="cal-chip" style="border-left:3px solid #4285F4; display:block;">
-        ${it.all_day ? '' : `<span class="cal-chip-time">${formatTime(it.date)}</span> `}📅 ${it.title}
+        ${it.all_day ? '' : `<span class="cal-chip-time">${formatTime(it.date)}</span> `}📅 ${it.title}${it.confirmation === 'confirmed' ? ' <span title="Confirmado pela aluna" style="color:#8fae8b;">✓</span>' : it.confirmation === 'reschedule' ? ' <span title="Pediu para remarcar" style="color:#d0705a;">↻</span>' : ''}
       </a>
     `;
   }
@@ -781,7 +787,7 @@ function buildItemsByDayReal(items) {
     const key = dateKeyForGoogleEvent(e);
     (byDay[key] || (byDay[key] = [])).push({
       id: e.id, source: 'google', title: e.summary, date: e.all_day ? `${e.start}T00:00:00` : e.start,
-      all_day: e.all_day, html_link: e.html_link, status: 'upcoming',
+      all_day: e.all_day, html_link: e.html_link, status: 'upcoming', confirmation: googleConfirmations.get(e.id) || null,
     });
   });
   Object.values(byDay).forEach((arr) => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
@@ -1195,6 +1201,8 @@ async function renderProductionAgenda() {
   realCalendarStatus = calendarStatus;
   calendarConnected = calendarStatus.connected;
   googleEvents = await loadGoogleEvents();
+  // Confirmations the assistant registered for Google events (Agenda da Nay).
+  googleConfirmations = await loadGoogleConfirmations(googleEvents.map((e) => e.id));
   const items = await loadRealAgendaItems();
   const itemsByDay = buildItemsByDayReal(items);
 
