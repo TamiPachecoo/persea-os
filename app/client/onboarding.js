@@ -212,7 +212,7 @@ async function render() {
 
   content.innerHTML = `
     <div class="mb-8">
-      <p class="text-white/40 text-sm mb-1">Bem-vinda à Persea,</p>
+      <p class="text-white/40 text-sm mb-1">Boas-vindas à Persea,</p>
       <h1 class="text-3xl font-serif">${client.full_name}</h1>
       <p class="text-sm text-white/40 mt-2">Antes de começar a Fase 1 da mentoria, vamos concluir seu cadastro.</p>
     </div>

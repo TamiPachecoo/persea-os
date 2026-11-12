@@ -2353,7 +2353,7 @@ function buildMessage(kind, { client, partyInfo, finState, meetings }) {
       const access = ['created', 'active'].includes(client.access_status)
         ? `Seu acesso ao app já está liberado: entre em *app.naymurta.com* com o seu e-mail (${client.email}). Se ainda não criou a sua senha, use o link que chegou no seu e-mail ou toque em "Primeiro acesso".`
         : 'Nos próximos dias você recebe o seu acesso ao app *PERSEA*, onde vai acompanhar toda a sua jornada: encontros, materiais e atividades.';
-      return [hello, '', `Seja muito bem-vinda à *Mentoria PERSEA*! ${isNay ? 'Estou muito feliz' : 'A Nay e toda a equipe estão muito felizes'} por começar essa jornada com você.`, '', access, '', 'Para ter o app sempre à mão no celular ou no computador: app.naymurta.com/tutorial-instalar.html', '', 'Qualquer dúvida, é só chamar por aqui.', '', sign].join('\n');
+      return [hello, '', `Boas-vindas à *Mentoria PERSEA*! ${isNay ? 'Estou muito feliz' : 'A Nay e toda a equipe estão muito felizes'} por começar essa jornada com você.`, '', access, '', 'Para ter o app sempre à mão no celular ou no computador: app.naymurta.com/tutorial-instalar.html', '', 'Qualquer dúvida, é só chamar por aqui.', '', sign].join('\n');
     }
     case 'meeting':
       if (!meeting) return null;

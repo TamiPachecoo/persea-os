@@ -258,7 +258,7 @@ function renderReview(answers) {
     ${SECTIONS.map((section, i) => renderReviewSection(answers, section, i)).join('')}
     ${card(`
       <p class="text-sm font-medium mb-1">Sua análise será enviada para Nay</p>
-      <p class="text-xs text-white/40">Após o envio, Nay utilizará essas informações para estudar sua oferta, sua capacidade e sua precificação. Você será avisada(o) quando a devolutiva estiver disponível.</p>
+      <p class="text-xs text-white/40">Após o envio, Nay utilizará essas informações para estudar sua oferta, sua capacidade e sua precificação. Você recebe um aviso quando a devolutiva estiver disponível.</p>
     `, 'mb-6')}
     <div class="flex items-center justify-between">
       <button type="button" id="wiz-back" class="btn-ghost">&larr; Voltar</button>
@@ -401,7 +401,7 @@ function renderWaiting(assessment) {
   const title = isSubmitted ? 'Informações enviadas' : 'Sua análise está sendo preparada';
   const body = isSubmitted
     ? 'Nay já pode iniciar sua Leitura Estratégica de Valor. Você poderá acompanhar o andamento por aqui.'
-    : 'Nay está estudando sua oferta, sua capacidade e sua precificação. Você será avisada(o) quando a devolutiva estiver disponível.';
+    : 'Nay está estudando sua oferta, sua capacidade e sua precificação. Você recebe um aviso quando a devolutiva estiver disponível.';
   return `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Metodologia PERSEA</p>
