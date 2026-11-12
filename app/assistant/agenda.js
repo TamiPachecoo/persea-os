@@ -12,6 +12,7 @@ import { renderShell, card, formatDateTime, toast, openModal, functionErrorMessa
 import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { isProductionEnvironment } from '../shared/environment.js';
+import { dueStripHtml } from '../shared/team-tasks.js';
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
@@ -606,6 +607,8 @@ function welcomeCard() {
 
 async function renderReal() {
   await loadReal();
+  const me = await getCurrentProfile();
+  const strip = me ? await dueStripHtml(me).catch(() => '') : '';
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endToday = new Date(startToday); endToday.setDate(endToday.getDate() + 1);
@@ -624,6 +627,7 @@ async function renderReal() {
       </div>
       <button id="real-new-item" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Nova tarefa</button>
     </div>
+    ${strip}
     ${welcomeClosed() ? '' : welcomeCard()}
     ${overdue.length ? realSection('⚠ Atrasados', overdue, '', 'color:var(--terracotta);') : ''}
     ${realSection('Hoje', today, 'Nada para hoje.')}

@@ -129,3 +129,28 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req).then((cached) => cached || Response.error()))
   );
 });
+
+// --- Notificações da equipe (Edge Function team-push) -------------------
+// Payload: { title, body, url, tag }. Tapping opens (or focuses) the task.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'PERSEA', body: event.data?.text() || '' }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'PERSEA', {
+    body: data.body || '',
+    tag: data.tag || undefined,
+    renotify: !!data.tag,
+    icon: '/shared/assets/icons/icon-192.png',
+    badge: '/shared/assets/icons/icon-192.png',
+    data: { url: data.url || '/' },
+  }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    for (const w of wins) {
+      if (new URL(w.url).origin === self.location.origin && 'focus' in w) { w.navigate(url).catch(() => {}); return w.focus(); }
+    }
+    return self.clients.openWindow(url);
+  }));
+});

@@ -16,6 +16,7 @@ import { supabase } from '../shared/supabase-client.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { computeTeamNextStep } from '../shared/team-action-model.js';
 import { mountEncounterBoard } from './encounter-board.js';
+import { dueStripHtml } from '../shared/team-tasks.js';
 
 // Production Migration Batch 4: app.naymurta.com never shows MockDB
 // clients/leads. Real client creation + registration-link generation
@@ -492,7 +493,9 @@ async function renderProductionCRM() {
   } else {
     const clients = await loadRealClients();
     lastLoadedClients = clients;
+    const strip = await dueStripHtml(crmProfile).catch(() => '');
     content.innerHTML = header + `
+      ${strip}
       ${card(`
         <div class="flex items-center justify-between">
           <p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'}</p>
@@ -600,7 +603,8 @@ const STAGE_CLASS = {
 };
 const stageBadge = (stage) => `<span class="badge ${STAGE_CLASS[stage] || 'badge-locked'}">${LEAD_STAGE_LABEL[stage] || stage}</span>`;
 
-if (!(await requireProfile('admin'))) throw new Error('not authorized');
+const crmProfile = await requireProfile('admin');
+if (!crmProfile) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'admin', active: 'crm.html', title: 'Clientes' });
 const content = document.getElementById('app-content');
 

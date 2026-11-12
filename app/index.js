@@ -23,7 +23,7 @@ if (isLocalDev) {
     <p class="mb-10 text-sm" style="color:var(--muted); line-height:1.7;">Atalhos de desenvolvimento — cada página abaixo ainda exige login real correspondente ao papel (admin/assistente); isto só pula a tela inicial.</p>
     <div class="space-y-3">
       <a href="login.html" class="btn-primary block w-full text-center" style="padding-top:13px;padding-bottom:13px;">Entrar</a>
-      <a href="admin/agenda.html" class="btn-ghost block w-full text-center" style="padding-top:12px;padding-bottom:12px;">Ir para Admin</a>
+      <a href="admin/crm.html" class="btn-ghost block w-full text-center" style="padding-top:12px;padding-bottom:12px;">Ir para Admin</a>
       <a href="assistant/agenda.html" class="btn-ghost block w-full text-center" style="padding-top:12px;padding-bottom:12px;">Ir para Assistente</a>
     </div>
     <button id="reset-btn" class="btn-text mt-8 underline">Redefinir dados de exemplo</button>

@@ -154,7 +154,7 @@ function renderForm() {
     // Same page serves students and the team (invite-staff links land here
     // too) — send each to her own home.
     const profile = await getCurrentProfile();
-    location.href = { admin: '/admin/agenda.html', assistant: '/assistant/agenda.html' }[profile?.role] || 'program.html';
+    location.href = { admin: '/admin/crm.html', assistant: '/assistant/agenda.html' }[profile?.role] || 'program.html';
   });
 }
 

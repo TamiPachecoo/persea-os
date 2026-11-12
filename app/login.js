@@ -13,7 +13,7 @@ const params = new URLSearchParams(location.search);
 const next = params.get('next');
 
 const ROLE_HOME = {
-  admin: '/admin/agenda.html', // Painel removed — Agenda is Nay's landing page now
+  admin: '/admin/crm.html', // Clientes (with the E1–E8 timeline) is Nay's landing page now — trial, was Agenda
   assistant: '/assistant/agenda.html', // Painel removed — Agenda is her landing page now
   client: '/client/program.html', // Painel removed — Minha Jornada is her landing page now
 };

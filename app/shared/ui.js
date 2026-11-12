@@ -190,6 +190,7 @@ const MOBILE_TAB_ICON = {
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.75" y="5.25" width="16.5" height="15" rx="2.25"/><path d="M8 3.5v3.5M16 3.5v3.5M3.75 9.75h16.5"/></svg>',
   wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.5" width="18" height="12" rx="2.25"/><path d="M3 10.25h18"/><path d="M6.75 14.5h3.5"/></svg>',
   people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M15.5 5.5c1.4.4 2.4 1.6 2.4 3s-1 2.6-2.4 3"/><path d="M16 14.6c2 .5 3.5 2.1 3.5 4.4"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.75" y="3.75" width="16.5" height="16.5" rx="3"/><path d="m8 12.2 2.7 2.7L16.2 9"/></svg>',
   clipboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="17" rx="2"/><rect x="9" y="3" width="6" height="3" rx="1"/><path d="M8.5 12h7M8.5 15.5h7"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
   content: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v15.5a1 1 0 0 1-1 1H6.5A2.5 2.5 0 0 1 4 18Z"/><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20"/></svg>',
@@ -226,12 +227,14 @@ const MOBILE_NAV_CONFIG = {
     ],
   },
   admin: {
+    // Clientes first: it is Nay's landing page now (E1–E8 timeline).
     tabs: [
-      ['agenda.html', 'Agenda', MOBILE_TAB_ICON.calendar],
       ['crm.html', 'Clientes', MOBILE_TAB_ICON.people],
+      ['agenda.html', 'Agenda', MOBILE_TAB_ICON.calendar],
       ['financial.html', 'Financeiro', MOBILE_TAB_ICON.wallet],
     ],
     mais: [
+      ['tarefas.html', 'Tarefas'],
       ['content.html', 'Conteúdos'],
       ['assistente.html', 'Assistente'],
       ['events.html', 'Eventos'],
@@ -240,12 +243,15 @@ const MOBILE_NAV_CONFIG = {
     ],
   },
   assistant: {
+    // Tarefas (what Nay delegated, with deadlines) in the bar; Cadastros
+    // moved to "Mais".
     tabs: [
       ['agenda.html', 'Agenda', MOBILE_TAB_ICON.calendar],
+      ['tarefas.html', 'Tarefas', MOBILE_TAB_ICON.check],
       ['clients.html', 'Clientes', MOBILE_TAB_ICON.people],
-      ['leads.html', 'Cadastros', MOBILE_TAB_ICON.clipboard],
     ],
     mais: [
+      ['leads.html', 'Cadastros'],
       ['templates.html', 'Templates'],
       ['financial.html', 'Financeiro'],
       ['events.html', 'Eventos'],
@@ -333,6 +339,7 @@ function onboardingGateBanner(active) {
 const ADMIN_NAV = [
   ['agenda.html', 'Agenda'],
   ['crm.html', 'Clientes'],
+  ['tarefas.html', 'Tarefas'],
   ['content.html', 'Conteúdos'],
   ['assistente.html', 'Assistente'],
   ['events.html', 'Eventos'],
@@ -352,6 +359,7 @@ const ADMIN_NAV = [
 // assigned to her, pendências, and her schedule all live there).
 const ASSISTANT_NAV = [
   ['agenda.html', 'Agenda'],
+  ['tarefas.html', 'Tarefas'],
   ['leads.html', 'Cadastros'],
   ['clients.html', 'Clientes'],
   ['templates.html', 'Templates'],
@@ -454,6 +462,11 @@ document.addEventListener('click', (e) => {
 
 export function renderShell({ role, active, tenantName = 'PERSEA', title, program }) {
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
+  // Staff: a small count on "Tarefas" (new, due within 24h or late) once
+  // the page has rendered. Loaded lazily so it never slows the page.
+  if ((role === 'admin' || role === 'assistant') && isProductionEnvironment()) {
+    setTimeout(() => { import('./team-tasks.js').then((m) => m.decorateTaskNav(role)).catch(() => {}); }, 400);
+  }
   const dir = ROLE_DIR[role] || '';
   const navHtml = nav.map(([href, label]) => `
     <a href="${dir}${href}" class="nav-link ${active === href ? 'active' : ''}">${label}</a>

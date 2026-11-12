@@ -69,7 +69,7 @@ export async function getCurrentProfile() {
 // instead of being signed out. Signing her out here produced a real loop —
 // login worked, the remembered admin page logged her out a second later,
 // and it looked like a wrong password ("keeps asking for a new password").
-const ROLE_HOME = { admin: '/admin/agenda.html', assistant: '/assistant/agenda.html', client: '/client/program.html' };
+const ROLE_HOME = { admin: '/admin/crm.html', assistant: '/assistant/agenda.html', client: '/client/program.html' };
 
 export async function requireProfile(role, loginPath = '../login.html') {
   const profile = await getCurrentProfile();

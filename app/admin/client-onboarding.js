@@ -43,6 +43,7 @@ import {
   loadEncounterRefs, loadPlan, savePlan, clientSequence, homeworkFor, teamDeliverablesFor,
   activityStatusFromProgramState, homeworkProgress, encounterDetailHtml, studentTrackHtml,
 } from '../shared/encounter-journey.js';
+import { mountClientTasks } from '../shared/team-tasks.js';
 
 
 // Staff-side conversion of Business Survey / Brand Direction / Value
@@ -2624,6 +2625,7 @@ async function render() {
     jornada: `
       ${nextActionCard(status.nextAction)}
       ${programSummaryHtml}
+      <div id="client-team-tasks"></div>
       ${encounterTrackCard(journey, encRefs, encounterCtx.activityStatus, encPlan)}
       ${encounterPlanCard(client, encRefs, encPlan)}
       ${journeyControlCard(client, state)}
@@ -2722,7 +2724,10 @@ async function render() {
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
   });
-  if (activeTab === 'jornada') wireEncounterTrack(content);
+  if (activeTab === 'jornada') {
+    wireEncounterTrack(content);
+    mountClientTasks(content.querySelector('#client-team-tasks'), profile, clientId).catch(() => {});
+  }
   if (encontros) { wireEncontrosTab(encontros); wireMaterialSlots(encontros.materials); }
   if (jornadaMaterials) wireMaterialSlots(jornadaMaterials);
   if (messagesData) wireMessagesTab({ client, partyInfo, finState });
