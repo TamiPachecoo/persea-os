@@ -85,7 +85,7 @@ async function renderProductionCadastros() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Cadastros</p>
       <h1 class="text-3xl font-serif">Contrato e Ativação</h1>
-      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais em onboarding — cadastro, contrato e acesso. Clique em uma cliente para abrir o workspace real dela.</p>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais em onboarding — cadastro, contrato e acesso. Clique em um cadastro para abrir o workspace real.</p>
     </div>
     ${renderHublaPendingCard(hublaPending)}
     ${clients.length
@@ -248,7 +248,7 @@ function realContractSection(l, real) {
             <p class="text-sm mb-2" ${gold}>✓ Acesso criado — convite já enviado.</p>
             <button data-create-access="${l.id}" class="btn-text">Reenviar Convite</button>
           ` : `
-            <p class="text-sm mb-2" ${gold}>Contrato assinado — falta criar o acesso dela ao Persea OS.</p>
+            <p class="text-sm mb-2" ${gold}>Contrato assinado — falta criar o acesso ao Persea OS.</p>
             <button data-create-access="${l.id}" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Criar Acesso</button>
           `}
         </div>
@@ -292,7 +292,7 @@ function leadCard(l, real) {
                 <button data-update-contract="${l.id}" class="btn-ghost">Atualizar</button>
               </div>
               <button data-upload-contract="${l.id}" class="btn-ghost">Fazer upload do contrato autenticado</button>
-              <p class="text-xs text-white/30 mt-3">Use apenas se a assinatura aconteceu fora da Autentique (ex.: assinatura física). O upload aqui não ativa o acesso dela automaticamente — use "Ativar Cliente" abaixo depois.</p>
+              <p class="text-xs text-white/30 mt-3">Use apenas se a assinatura aconteceu fora da Autentique (ex.: assinatura física). O upload aqui não ativa o acesso automaticamente — use "Ativar Cliente" abaixo depois.</p>
             </div>
           </details>
         `}
@@ -302,7 +302,7 @@ function leadCard(l, real) {
     ${ready && !real ? `
       <div class="mt-4 pt-4" style="border-top:1px solid var(--line);">
         <p class="text-sm mb-1" style="color:var(--gold);">Pronta para ativação</p>
-        <p class="text-xs text-white/20 mb-3">Cria o perfil dela com tudo já preenchido e libera o acesso ao Persea OS — ela usa o email já cadastrado e cria a própria senha no primeiro acesso.</p>
+        <p class="text-xs text-white/20 mb-3">Cria o perfil com tudo já preenchido e libera o acesso ao Persea OS — o login usa o email já cadastrado, com senha criada pela própria pessoa no primeiro acesso.</p>
         <button data-activate="${l.id}" class="btn-primary" style="padding:10px 20px;font-size:13px;">Ativar Cliente</button>
       </div>
     ` : ''}
@@ -341,7 +341,7 @@ function renderHublaPendingCard({ clients, error }) {
         <a ${externalLinkAttrs(HUBLA_DASHBOARD_URL)} class="btn-text">Abrir Hubla ↗</a>
       </div>
     </div>
-    <p class="text-xs text-white/20 mb-3 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. Copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+    <p class="text-xs text-white/20 mb-3 max-w-2xl">Cadastros ativos sem acesso ao Hubla ainda. Copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
     ${error ? `<p class="text-sm" style="color:var(--terracotta);">Não foi possível carregar: ${error}</p>`
       : clients.length ? clients.map(hublaPendingRow).join('')
       : '<p class="text-sm" style="color:var(--gold);">Nenhuma pendência. Todo mundo ativa já tem acesso.</p>'}
@@ -358,7 +358,7 @@ async function render() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Cadastros</p>
       <h1 class="text-3xl font-serif">Contrato e Ativação</h1>
-      <p class="text-sm text-white/40 mt-2 max-w-2xl">Assim que uma lead preenche o cadastro que a Nay enviou, ela aparece aqui — prepare e faça upload do contrato assinado, depois ative o acesso dela.</p>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Assim que alguém preenche o cadastro que a Nay enviou, o cadastro aparece aqui — prepare e faça upload do contrato assinado, depois ative o acesso.</p>
     </div>
     ${renderHublaPendingCard(hublaPending)}
     ${queue.length ? queue.map((l) => leadCard(l, realStatuses.get(l.id))).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro pendente agora.</p>')}
@@ -460,7 +460,7 @@ async function render() {
       if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); btn.disabled = false; btn.textContent = 'Criar Acesso'; return; }
       toast(data.mock
         ? (data.resent ? 'Acesso (demo) já existia — nada a reenviar.' : 'Acesso criado (demo) — sem e-mail real enviado, mas o login já funciona de verdade.')
-        : (data.resent ? 'Convite reenviado.' : 'Acesso criado — ela receberá um e-mail para criar a senha.'));
+        : (data.resent ? 'Convite reenviado.' : 'Acesso criado — chega um e-mail para criar a senha.'));
       render();
     });
   });

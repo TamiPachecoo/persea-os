@@ -153,7 +153,7 @@ function renderCommercialTermsForm(contract, isRevision) {
   const lines = contract.payment_lines?.length ? contract.payment_lines : [{}];
   return card(`
     <p class="text-sm text-white/50 mb-1">Condições Comerciais</p>
-    <p class="text-xs text-white/20 mb-4">Preencha o que foi acordado com a cliente — o texto do contrato é gerado automaticamente a partir disso, incluindo a cláusula de pagamento. Registre cada pagamento combinado (entrada, depósitos avulsos, parcelas) em qualquer combinação e ordem — não precisa ser um plano parcelado padrão.</p>
+    <p class="text-xs text-white/20 mb-4">Preencha o que foi acordado com quem contrata — o texto do contrato é gerado automaticamente a partir disso, incluindo a cláusula de pagamento. Registre cada pagamento combinado (entrada, depósitos avulsos, parcelas) em qualquer combinação e ordem — não precisa ser um plano parcelado padrão.</p>
     <form id="terms-form" class="space-y-4">
       <div class="grid sm:grid-cols-2 gap-4">
         <div>
@@ -450,7 +450,7 @@ async function render() {
       <p class="text-sm text-white/50 mb-3">Acesso da Cliente ao Sistema</p>
       ${client.access_status === 'created'
         ? `<p class="text-xs mb-3" style="color:var(--gold);">Convite já enviado.</p><button id="invite-client" class="btn-ghost">Reenviar Convite</button>`
-        : `<p class="text-xs text-white/30 mb-3">Ela ainda não tem login real — envie o convite para que crie sua própria senha.</p><button id="invite-client" class="btn-primary">Convidar Cliente para Acesso</button>`}
+        : `<p class="text-xs text-white/30 mb-3">Ainda não há login real — envie o convite para que crie sua própria senha.</p><button id="invite-client" class="btn-primary">Convidar Cliente para Acesso</button>`}
     `);
     document.getElementById('invite-client')?.addEventListener('click', async (e) => {
       e.target.disabled = true;
@@ -463,7 +463,7 @@ async function render() {
       if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Convidar Cliente para Acesso'; return; }
       toast(data.mock
         ? (data.resent ? 'Acesso (demo) já existia — nada a reenviar.' : 'Acesso criado (demo) — sem e-mail real enviado, mas o login já funciona de verdade.')
-        : (data.resent ? 'Convite reenviado.' : 'Convite enviado — ela receberá um e-mail para criar a senha.'));
+        : (data.resent ? 'Convite reenviado.' : 'Convite enviado — chega um e-mail para criar a senha.'));
       render();
     });
     return;
@@ -510,7 +510,7 @@ async function render() {
   // for that, so nothing goes out with [CPF]/[ENDEREÇO] placeholders.
   const cadastroDone = !!partyInfo?.submitted;
   const cadastroBanner = cadastroDone || sentViaAutentique ? ''
-    : `<div class="mb-4 px-4 py-3 rounded-xl text-sm text-white/70" style="border:1px dashed var(--line);background:rgba(255,255,255,.03);">A cliente ainda não preencheu o cadastro. Pode editar e revisar o contrato normalmente: quando ela enviar, o parágrafo <b>CONTRATANTE</b> e o nome na assinatura são preenchidos sozinhos com os dados dela, sem mexer no resto do texto.</div>`;
+    : `<div class="mb-4 px-4 py-3 rounded-xl text-sm text-white/70" style="border:1px dashed var(--line);background:rgba(255,255,255,.03);">O cadastro ainda não foi preenchido. Pode editar e revisar o contrato normalmente: quando ele chegar, o parágrafo <b>CONTRATANTE</b> e o nome na assinatura são preenchidos sozinhos com esses dados, sem mexer no resto do texto.</div>`;
   const reviewBanner = sentViaAutentique ? '' : reviewed
     ? `<div class="mb-4 px-4 py-3 rounded-xl text-sm" style="border:1px solid rgba(220,199,168,.35);background:rgba(220,199,168,.08);color:var(--gold);">✓ Revisado pela Nay em ${new Date(contract.admin_reviewed_at).toLocaleString('pt-BR')} — pronto para enviar para assinatura.</div>`
     : isAdminUser
@@ -540,12 +540,12 @@ async function render() {
       ? `<p class="text-xs text-white/30 mb-3">Enviado em ${new Date(contract.sent_for_signature_at).toLocaleString('pt-BR')} — documento Autentique: ${contract.autentique_document_id}</p>
          <div class="flex flex-wrap gap-2">
            <button id="${isDemo ? 'check-autentique-demo' : 'check-autentique'}" class="btn-primary">${isDemo ? 'Simular Assinatura Concluída' : 'Verificar Assinatura'}</button>
-           ${isDemo ? '' : '<button id="get-sign-link" class="btn-ghost">Ela não achou o e-mail? Pegar link de assinatura</button>'}
+           ${isDemo ? '' : '<button id="get-sign-link" class="btn-ghost">Não achou o e-mail? Pegar link de assinatura</button>'}
          </div>
          <div id="sign-link-box" class="mt-4"></div>`
       : !cadastroDone
         ? `<button class="btn-primary" disabled style="opacity:.45;cursor:not-allowed;">Enviar para Assinatura via Autentique</button>
-           <p class="text-xs mt-2" style="color:var(--terracotta);">Libera quando a cliente preencher o cadastro: os dados dela entram no contrato automaticamente.</p>`
+           <p class="text-xs mt-2" style="color:var(--terracotta);">Libera quando o cadastro for preenchido: os dados entram no contrato automaticamente.</p>`
       : canSend
         ? `<button id="${isDemo ? 'send-autentique-demo' : 'send-autentique'}" class="btn-primary">${isDemo ? 'Simular Envio para Assinatura' : 'Enviar para Assinatura via Autentique'}</button>`
         : `<button class="btn-primary" disabled style="opacity:.45;cursor:not-allowed;">Enviar para Assinatura via Autentique</button>
@@ -592,7 +592,7 @@ async function render() {
     // document goes out — real case: a typo'd "@hotmailm.com" was sent.
     const to = (client.email || '').trim();
     const fix = emailTypoSuggestion(to);
-    if (fix) { toast(`O e-mail da cliente parece ter um erro (${to} → ${fix}?). Corrija o e-mail no cadastro dela antes de enviar.`, { tone: 'error' }); return; }
+    if (fix) { toast(`O e-mail cadastrado parece ter um erro (${to} → ${fix}?). Corrija o e-mail no cadastro antes de enviar.`, { tone: 'error' }); return; }
     if (!window.confirm(`O contrato será enviado pela Autentique para:\n\n${to || '(sem e-mail)'}\n\nO e-mail está correto?`)) return;
     e.target.disabled = true;
     e.target.textContent = 'Enviando...';
@@ -681,7 +681,7 @@ async function render() {
     e.target.disabled = false;
     e.target.textContent = label;
     if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
-    if (data.normalized_status === 'COMPLETED') { toast(data.already_processed ? 'Este contrato já está assinado.' : 'Ela já assinou! Contrato registrado.'); render(); return; }
+    if (data.normalized_status === 'COMPLETED') { toast(data.already_processed ? 'Este contrato já está assinado.' : 'Contrato já assinado! Registrado.'); render(); return; }
     signLinkBox(data);
   });
   document.getElementById('check-autentique')?.addEventListener('click', async (e) => {
@@ -746,7 +746,7 @@ content.addEventListener('change', async (e) => {
   const checked = e.target.checked;
   const { error } = await supabase.from('clients').update({ is_demo: checked }).eq('id', clientId);
   if (error) { toast(error.message, { tone: 'error' }); e.target.checked = !checked; return; }
-  toast(checked ? 'Marcada como cliente de demonstração.' : 'Marcada como cliente real.');
+  toast(checked ? 'Cadastro marcado como demonstração.' : 'Cadastro marcado como real.');
   render();
 });
 

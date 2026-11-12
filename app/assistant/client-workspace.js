@@ -227,7 +227,7 @@ function renderChecklist(client) {
         ${o.contract.status === 'completed'
           ? `<p class="text-xs" style="color:var(--gold);">Arquivado: ${o.contract.signedFileName || 'contrato-assinado.pdf'}</p>`
           : `<button id="upload-signed-contract" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Fazer upload do contrato autenticado</button>`}
-        <p class="text-xs text-white/30 mt-3">Assinatura acontece na plataforma externa de assinatura — faça o upload assim que o contrato assinado (com as duas assinaturas) chegar. Isso libera o Programa e os Conteúdos para a cliente.</p>
+        <p class="text-xs text-white/30 mt-3">Assinatura acontece na plataforma externa de assinatura — faça o upload assim que o contrato assinado (com as duas assinaturas) chegar. Isso libera o Programa e os Conteúdos no app.</p>
       `),
     },
     {
@@ -269,7 +269,7 @@ function renderChecklist(client) {
     {
       weight: 3, pending: nfOwed.length > 0, html: card(`
         <p class="text-sm text-white/50 mb-1">Emitir Nota Fiscal</p>
-        <p class="text-xs text-white/30 mb-4">Sempre que a cliente solicitar, ou automaticamente quando a venda for no cartão de crédito${(o.contract.paymentMethods && o.contract.paymentMethods.length) ? ` — forma${o.contract.paymentMethods.length > 1 ? 's' : ''} de pagamento desta cliente: <span style="color:var(--gold);">${o.contract.paymentMethods.map((m) => PAYMENT_METHOD_LABEL[m]).join(' + ')}</span>` : o.contract.paymentMethod ? ` — forma de pagamento desta cliente: <span style="color:var(--gold);">${PAYMENT_METHOD_LABEL[o.contract.paymentMethod]}</span>` : ''}.</p>
+        <p class="text-xs text-white/30 mb-4">Sempre que houver solicitação, ou automaticamente quando a venda for no cartão de crédito${(o.contract.paymentMethods && o.contract.paymentMethods.length) ? ` — forma${o.contract.paymentMethods.length > 1 ? 's' : ''} de pagamento desta cliente: <span style="color:var(--gold);">${o.contract.paymentMethods.map((m) => PAYMENT_METHOD_LABEL[m]).join(' + ')}</span>` : o.contract.paymentMethod ? ` — forma de pagamento desta cliente: <span style="color:var(--gold);">${PAYMENT_METHOD_LABEL[o.contract.paymentMethod]}</span>` : ''}.</p>
         ${payments.length ? `
           <div class="space-y-2">
             ${payments.map((p) => `
@@ -323,7 +323,7 @@ function renderChecklist(client) {
           <p class="text-sm text-white/50">Elaboração de Projeto de Imagem</p>
           <span class="badge ${client.imageProjectStatus === 'created' ? 'badge-completed' : 'badge-locked'}">${client.imageProjectStatus === 'created' ? 'Criado' : 'Não criado'}</span>
         </div>
-        <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pela cliente.</p>
+        <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pelo app.</p>
         <div class="flex items-center gap-3 flex-wrap">
           ${client.imageProjectStatus !== 'created' ? '<button id="create-image-project" class="btn-ghost">Criar projeto</button>' : ''}
           <button id="remind-photos" class="btn-text">🔔 Lembrar cliente de enviar fotos</button>
@@ -334,14 +334,14 @@ function renderChecklist(client) {
     ...(productionGuide ? [{
       weight: 7, pending: productionGuide.status !== 'delivered', html: card(`
         <p class="text-sm text-white/50 mb-1">Elaboração de Guia de Produções</p>
-        <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pela cliente.</p>
+        <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pelo app.</p>
         ${guideRow(productionGuide)}
       `),
     }] : []),
     ...(moodGuide ? [{
       weight: 8, pending: moodGuide.status !== 'delivered', html: card(`
         <p class="text-sm text-white/50 mb-1">Elaboração de Mood Fotográfico</p>
-        <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pela cliente.</p>
+        <p class="text-xs text-white/30 mb-3">Depende das fotos enviadas pelo app.</p>
         ${guideRow(moodGuide)}
       `),
     }] : []),
@@ -359,7 +359,7 @@ function renderChecklist(client) {
       // running log, not a task, so it just holds a stable spot near the end.
       weight: 11, pending: false, html: card(`
         <p class="text-sm text-white/50 mb-4">Acompanhamento de WhatsApp</p>
-        <p class="text-xs text-white/30 mb-3">Registre aqui qualquer retorno importante das conversas — visível só para a equipe, nunca para a cliente.</p>
+        <p class="text-xs text-white/30 mb-3">Registre aqui qualquer retorno importante das conversas — visível só para a equipe, nunca no app de quem é cliente.</p>
         <form id="whatsapp-note-form" class="flex items-start gap-2 mb-4">
           <textarea name="note" rows="2" class="field" placeholder="Ex.: cliente comentou que vai viajar semana que vem, pode atrasar o envio das fotos." required></textarea>
           <button type="submit" class="btn-ghost" style="white-space:nowrap;">Registrar</button>
@@ -395,7 +395,7 @@ function render() {
     </div>
     ${!MockDB.getOnboarding(clientId).clientInfo.submitted ? `
       <div class="mb-8" style="border-left:3px solid var(--terracotta); border-radius:4px;">${card(`
-        <p class="text-sm" style="color:var(--terracotta);">⚠ Esta cliente ainda não preencheu as informações de cadastro — acompanhe até ela concluir antes de qualquer outra etapa.</p>
+        <p class="text-sm" style="color:var(--terracotta);">⚠ Esta cliente ainda não preencheu as informações de cadastro — acompanhe até a conclusão antes de qualquer outra etapa.</p>
       `)}</div>
     ` : ''}
     <div class="workspace-layout">
@@ -445,14 +445,14 @@ function render() {
   content.querySelectorAll('[data-issue-nf]').forEach((btn) => {
     btn.addEventListener('click', () => {
       MockDB.issueInvoice(clientId, btn.dataset.issueNf);
-      toast('Nota fiscal emitida — disponível para a cliente.');
+      toast('Nota fiscal emitida — disponível no app.');
       render();
     });
   });
   content.querySelector('#upload-signed-contract')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Enviando…';
     await MockDB.uploadSignedContract(clientId, `contrato-${clientId}-assinado.pdf`);
-    toast('Contrato assinado enviado — Programa e Conteúdos liberados para a cliente.');
+    toast('Contrato assinado enviado — Programa e Conteúdos liberados no app.');
     render();
   });
   content.querySelector('#remind-photos')?.addEventListener('click', () => {

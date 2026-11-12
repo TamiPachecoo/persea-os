@@ -75,7 +75,7 @@ function renderCommercialCard(lead) {
       <p class="text-sm text-white/50">Condições Comerciais</p>
       ${lead.onboardingStatus ? `<span class="text-xs" style="color:var(--gold);">Condições registradas${ct.saleAgreedAt ? ` em ${formatDate(ct.saleAgreedAt)}` : ''}</span>` : ''}
     </div>
-    <p class="text-xs text-white/20 mb-4">Preenchido por quem conduziu a conversa — a cliente não escolhe nem edita essas condições no formulário dela. O negócio só é considerado fechado quando a primeira parcela é paga.</p>
+    <p class="text-xs text-white/20 mb-4">Preenchido por quem conduziu a conversa — quem vai contratar não escolhe nem edita essas condições no próprio formulário. O negócio só é considerado fechado quando a primeira parcela é paga.</p>
     <form id="commercial-form" class="space-y-4">
       <div>
         <label class="text-xs text-white/40 block mb-1">Programa Acordado</label>
@@ -186,7 +186,7 @@ function renderContractCard(lead) {
 function renderActivationCard(lead) {
   if (lead.convertedToClientId) {
     return card(`
-      <p class="text-sm text-white/50 mb-3">Cliente Ativa</p>
+      <p class="text-sm text-white/50 mb-3">Acesso ativo</p>
       <p class="text-sm mb-4">Ativada em ${formatDate(lead.convertedAt)} — acesso ao Persea OS liberado.</p>
       <a href="client-detail.html?id=${lead.convertedToClientId}" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Ver Perfil de Cliente</a>
     `, 'mb-6');
@@ -194,7 +194,7 @@ function renderActivationCard(lead) {
   if (lead.onboardingStatus !== 'ready_for_activation') return '';
   return card(`
     <p class="text-sm mb-1" style="color:var(--gold);">Pronta para ativação</p>
-    <p class="text-xs text-white/20">Cadastro recebido e contrato assinado — a assistente ativa o acesso dela no painel de Cadastros.</p>
+    <p class="text-xs text-white/20">Cadastro recebido e contrato assinado — a assistente ativa o acesso no painel de Cadastros.</p>
   `, 'mb-6');
 }
 
@@ -371,7 +371,7 @@ function render() {
 
   content.querySelector('#copy-link')?.addEventListener('click', async () => {
     const link = content.querySelector('#copy-link').previousElementSibling.value;
-    try { await navigator.clipboard.writeText(link); toast('Link copiado — cole no WhatsApp da cliente.'); }
+    try { await navigator.clipboard.writeText(link); toast('Link copiado — cole no WhatsApp de quem vai receber.'); }
     catch { toast('Não foi possível copiar automaticamente — selecione e copie manualmente.', { tone: 'error' }); }
     MockDB.markRegistrationSent(leadId);
     render();

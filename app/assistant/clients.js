@@ -59,7 +59,7 @@ function productionClientRow(c) {
         <p class="text-xs text-white/20 mt-1">${meetingLabel}</p>
         ${c._teamNextStep ? `<p class="text-xs mt-0.5 break-words" style="color:var(--gold);">→ ${c._teamNextStep.label}</p>` : ''}
       </div>
-      <span class="badge badge-completed shrink-0">Ativa</span>
+      <span class="badge badge-completed shrink-0">Acesso ativo</span>
     </a>
   `;
 }
@@ -70,12 +70,12 @@ async function renderProductionClientes() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Clientes</p>
       <h1 class="text-3xl font-serif">Suas Clientes</h1>
-      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais com acesso ativo ao Persea OS. Clique em uma cliente para abrir o workspace real dela.</p>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais com acesso ativo ao Persea OS. Clique em um cadastro para abrir o workspace real.</p>
     </div>
     ${card(`<p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'} ativa${clients.length === 1 ? '' : 's'}</p>`, 'mb-6')}
     ${clients.length
       ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
-      : card('<p class="text-sm" style="color:var(--muted);">Nenhuma cliente ativa no momento — assim que o acesso de uma cliente for criado em Cadastros, ela aparece aqui.</p>')}
+      : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro ativo no momento — assim que um acesso for criado em Cadastros, ele aparece aqui.</p>')}
   `;
 }
 
@@ -102,7 +102,7 @@ function render() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Clientes</p>
       <h1 class="text-3xl font-serif">Suas Clientes</h1>
-      <p class="text-sm text-white/40 mt-2 max-w-2xl">Contrato, links de pagamento, WhatsApp, projeto de imagens, guias, Kit Digital e acesso à Hubla — tudo o que falta fazer para cada cliente, e o contexto para fazer bem.</p>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Contrato, links de pagamento, WhatsApp, projeto de imagens, guias, Kit Digital e acesso à Hubla — tudo o que falta fazer em cada caso, e o contexto para fazer bem.</p>
     </div>
     ${card(`<div class="divide-y" style="border-color:var(--line);">${all.map(clientRow).join('')}</div>`)}
   `;

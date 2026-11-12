@@ -11,7 +11,7 @@ export function deriveClientStatus({ accessStatus, partyInfoSubmitted, contractS
   // this instead of a profiles lookup keeps this status derivable by
   // either role without hitting that boundary.
   if (accessStatus === 'created') {
-    return { label: 'Ativa', badgeClass: 'badge-completed', nextAction: null };
+    return { label: 'Acesso ativo', badgeClass: 'badge-completed', nextAction: null };
   }
   if (['signed', 'completed'].includes(contractStatus)) {
     return { label: 'Contrato Assinado — Convite Pendente', badgeClass: 'badge-progress', nextAction: 'send_invite' };

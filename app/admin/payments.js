@@ -159,7 +159,7 @@ function showLinkModal(hostedUrl, isMock) {
     title: 'Link de Pagamento Gerado',
     bodyHtml: `
       ${isMock ? `<p class="text-xs mb-3" style="color:var(--terracotta);">⚠ Modo de teste — SumUp não conectado, este link não é real.</p>` : ''}
-      <p class="text-sm text-white/50 mb-2">Copie o link abaixo e envie para a cliente.</p>
+      <p class="text-sm text-white/50 mb-2">Copie o link abaixo e envie pelo WhatsApp ou e-mail.</p>
       <input type="text" readonly class="field mb-4" value="${hostedUrl}" data-autoselect />
       <div class="flex items-center gap-3">
         <button id="copy-link-modal" class="btn-primary">Copiar Link</button>
@@ -282,7 +282,7 @@ async function openNewChargeModal(clients, prefill, onDone) {
     e.preventDefault();
     const fd = new FormData(e.target);
     const clientId = fd.get('client_id');
-    if (!clientId) { toast('Selecione uma cliente.', { tone: 'error' }); return; }
+    if (!clientId) { toast('Selecione quem é cliente.', { tone: 'error' }); return; }
     const amountCents = Math.round(parseFloat(fd.get('amount')) * 100);
     if (!amountCents || amountCents <= 0) { toast('Informe um valor válido.', { tone: 'error' }); return; }
 
@@ -380,7 +380,7 @@ function renderUnmatchedSection(unmatched) {
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm text-white/50">Pagamentos SumUp não vinculados${unmatched.length ? ` (${unmatched.length})` : ''}</p>
     </div>
-    <p class="text-xs text-white/20 mb-4">Transações observadas na conta SumUp da Nay que não correspondem a um link de pagamento gerado pelo PERSEA — podem ser cobranças feitas na maquininha, por outro link, etc. Não contam em nenhum total até serem vinculadas explicitamente a uma cliente.</p>
+    <p class="text-xs text-white/20 mb-4">Transações observadas na conta SumUp da Nay que não correspondem a um link de pagamento gerado pelo PERSEA — podem ser cobranças feitas na maquininha, por outro link, etc. Não contam em nenhum total até serem vinculadas explicitamente a um cadastro de cliente.</p>
     ${unmatched.length ? `
       <div class="divide-y" style="border-color:var(--line);">
         ${unmatched.map((t) => `
@@ -480,7 +480,7 @@ function openReconcileModal(tx, clients, onDone) {
 
   el.querySelector('#reconcile-confirm').addEventListener('click', async () => {
     const clientId = el.querySelector('[name="client_id"]').value;
-    if (!clientId) { toast('Selecione uma cliente.', { tone: 'error' }); return; }
+    if (!clientId) { toast('Selecione quem é cliente.', { tone: 'error' }); return; }
     const allocations = [...el.querySelectorAll('[data-alloc-line]')]
       .filter((cb) => cb.checked)
       .map((cb) => ({
@@ -528,7 +528,7 @@ async function render() {
       <div>
         <p class="text-white/40 text-sm mb-1">Financeiro</p>
         <h1 class="text-3xl font-serif">${scopedClient ? `Pagamentos — ${scopedClient.full_name}` : 'Pagamentos'}</h1>
-        ${scopedClient ? `<a href="payments.html" class="btn-text">Ver todas as clientes →</a>` : ''}
+        ${scopedClient ? `<a href="payments.html" class="btn-text">Ver todos os cadastros →</a>` : ''}
       </div>
       <div class="flex items-center gap-3">
         ${!scopedClient ? `<button id="sync-sumup" class="btn-ghost">Sincronizar SumUp</button>` : ''}

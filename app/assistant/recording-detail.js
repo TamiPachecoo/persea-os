@@ -26,7 +26,7 @@ function openFlagModal(m) {
       <form id="flag-form" class="space-y-4">
         <div>
           <label class="text-xs text-white/40 block mb-1">O que a Nay precisa saber?</label>
-          <textarea name="note" rows="3" class="field" placeholder="Ex.: a cliente perguntou pela gravação e não encontrei o link." required></textarea>
+          <textarea name="note" rows="3" class="field" placeholder="Ex.: perguntaram pela gravação e não encontrei o link." required></textarea>
         </div>
         <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Sinalizar</button>
       </form>

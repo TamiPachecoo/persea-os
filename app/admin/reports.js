@@ -147,7 +147,7 @@ function renderAdherenceReport() {
     </div>
     <div class="flex items-center gap-4 mb-5">
       <p class="text-3xl font-serif">${r.completedPct}%</p>
-      <p class="text-xs" style="color:var(--muted);">das clientes concluem o que é atribuído</p>
+      <p class="text-xs" style="color:var(--muted);">de quem é cliente conclui o que é atribuído</p>
     </div>
     <div class="space-y-2 mb-6">
       ${[['Concluído', r.completed, 'var(--gold)'], ['Em atraso', r.overdue, 'var(--terracotta)'], ['Pendente', r.pending, 'var(--muted)']].map(([label, n, colorVar]) => {
@@ -194,7 +194,7 @@ function renderEngagementReport() {
             <span class="text-sm">${c.clientName}</span>
             <div class="flex items-center gap-3">
               <span class="text-xs" style="color:var(--muted);">${c.lastActivityAt ? `última atividade ${formatDate(c.lastActivityAt)}` : 'sem atividade registrada'}</span>
-              ${c.inactive ? '<span class="badge badge-locked">Inativa</span>' : '<span class="badge badge-completed">Ativa</span>'}
+              ${c.inactive ? '<span class="badge badge-locked">Sem atividade</span>' : '<span class="badge badge-completed">Em atividade</span>'}
             </div>
           </div>
         `).join('')}

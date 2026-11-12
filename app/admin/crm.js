@@ -57,7 +57,7 @@ async function loadRealClients() {
   // fuller card — one definition, not two) fills exactly that gap, for
   // active clients only (a still-onboarding client has no program state
   // to compute this from yet).
-  await Promise.all(withStatus.filter((c) => c._status.label === 'Ativa').map(async (c) => {
+  await Promise.all(withStatus.filter((c) => c._status.label === 'Acesso ativo').map(async (c) => {
     c._teamNextStep = await computeTeamNextStep(c, c.id);
   }));
   // Engagement (last login, her own actions, meetings) — client_engagement()
@@ -73,7 +73,7 @@ async function loadRealClients() {
 // days or never. Only meaningful once she is active on the platform.
 const DAY = 86400000;
 const ENG_LEVELS = {
-  engajada: { label: 'Engajada', color: '#8fae8b' },
+  engajada: { label: 'Engajamento em dia', color: '#8fae8b' },
   atencao: { label: 'Atenção', color: '#d1a04f' },
   sem_resposta: { label: 'Sem resposta', color: '#c4785c' },
 };
@@ -88,7 +88,7 @@ const daysText = (d) => (d == null ? 'nunca interagiu' : d === 0 ? 'interagiu ho
 const shortDate = (t) => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 function engagementLine(c) {
   const e = c._eng;
-  if (!e || c._status.label !== 'Ativa') return '';
+  if (!e || c._status.label !== 'Acesso ativo') return '';
   const lv = ENG_LEVELS[e.level];
   const bits = [
     `<span style="color:${lv.color};">● ${lv.label}</span>`,
@@ -102,7 +102,7 @@ function engagementLine(c) {
 // Top of Clientes: how engaged the active clients are, and how long since
 // each one last interacted (sorted: who needs a nudge first).
 function engagementPanel(clients) {
-  const active = clients.filter((c) => c._status.label === 'Ativa' && !c.is_demo && c._eng);
+  const active = clients.filter((c) => c._status.label === 'Acesso ativo' && !c.is_demo && c._eng);
   if (!active.length) return '';
   const counts = Object.fromEntries(Object.keys(ENG_LEVELS).map((k) => [k, active.filter((c) => c._eng.level === k).length]));
   const bar = Object.keys(ENG_LEVELS).filter((k) => counts[k]).map((k) => `<div title="${ENG_LEVELS[k].label}: ${counts[k]}" style="flex:${counts[k]};background:${ENG_LEVELS[k].color};height:10px;"></div>`).join('');
@@ -118,8 +118,8 @@ function engagementPanel(clients) {
   }).join('');
   return card(`
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-      <p class="text-sm text-white/50">Engajamento das clientes ativas</p>
-      <p class="text-xs text-white/30">Interação = acesso à plataforma ou ação dela (fotos, tarefas, questionários, pedidos de encontro)</p>
+      <p class="text-sm text-white/50">Engajamento de quem está ativo no programa</p>
+      <p class="text-xs text-white/30">Interação = acesso à plataforma ou ação da própria pessoa (fotos, tarefas, questionários, pedidos de encontro)</p>
     </div>
     <div class="grid grid-cols-3 gap-4 mb-3">
       ${Object.entries(ENG_LEVELS).map(([k, v]) => `<div><p class="text-2xl font-serif" style="color:${v.color};">${counts[k]}</p><p class="text-xs text-white/40">${v.label} <span class="text-white/20">${k === 'engajada' ? '(até 7 dias)' : k === 'atencao' ? '(8 a 21 dias)' : '(mais de 21 dias)'}</span></p></div>`).join('')}
@@ -132,8 +132,8 @@ function engagementPanel(clients) {
 
 // Clients grouped by where they are: onboarding first, then Fase 1, 2, 3…
 function clientsByPhase(clients) {
-  const onboarding = clients.filter((c) => c._status.label !== 'Ativa');
-  const active = clients.filter((c) => c._status.label === 'Ativa');
+  const onboarding = clients.filter((c) => c._status.label !== 'Acesso ativo');
+  const active = clients.filter((c) => c._status.label === 'Acesso ativo');
   const phases = [...new Set(active.map((c) => c.phase_index ?? 0))].sort((a, b) => a - b);
   const group = (title, chip, list, note = '') => card(`
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
@@ -185,7 +185,7 @@ function openRegistrationLinkModal(url) {
   const { el } = openModal({
     title: 'Cliente criada',
     bodyHtml: `
-      <p class="text-sm text-white/50 mb-4">Envie este link para a cliente concluir o cadastro. Ele expira em 7 dias e só pode ser usado uma vez.</p>
+      <p class="text-sm text-white/50 mb-4">Envie este link para concluir o cadastro. Ele expira em 7 dias e só pode ser usado uma vez.</p>
       <div class="flex items-center gap-2">
         <input id="reg-link-field" class="field text-sm" readonly value="${url}" />
         <button type="button" id="copy-reg-link" class="btn-ghost shrink-0">Copiar</button>
@@ -276,7 +276,7 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
           program_slug: isAscensao ? 'ascensao-marca' : undefined,
         },
       });
-      if (error || data?.error) { toast(data?.error || 'Não foi possível criar a cliente agora.', { tone: 'error' }); return; }
+      if (error || data?.error) { toast(data?.error || 'Não foi possível criar o cadastro agora.', { tone: 'error' }); return; }
       if (fromLead) {
         await supabase.from('leads').update({
           stage: 'convertido', converted_to_client_id: data.client_id || null, converted_at: new Date().toISOString(),
@@ -394,7 +394,7 @@ function applicationBlock(l) {
       <div class="grid sm:grid-cols-2 gap-3 mt-3 p-3 rounded" style="background:rgba(255,255,255,.03);border:1px solid var(--line);">
         ${item('Instagram / LinkedIn', esc(l.instagram))}
         ${item('Idade', esc(a.age))}
-        ${item('Hoje ela é', esc(a.role))}
+        ${item('Hoje é', esc(a.role))}
         ${item('Universo', esc(a.field === 'Outro' && a.field_other ? a.field_other : a.field))}
         ${item('Faturamento mensal', esc(a.revenue))}
         ${item('Imagem x nível (0–10)', esc(a.thermometer))}
@@ -569,7 +569,7 @@ async function renderProductionCRM() {
       btn.addEventListener('click', async () => {
         const lead = lastLoadedLeads.find((l) => l.id === btn.dataset.deleteLead);
         if (!lead) return;
-        const note = lead.converted_to_client_id ? ' O cadastro dela em Clientes continua.' : '';
+        const note = lead.converted_to_client_id ? ' O cadastro em Clientes continua.' : '';
         if (!confirm(`Excluir o lead ${lead.full_name || '(sem nome)'}? As anotações e o histórico dele também serão apagados. Isto não pode ser desfeito.${note}`)) return;
         btn.disabled = true;
         const { error } = await supabase.from('leads').delete().eq('id', lead.id);
@@ -952,7 +952,7 @@ function render() {
         e.preventDefault();
         const lead = MockDB.getLead(btn.dataset.copyLink);
         const link = buildRegistrationLink(lead.registrationToken, location.pathname);
-        try { await navigator.clipboard.writeText(link); toast('Link copiado — cole no WhatsApp da cliente.'); }
+        try { await navigator.clipboard.writeText(link); toast('Link copiado — cole no WhatsApp de quem vai receber.'); }
         catch { toast('Não foi possível copiar automaticamente.', { tone: 'error' }); }
         MockDB.markRegistrationSent(lead.id);
         render();

@@ -82,7 +82,7 @@ function driveArtifactRow(a, clients, meetingsByClient) {
         <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">· ${a.name}</span></p>
         <p class="text-xs text-white/30 mt-0.5">
           ${formatDateTime(a.discovered_at)} descoberto
-          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
+          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cadastro vinculado'}
         </p>
         ${isMatched && meetingLabel ? `<p class="text-xs mt-0.5" style="color:var(--muted);">Encontro: ${meetingLabel}</p>` : ''}
       </div>
@@ -99,7 +99,7 @@ function driveArtifactRow(a, clients, meetingsByClient) {
             <option value="">Vincular a...</option>
             ${clients.map((c) => `<option value="${c.id}">${c.full_name}</option>`).join('')}
           </select>
-          <select data-link-meeting-select="${a.id}" class="field text-sm" style="width:auto;" disabled><option value="">Escolha a cliente primeiro</option></select>
+          <select data-link-meeting-select="${a.id}" class="field text-sm" style="width:auto;" disabled><option value="">Escolha o cadastro primeiro</option></select>
           <select data-link-slot-select="${a.id}" class="field text-sm" style="width:auto;">${slotOptionsHtml()}</select>
           <button type="button" data-link-artifact="${a.id}" data-session-key="${sessionKeyFor(a.name)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">Confirmar</button>
         `}
@@ -128,7 +128,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients, meetingsByClien
       </div>
     </div>
     <div class="hidden mb-4" id="drive-search-form" style="padding:14px; border:1px solid var(--line); border-radius:8px;">
-      <p class="text-xs text-white/30 mb-3">Procure algo mais antigo que 30 dias, ou por uma palavra do nome do arquivo (ex.: nome da cliente).</p>
+      <p class="text-xs text-white/30 mb-3">Procure algo mais antigo que 30 dias, ou por uma palavra do nome do arquivo (ex.: nome de quem é cliente).</p>
       <div class="grid sm:grid-cols-3 gap-3 items-end">
         <div>
           <label class="text-xs text-white/40 block mb-1">De</label>
@@ -140,7 +140,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients, meetingsByClien
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Palavra-chave</label>
-          <input type="text" id="drive-search-keyword" class="field text-sm" placeholder="Ex.: nome da cliente" />
+          <input type="text" id="drive-search-keyword" class="field text-sm" placeholder="Ex.: nome de quem é cliente" />
         </div>
       </div>
       <button type="button" id="run-drive-search" class="btn-primary mt-3" style="padding:8px 18px;font-size:12.5px;">Buscar</button>
@@ -176,7 +176,7 @@ function renderSyncSummary() {
     </div>
     <div class="pt-4" style="border-top:1px solid var(--line);">
       <p class="text-xs uppercase mb-3" style="color:var(--muted); letter-spacing:.1em;">✓ Decidido: forma de compartilhamento</p>
-      <p class="text-xs text-white/30">Link público ("qualquer pessoa com o link pode assistir"). Na prática já é como o Google Meet compartilha tudo que salva na pasta de gravações da Nay por padrão, então não muda nada do lado dela. Verificação manual (Nay/assistente confirma cada gravação vinculando-a à cliente certa, na seção "Descobertos no Google Drive" acima) continua sendo o que impede uma gravação de ser atribuída à pessoa errada. O link ser público não significa que o sistema atribui ela sozinho.</p>
+      <p class="text-xs text-white/30">Link público ("qualquer pessoa com o link pode assistir"). Na prática já é como o Google Meet compartilha tudo que salva na pasta de gravações da Nay por padrão, então não muda nada do lado dela. Verificação manual (Nay/assistente confirma cada gravação vinculando-a ao cadastro certo, na seção "Descobertos no Google Drive" acima) continua sendo o que impede uma gravação de ser atribuída à pessoa errada. O link ser público não significa que o sistema atribui ela sozinho.</p>
     </div>
   `, 'mb-8');
 }
@@ -297,7 +297,7 @@ async function render() {
       const id = select.dataset.linkClientSelect;
       const meetingSelect = content.querySelector(`[data-link-meeting-select="${id}"]`);
       const meetings = meetingsByClient[select.value] || [];
-      meetingSelect.innerHTML = !select.value ? '<option value="">Escolha a cliente primeiro</option>'
+      meetingSelect.innerHTML = !select.value ? '<option value="">Escolha o cadastro primeiro</option>'
         : meetings.length ? meetingOptionsHtml(meetings) : '<option value="">Sem encontro específico</option>';
       meetingSelect.disabled = !meetings.length;
       content.querySelector(`[data-link-slot-select="${id}"]`).classList.remove('hidden');
@@ -312,7 +312,7 @@ async function render() {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.linkArtifact;
       const select = content.querySelector(`[data-link-client-select="${id}"]`);
-      if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
+      if (!select.value) { toast('Selecione o cadastro primeiro.', { tone: 'error' }); return; }
       const meetingId = content.querySelector(`[data-link-meeting-select="${id}"]`).value;
       const profile = await getCurrentProfile();
       let error;
@@ -327,7 +327,7 @@ async function render() {
         }));
       }
       if (error) { toast('Erro ao vincular.', { tone: 'error' }); return; }
-      toast('Gravação vinculada à cliente. Ela já pode assistir na página Encontros.');
+      toast('Gravação vinculada. Já aparece para assistir na página Encontros do app.');
       render();
     });
   });

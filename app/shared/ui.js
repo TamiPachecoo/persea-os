@@ -441,7 +441,7 @@ function shellAvatar(c, size = 32) {
 function viewAsBanner(c) {
   return `
     <div class="view-as-banner" style="position:sticky;top:0;z-index:60;background:var(--gold);color:#16100a;font-size:12.5px;padding:8px 16px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;text-align:center;">
-      <span>Você está vendo o app como <b>${c.full_name}</b>. O que você alterar aqui fica salvo na conta dela.</span>
+      <span>Você está vendo o app como <b>${c.full_name}</b>. O que você alterar aqui fica salvo nessa conta.</span>
       <a href="/admin/client-onboarding.html?id=${c.id}" id="exit-view-as" style="color:#16100a;text-decoration:underline;font-weight:600;">Sair da visualização</a>
     </div>`;
 }

@@ -45,7 +45,7 @@ function renderAccessSection(staff) {
   return `
     ${card(`
       <p class="text-sm text-white/50 mb-1">Dar acesso à assistente</p>
-      <p class="text-xs text-white/30 mb-4">Ela recebe um link para criar a própria senha. Nenhum e-mail é enviado: copie a mensagem e mande no WhatsApp dela. O link vale por 24 horas. Cada novo link gerado cancela o anterior: mande sempre só o mais recente.</p>
+      <p class="text-xs text-white/30 mb-4">A pessoa recebe um link para criar a própria senha. Nenhum e-mail é enviado: copie a mensagem e mande pelo WhatsApp. O link vale por 24 horas. Cada novo link gerado cancela o anterior: mande sempre só o mais recente.</p>
       <form id="staff-access-form" class="flex flex-wrap gap-2 items-end">
         <div style="flex:1 1 200px;"><label class="text-xs text-white/40 block mb-1">Nome</label><input name="full_name" class="field text-sm" required /></div>
         <div style="flex:1 1 240px;"><label class="text-xs text-white/40 block mb-1">E-mail</label><input name="email" type="email" class="field text-sm" required /></div>
@@ -166,7 +166,7 @@ function renderReviewsSection() {
   const pending = all.filter((r) => r.status === 'pending');
   const resolved = all.filter((r) => r.status !== 'pending').slice(0, 15);
   return `
-    <p class="text-sm text-white/40 mb-6 max-w-2xl">Guias de imagem e Kit Digital passam por aqui antes de chegar até a cliente.</p>
+    <p class="text-sm text-white/40 mb-6 max-w-2xl">Guias de imagem e Kit Digital passam por aqui antes de chegar até quem é cliente.</p>
     ${card(`
       <div class="flex items-center justify-between mb-4">
         <p class="text-sm text-white/50">Aguardando sua revisão</p>
@@ -320,7 +320,7 @@ const HUBLA_DASHBOARD_URL = 'https://app.hub.la/dashboard';
 function renderHublaSection({ clients, error }) {
   return `
     <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
-      <p class="text-sm text-white/40 max-w-2xl">Clientes ativas sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API, então copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
+      <p class="text-sm text-white/40 max-w-2xl">Cadastros ativos sem acesso ao Hubla ainda. A Hubla não tem uma forma de conceder acesso por API, então copie o e-mail, abra a Hubla e adicione em Produto → Membros → Adicionar membro(s) gratuito(s). O status aqui atualiza sozinho assim que a Hubla confirmar o acesso.</p>
       <a ${externalLinkAttrs(HUBLA_DASHBOARD_URL)} class="btn-ghost" style="white-space:nowrap;">Abrir Hubla ↗</a>
     </div>
     ${card(`
@@ -423,7 +423,7 @@ async function render() {
     content.querySelectorAll('[data-approve]').forEach((btn) => {
       btn.addEventListener('click', () => {
         MockDB.approveReview(btn.dataset.approve);
-        toast('Aprovado — já está disponível para a cliente.');
+        toast('Aprovado — já está disponível no app de quem é cliente.');
         render();
       });
     });

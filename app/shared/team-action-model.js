@@ -64,7 +64,7 @@ export async function computeTeamNextStep(client, clientId) {
   const nextDef = applicableEncounters(allDefs, client)[(completedMeetings || []).length] || null;
 
   if (!nextDef) {
-    return { label: 'Encontros do plano concluídos', detail: 'Nenhum encontro pendente para o plano atual dela.', kind: 'done' };
+    return { label: 'Encontros do plano concluídos', detail: 'Nenhum encontro pendente para o plano atual.', kind: 'done' };
   }
 
   if (upcoming) {
@@ -80,8 +80,8 @@ export async function computeTeamNextStep(client, clientId) {
     if (questionnaire?.status !== 'submitted') missing.push('Diagnóstico Estratégico de Entrada');
     if (archetype?.status !== 'completed') missing.push('Teste de Arquétipos');
     return {
-      label: 'Aguardando a cliente',
-      detail: `Falta ela concluir ${missing.join(' e ')} antes de preparar o Encontro 1.`,
+      label: 'Aguardando resposta',
+      detail: `Falta concluir ${missing.join(' e ')} antes de preparar o Encontro 1.`,
       kind: 'waiting',
     };
   }

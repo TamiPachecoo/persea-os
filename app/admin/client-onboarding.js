@@ -223,7 +223,7 @@ function brandDirectionCard({ bdRow, keywords, references, styleNotes }) {
   // freeform list of lines to a sort_order-keyed table without a second
   // per-item CRUD UI.
   return card(`
-    <p class="text-sm text-white/50 mb-4">Direção de Marca <span class="text-xs text-white/30">— salvo aqui, visível para a cliente imediatamente</span></p>
+    <p class="text-sm text-white/50 mb-4">Direção de Marca <span class="text-xs text-white/30">— salvo aqui, visível no app de quem é cliente imediatamente</span></p>
     <form id="bd-form" class="space-y-3">
       <div><label class="text-xs text-white/40 block mb-1">Link do Pinterest</label><input name="pinterestUrl" class="field text-sm" value="${bdRow?.pinterest_url || ''}" placeholder="https://pinterest.com/..." /></div>
       <div><label class="text-xs text-white/40 block mb-1">Introdução do Mural</label><textarea name="moodBoardIntro" rows="2" class="field text-sm">${bdRow?.mood_board_intro || ''}</textarea></div>
@@ -308,10 +308,10 @@ function valueAnalysisCard(va) {
       <p class="text-sm text-white/50">Análise de Valor <span class="text-xs text-white/30">(somente administradoras — RLS não concede acesso à assistente aqui)</span></p>
       <span class="badge ${VALUE_ASSESSMENT_STATUS_BADGE_CLASS[va.status] || 'badge-progress'}">${VALUE_ASSESSMENT_STATUS_LABEL[va.status] || va.status}</span>
     </div>
-    <p class="text-xs text-white/30 mb-2">Respostas da cliente</p>
+    <p class="text-xs text-white/30 mb-2">Respostas recebidas</p>
     <div class="grid sm:grid-cols-2 gap-3 mb-6">${rows.join('') || '<p class="text-xs" style="color:var(--muted);">Sem respostas registradas ainda.</p>'}</div>
     <div class="pt-4" style="border-top:1px solid var(--line);">
-      <p class="text-sm text-white/50 mb-3">Devolutiva Publicada <span class="text-xs text-white/30">— única coisa que a cliente vê desta análise</span></p>
+      <p class="text-sm text-white/50 mb-3">Devolutiva Publicada <span class="text-xs text-white/30">— única parte desta análise visível no app</span></p>
       ${dl ? `<p class="text-xs mb-3" style="color:var(--gold);">Publicada em ${formatDateTime(dl.publishedAt)}</p>` : ''}
       <form id="value-publish-form" class="space-y-3">
         <div class="grid sm:grid-cols-2 gap-3">
@@ -320,7 +320,7 @@ function valueAnalysisCard(va) {
           <div><label class="text-xs text-white/40 block mb-1">Data da recomendação</label><input name="recommendationDate" type="date" class="field text-sm" value="${dl?.recommendationDate || ''}" /></div>
           <div><label class="text-xs text-white/40 block mb-1">Rever em</label><input name="reviewDate" type="date" class="field text-sm" value="${dl?.reviewDate || ''}" /></div>
         </div>
-        <div><label class="text-xs text-white/40 block mb-1">Explicação para a cliente</label><textarea name="explanation" rows="3" class="field text-sm">${dl?.explanation || ''}</textarea></div>
+        <div><label class="text-xs text-white/40 block mb-1">Explicação que aparece no app</label><textarea name="explanation" rows="3" class="field text-sm">${dl?.explanation || ''}</textarea></div>
         <div class="flex justify-end pt-1"><button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${dl ? 'Atualizar Devolutiva' : 'Publicar Devolutiva'}</button></div>
       </form>
     </div>
@@ -357,7 +357,7 @@ async function publishValueDeliverable(e, assessmentId) {
     return;
   }
   await supabase.from('value_assessments').update({ status: 'published', published_at: publishedAt }).eq('id', assessmentId);
-  toast('Devolutiva publicada — a cliente já pode vê-la.');
+  toast('Devolutiva publicada — já aparece no app.');
   render();
 }
 
@@ -434,7 +434,7 @@ async function programSummaryCard(client, state) {
       <div><p class="text-xs text-white/30">Plano</p><p>${client.program_slug?.startsWith('persea') ? (TIER_NAME[client.tier] || programDef.name) : programDef.name}</p></div>
       <div><p class="text-xs text-white/30">Fase atual</p><p class="mt-1">${phaseChip(client.phase_index || 0)}</p></div>
       <div><p class="text-xs text-white/30">Atividades</p><p>${progress.completedCount} de ${progress.totalIncluded} concluídas (${progress.pct}%)</p></div>
-      <div><p class="text-xs text-white/30">Próxima ação da cliente</p><p>${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia'}</p></div>
+      <div><p class="text-xs text-white/30">Próxima ação no app</p><p>${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia'}</p></div>
       <div class="sm:col-span-2"><p class="text-xs text-white/30">Próximo encontro</p><p>${nextMeeting ? `${nextMeeting.title || 'Encontro agendado'} — ${formatDateTime(nextMeeting.item_date)}` : 'Não agendado'}</p></div>
     </div>
     <div class="pt-4" style="border-top:1px solid var(--line);">
@@ -449,7 +449,7 @@ function openLinkModal(url, expiresAt) {
   const { el } = openModal({
     title: 'Link de cadastro',
     bodyHtml: `
-      <p class="text-sm text-white/50 mb-4">Envie este link para a cliente concluir o cadastro. Expira em ${formatDateTime(expiresAt)} e só pode ser usado uma vez.</p>
+      <p class="text-sm text-white/50 mb-4">Envie este link para concluir o cadastro. Expira em ${formatDateTime(expiresAt)} e só pode ser usado uma vez.</p>
       <div class="flex items-center gap-2">
         <input class="field text-sm" readonly value="${url}" />
         <button type="button" id="copy-reg-link" class="btn-ghost shrink-0">Copiar</button>
@@ -523,7 +523,7 @@ async function prepareContract(client, btn) {
 }
 
 async function sendInvite() {
-  if (!confirm('Isto envia um convite real de acesso por e-mail para a cliente. Confirmar?')) return;
+  if (!confirm('Isto envia um convite real de acesso por e-mail. Confirmar?')) return;
   const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: clientId } });
   if (error || data?.error) { toast(data?.error || 'Não foi possível enviar o convite agora.', { tone: 'error' }); return; }
   toast('Convite enviado.');
@@ -534,7 +534,7 @@ async function sendInvite() {
 // her account and returns the one-time create-password link instead of
 // e-mailing it. A new link cancels earlier ones (e-mail included).
 async function sendInviteWhatsApp(client, partyInfo) {
-  if (!confirm('Gerar o link de acesso para enviar pelo WhatsApp? Se ela já recebeu um convite antes, o link anterior deixa de valer.')) return;
+  if (!confirm('Gerar o link de acesso para enviar pelo WhatsApp? Se um convite já foi enviado antes, o link anterior deixa de valer.')) return;
   const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: clientId, channel: 'link' } });
   if (error || data?.error || !data?.url) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
   const first = (partyInfo?.social_name || client.full_name || '').trim().split(/\s+/)[0];
@@ -558,10 +558,10 @@ async function sendInviteWhatsApp(client, partyInfo) {
   const { el } = openModal({
     title: 'Convite pelo WhatsApp',
     bodyHtml: `
-      <p class="text-xs text-white/40 mb-3">O acesso dela foi criado. Envie esta mensagem — ela toca no link, cria a senha e já entra no app.</p>
+      <p class="text-xs text-white/40 mb-3">O acesso foi criado. Envie esta mensagem — basta tocar no link, criar a senha e entrar no app.</p>
       <textarea class="field text-sm" rows="12" readonly style="line-height:1.55;">${escHtml(msg)}</textarea>
       <div class="flex gap-2 flex-wrap mt-3">
-        ${digits ? `<a href="https://wa.me/55${digits}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Abrir WhatsApp</a>` : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro dela — copie e envie manualmente.</span>'}
+        ${digits ? `<a href="https://wa.me/55${digits}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Abrir WhatsApp</a>` : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro — copie e envie manualmente.</span>'}
         <button type="button" id="copy-invite-msg" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Copiar mensagem</button>
       </div>`,
   });
@@ -700,7 +700,7 @@ function profileHeaderCard(c, status) {
           <input name="photo_url" class="field text-sm" style="max-width:340px;" placeholder="Link da foto de perfil" value="${c.photo_url || ''}" />
           <button type="submit" class="btn-ghost">Salvar</button>
         </form>
-        <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar (para você e para ela, no topo do app dela) — precisa ser um link direto para a imagem, não uma página.</p>
+        <p class="text-xs text-white/20 mt-1">Cole o link e a foto aparece assim que salvar (para você e no topo do app de quem é cliente) — precisa ser um link direto para a imagem, não uma página.</p>
         <form id="social-links-form" class="flex items-center gap-2 mt-2 flex-wrap">
           <input name="instagram_url" class="field text-sm" style="max-width:260px;" placeholder="Link do Instagram" value="${c.instagram_url || ''}" />
           <input name="linkedin_url" class="field text-sm" style="max-width:260px;" placeholder="Link do LinkedIn" value="${c.linkedin_url || ''}" />
@@ -740,21 +740,21 @@ function profileSummaryCard(c, p) {
     <p class="text-xs text-white/20 mb-4">Preenchido a partir do E1 e do E2 — o resumo que qualquer pessoa da equipe precisa para entender esta cliente rapidamente.</p>
     <form id="summary-form" class="space-y-4">
       <div>
-        <label class="text-xs text-white/40 block mb-1">QUEM ela é</label>
+        <label class="text-xs text-white/40 block mb-1">QUEM é</label>
         <textarea name="who" rows="2" class="field text-sm">${p.who}</textarea>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div>
-          <label class="text-xs text-white/40 block mb-1">O QUE ela vende</label>
+          <label class="text-xs text-white/40 block mb-1">O QUE vende</label>
           <textarea name="what" rows="2" class="field text-sm">${p.what}</textarea>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">POR QUE ela vende</label>
+          <label class="text-xs text-white/40 block mb-1">POR QUE vende</label>
           <textarea name="why" rows="2" class="field text-sm">${p.why}</textarea>
         </div>
       </div>
       <div>
-        <label class="text-xs text-white/40 block mb-1">COMO ela vende</label>
+        <label class="text-xs text-white/40 block mb-1">COMO vende</label>
         <textarea name="how" rows="2" class="field text-sm">${p.how}</textarea>
       </div>
       <div class="flex justify-end">
@@ -767,7 +767,7 @@ function profileSummaryCard(c, p) {
 function internalNotesCard(p) {
   return card(`
     <p class="text-sm text-white/50 mb-1">Notas Internas</p>
-    <p class="text-xs text-white/20 mb-3">Visível para Nay e para a assistente — nunca para a cliente.</p>
+    <p class="text-xs text-white/20 mb-3">Visível para Nay e para a assistente — nunca no app de quem é cliente.</p>
     <form id="internal-notes-form" class="space-y-3">
       <textarea name="note" rows="4" class="field text-sm">${p.note}</textarea>
       <div class="flex justify-end"><button type="submit" class="btn-ghost">Salvar Notas</button></div>
@@ -777,7 +777,7 @@ function internalNotesCard(p) {
 
 const ENCOUNTER_STATUS_LABEL = {
   completed: 'Concluído', scheduled: 'Agendado', pending: 'Pronto para agendar',
-  waiting_on_client: 'Aguardando cliente', locked: 'Ainda não chegou a vez', skipped: 'Não se aplica a ela',
+  waiting_on_client: 'Aguardando cliente', locked: 'Ainda não chegou a vez', skipped: 'Não se aplica',
 };
 const ENCOUNTER_STATUS_CLASS = {
   completed: 'badge-completed', scheduled: 'badge-progress', pending: 'badge-progress',
@@ -832,7 +832,7 @@ function phaseActivityRow(a) {
   `;
 }
 
-const PHASE_STATUS_LABEL = { completed: 'Concluída', current: 'Fase atual', upcoming: 'Próxima', skipped: 'Não se aplica a ela' };
+const PHASE_STATUS_LABEL = { completed: 'Concluída', current: 'Fase atual', upcoming: 'Próxima', skipped: 'Não se aplica' };
 const PHASE_STATUS_CLASS = { completed: 'badge-completed', current: 'badge-progress', upcoming: 'badge-locked', skipped: 'badge-locked' };
 
 // Nay's control over this client's journey: her current phase and which
@@ -844,8 +844,8 @@ function journeyControlCard(client, state) {
   const skipped = skippedPhaseSet(client);
   const phases = state.phases;
   return card(`
-    <p class="text-sm text-white/50 mb-1">Fases da jornada dela</p>
-    <p class="text-xs text-white/30 mb-4">Mude a fase atual quando ela avançar. Marque uma fase como pulada se ela não for passar por ela: os encontros, atividades e entregas dessa fase saem da jornada dela${skipped.has(IMAGE_PHASE) ? '' : ' (pular a Fase 2 também tira a Análise da Imagem Atual, o Upload das Imagens e o Projeto de Imagem)'}.</p>
+    <p class="text-sm text-white/50 mb-1">Fases da jornada</p>
+    <p class="text-xs text-white/30 mb-4">Mude a fase atual a cada avanço. Marque uma fase como pulada se ela não fizer parte deste caso: os encontros, atividades e entregas dessa fase saem da jornada${skipped.has(IMAGE_PHASE) ? '' : ' (pular a Fase 2 também tira a Análise da Imagem Atual, o Upload das Imagens e o Projeto de Imagem)'}.</p>
     <form id="journey-control" class="space-y-4">
       <div>
         <label class="text-xs text-white/40 block mb-1">Fase atual</label>
@@ -877,7 +877,7 @@ function phaseBreakdownCard(state, journey) {
   if (!state.programDef) return '';
   return card(`
     <p class="text-sm text-white/50 mb-1">Fases do Programa</p>
-    <p class="text-xs text-white/20 mb-4">Clique em uma fase para ver os encontros, atividades e materiais dela.</p>
+    <p class="text-xs text-white/20 mb-4">Clique em uma fase para ver os encontros, atividades e materiais.</p>
     ${state.phases.map((phase) => `
       <details class="mb-2 rounded" ${phase.status === 'current' ? 'open' : ''} style="border-left:5px solid ${phaseColor(phase.id)};background:${phaseColor(phase.id)}${phase.status === 'current' ? '26' : '12'};padding:0 14px;">
         <summary class="text-sm cursor-pointer py-3 flex items-center gap-3 flex-wrap" style="list-style:none;">
@@ -1417,14 +1417,14 @@ function openReceiptModal(contractId, rawLines, { contractCents = null, receipts
   const modal = openModal({
     title: editing ? 'Editar recebimento' : 'Registrar recebimento',
     bodyHtml: `
-      <p class="text-xs text-white/40 mb-4">O que ela realmente pagou, mesmo que seja diferente do contrato. O valor é abatido das parcelas em aberto (primeiro as da mesma forma de pagamento, das mais antigas para as mais novas). ${contractLeft != null ? `Falta receber do contrato: <b>${brl(contractLeft / 100)}</b>.` : `Em aberto: ${brl(totalOpen / 100)}.`}</p>
+      <p class="text-xs text-white/40 mb-4">O que foi realmente pago, mesmo que seja diferente do contrato. O valor é abatido das parcelas em aberto (primeiro as da mesma forma de pagamento, das mais antigas para as mais novas). ${contractLeft != null ? `Falta receber do contrato: <b>${brl(contractLeft / 100)}</b>.` : `Em aberto: ${brl(totalOpen / 100)}.`}</p>
       <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
         <div><label class="text-xs text-white/50 block mb-1" for="rc-amount">Valor recebido (R$)</label><input id="rc-amount" type="number" step="0.01" min="0" class="field text-sm" /></div>
         <div><label class="text-xs text-white/50 block mb-1" for="rc-date">Data do pagamento</label><input id="rc-date" type="date" class="field text-sm" value="${today}" max="${today}" /></div>
         <div><label class="text-xs text-white/50 block mb-1" for="rc-method">Forma</label><select id="rc-method" class="field text-sm">${Object.entries(RECEIPT_METHOD_LABEL).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
       </div>
       <div id="rc-permuta" class="mt-3 p-3 rounded hidden" style="border:1px solid var(--line);">
-        <p class="text-xs text-white/50 mb-2">Permuta: parte do contrato paga com um serviço ou produto, sem dinheiro. O valor sai do que ela deve, mas não entra no caixa nos Relatórios.</p>
+        <p class="text-xs text-white/50 mb-2">Permuta: parte do contrato paga com um serviço ou produto, sem dinheiro. O valor sai do saldo devido, mas não entra no caixa nos Relatórios.</p>
         <label class="text-xs text-white/50 block mb-1" for="rc-from">Abater de</label>
         <select id="rc-from" class="field text-sm"><option value="end">Últimas parcelas do plano</option><option value="next">Próximas parcelas a vencer</option></select>
       </div>
@@ -1638,7 +1638,7 @@ function imageDeliverableRow({ key, label, row, isKit }) {
 function imageProjectCard({ guideBySlug, kit }) {
   return card(`
     <p class="text-sm text-white/50 mb-1">Projeto de Imagem</p>
-    <p class="text-xs text-white/20 mb-4">${isAssistant ? 'Prepare cada material abaixo — a Nay revisa e aprova antes de a cliente ver.' : 'Revise e aprove cada material preparado pela assistente antes que a cliente veja.'}</p>
+    <p class="text-xs text-white/20 mb-4">${isAssistant ? 'Prepare cada material abaixo — a Nay revisa e aprova antes de aparecer no app.' : 'Revise e aprove cada material preparado pela assistente antes de aparecer no app.'}</p>
     ${IMAGE_GUIDE_DEFS.map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: guideBySlug[d.slug], isKit: false })).join('')}
     ${imageDeliverableRow({ key: 'kit_digital', label: 'Kit Digital', row: kit, isKit: true })}
   `, 'mb-6');
@@ -1655,7 +1655,7 @@ function openDeliverableModal({ key, label, row, isKit }) {
           <textarea name="summary" rows="2" class="field text-sm">${data.summary || ''}</textarea>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação, vídeo — até ${SHARED_MAX_MB} MB; a cliente abre direto na plataforma)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação, vídeo — até ${SHARED_MAX_MB} MB; abre direto na plataforma)</span></label>
           ${data.file_path ? `<div class="flex items-center gap-3 flex-wrap mb-2 text-sm">
             ${data.signedFileUrl ? `<a ${externalLinkAttrs(data.signedFileUrl)} class="btn-text" style="display:inline;">📄 ${escHtml(data.file_name || 'Arquivo')} ↗</a>` : `<span>📄 ${escHtml(data.file_name || 'Arquivo')}</span>`}
             <label class="text-xs text-white/50 flex items-center gap-1"><input type="checkbox" name="remove_file" /> Remover arquivo</label>
@@ -1889,7 +1889,7 @@ async function openScheduleNextModal(next) {
       }
     }
     close();
-    toast(`${msg} Use "Avisar pelo WhatsApp" no encontro para mandar a mensagem para ela.`);
+    toast(`${msg} Use "Avisar pelo WhatsApp" no encontro para mandar a mensagem.`);
     render();
   });
 }
@@ -1913,15 +1913,15 @@ function materialSlotHtml(number, materials = {}) {
         ${badge}
       </div>
       ${has ? `<p class="text-sm mb-3">${url ? `<a ${externalLinkAttrs(url)} class="btn-text" style="display:inline;">📄 ${escHtml(row.file_name || (row.file_path ? 'Arquivo' : 'Abrir link'))} ↗</a>` : escHtml(row.file_name || 'Arquivo')}</p>`
-        : `<p class="text-xs text-white/40 mb-3">Envie o ${def.label} antes do encontro; ela só vê quando você liberar.</p>`}
+        : `<p class="text-xs text-white/40 mb-3">Envie o ${def.label} antes do encontro; só aparece no app quando você liberar.</p>`}
       <div class="flex items-center gap-2 flex-wrap">
         <label class="btn-ghost" style="padding:7px 14px;font-size:12px;cursor:pointer;" data-material-label="${def.key}">
           ${has ? 'Substituir arquivo' : 'Enviar arquivo'}
           <input type="file" accept="image/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.zip" data-material-upload="${def.key}" style="display:none;" />
         </label>
-        ${isAssistant ? '<span class="text-xs text-white/30">A Nay libera para a cliente.</span>'
+        ${isAssistant ? '<span class="text-xs text-white/30">A Nay libera no app.</span>'
           : released ? `<button type="button" class="btn-text" style="color:var(--terracotta);" data-material-unrelease="${def.key}">Recolher</button>`
-          : has ? `<button type="button" class="btn-primary" style="padding:7px 14px;font-size:12px;" data-material-release="${def.key}">Liberar para a cliente</button>` : ''}
+          : has ? `<button type="button" class="btn-primary" style="padding:7px 14px;font-size:12px;" data-material-release="${def.key}">Liberar no app</button>` : ''}
       </div>
     </div>`;
 }
@@ -2025,14 +2025,14 @@ function sharedNotesHtml(m, fileUrls = {}) {
     <form class="mt-3 rounded" style="padding:16px 18px;border:1px solid var(--gold);background:rgba(201,169,110,.06);" data-shared-form="${m.id}">
       <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
         <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
-        <span class="text-xs text-white/30">${m.shared_updated_at ? `Atualizado ${formatDateTime(m.shared_updated_at)} · ` : ''}ela vê isto na página Encontros</span>
+        <span class="text-xs text-white/30">${m.shared_updated_at ? `Atualizado ${formatDateTime(m.shared_updated_at)} · ` : ''}aparece na página Encontros do app</span>
       </div>
-      <textarea class="field text-sm" rows="4" data-shared-notes placeholder="O que vocês combinaram, o que você vai enviar, os próximos passos dela…">${escHtml(m.shared_notes || '')}</textarea>
+      <textarea class="field text-sm" rows="4" data-shared-notes placeholder="O que vocês combinaram, o que você vai enviar, os próximos passos…">${escHtml(m.shared_notes || '')}</textarea>
       <p class="text-xs text-white/40 mt-3 mb-2">Links e materiais</p>
       <div data-shared-links>${links.map(sharedLinkInputs).join('')}</div>
       <button type="button" class="btn-text" data-add-link>+ Adicionar link</button>
       ${sharedFilesHtml(m, fileUrls, true)}
-      <p class="text-xs text-white/20 mt-1">Fotos e documentos são enviados na hora e ela já pode abrir. Até ${SHARED_MAX_MB} MB por arquivo.</p>
+      <p class="text-xs text-white/20 mt-1">Fotos e documentos são enviados na hora e já podem ser abertos no app. Até ${SHARED_MAX_MB} MB por arquivo.</p>
       <div class="flex justify-end mt-3">
         <button type="submit" class="btn-primary" style="padding:7px 16px;font-size:12px;">Salvar anotações e links</button>
       </div>
@@ -2051,14 +2051,14 @@ function encontrosTabHtml(encontros) {
   // upload ahead of time.
   const materialsCard = card(`
     <p class="text-sm text-white/50 mb-1">Materiais dos encontros</p>
-    <p class="text-xs text-white/30 mb-1">Envie quando quiser; ela só vê depois que você clicar em "Liberar para a cliente" (normalmente durante o encontro).</p>
+    <p class="text-xs text-white/30 mb-1">Envie quando quiser; só aparece no app depois que você clicar em "Liberar no app" (normalmente durante o encontro).</p>
     ${Object.keys(ENCOUNTER_MATERIALS).map((n) => materialSlotHtml(Number(n), materials)).join('')}
   `, 'mb-6');
   return `
     ${materialsCard}
     ${card(`
       <p class="text-sm text-white/50 mb-1">Gravações</p>
-      <p class="text-xs text-white/30 mb-3">Gravações vinculadas a ela. Ela já vê todas na página Encontros. Arquivar em um encontro já realizado é opcional.</p>
+      <p class="text-xs text-white/30 mb-3">Gravações vinculadas a este cadastro. Todas já aparecem na página Encontros do app. Arquivar em um encontro já realizado é opcional.</p>
       ${unassigned.length ? unassigned.map((a) => encontroFileRow(a, pastMeetings)).join('') : '<p class="text-xs text-white/20">Nenhuma gravação avulsa. Vincule novas em Agenda → Gravações.</p>'}
     `, 'mb-6')}
     ${meetings.length ? meetings.map((m) => {
@@ -2082,7 +2082,7 @@ function encontrosTabHtml(encontros) {
           ${files.length ? files.map((a) => encontroFileRow(a)).join('') : isPast ? sessionPickerHtml(m.id, sessions) : '<p class="text-xs text-white/20">Encontro ainda não realizado.</p>'}
         </div>
       `, 'mb-4');
-    }).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado com ela ainda.</p>', 'mb-6')}
+    }).join('') : card('<p class="text-sm" style="color:var(--muted);">Nenhum encontro agendado ainda.</p>', 'mb-6')}
   `;
 }
 
@@ -2104,7 +2104,7 @@ function wireMaterialSlots(materials) {
       const { error } = await supabase.from(def.table).upsert({ client_id: clientId, file_path: path, file_name: f.name.slice(0, 200) }, { onConflict: 'client_id' });
       if (error) { await supabase.storage.from(MATERIALS_BUCKET).remove([path]); toast('Não foi possível salvar o material.', { tone: 'error' }); render(); return; }
       if (old && old !== path) await supabase.storage.from(MATERIALS_BUCKET).remove([old]);
-      toast(`${def.label} enviado.${materials?.[def.key]?.row?.delivered_at ? '' : ' Ela só vê quando você liberar.'}`);
+      toast(`${def.label} enviado.${materials?.[def.key]?.row?.delivered_at ? '' : ' Só aparece no app quando você liberar.'}`);
       render();
     });
   });
@@ -2113,12 +2113,12 @@ function wireMaterialSlots(materials) {
     btn.disabled = true;
     const { error } = await supabase.from(def.table).update({ delivered_at: new Date().toISOString() }).eq('client_id', clientId);
     if (error) { toast('Não foi possível liberar agora.', { tone: 'error' }); btn.disabled = false; return; }
-    toast(`${def.label} liberado — ela já vê na página Encontros.`);
+    toast(`${def.label} liberado — já aparece na página Encontros do app.`);
     render();
   }));
   content.querySelectorAll('[data-material-unrelease]').forEach((btn) => btn.addEventListener('click', async () => {
     const def = matDef(btn.dataset.materialUnrelease);
-    if (!confirm(`Recolher o ${def.label}? Ela deixa de ver até você liberar de novo.`)) return;
+    if (!confirm(`Recolher o ${def.label}? Deixa de aparecer no app até você liberar de novo.`)) return;
     const { error } = await supabase.from(def.table).update({ delivered_at: null }).eq('client_id', clientId);
     if (error) { toast('Não foi possível recolher agora.', { tone: 'error' }); return; }
     toast(`${def.label} recolhido.`);
@@ -2161,14 +2161,14 @@ function wireEncontrosTab(encontros) {
           shared_files: [...(fresh?.shared_files || []), ...added], shared_updated_at: new Date().toISOString(),
         }).eq('id', m.id);
         if (error) toast('Arquivo enviado, mas não foi possível anexar ao encontro.', { tone: 'error' });
-        else toast(added.length === 1 ? 'Arquivo compartilhado — ela já pode abrir.' : `${added.length} arquivos compartilhados.`);
+        else toast(added.length === 1 ? 'Arquivo compartilhado — já pode ser aberto no app.' : `${added.length} arquivos compartilhados.`);
       }
       render();
     });
   });
   content.querySelectorAll('[data-remove-file]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Remover este arquivo? Ela deixa de ver.')) return;
+      if (!confirm('Remover este arquivo? Ele deixa de aparecer no app.')) return;
       const path = btn.dataset.removeFile;
       const { data: fresh } = await supabase.from('agenda_items').select('shared_files').eq('id', btn.dataset.meeting).maybeSingle();
       const { error } = await supabase.from('agenda_items').update({ shared_files: (fresh?.shared_files || []).filter((f) => f.path !== path) }).eq('id', btn.dataset.meeting);
@@ -2199,7 +2199,7 @@ function wireEncontrosTab(encontros) {
       }).eq('id', form.dataset.sharedForm);
       btn.disabled = false;
       if (error) { toast('Erro ao salvar.', { tone: 'error' }); return; }
-      toast('Salvo — ela já vê na página Encontros.');
+      toast('Salvo — já aparece na página Encontros do app.');
       render();
     });
   });
@@ -2228,7 +2228,7 @@ function wireEncontrosTab(encontros) {
     btn.addEventListener('click', async () => {
       const { error } = await detachArtifactFromMeeting(btn.dataset.encUnfile);
       if (error) { toast('Erro ao tirar do encontro.', { tone: 'error' }); return; }
-      toast('Gravação voltou para a lista geral dela.');
+      toast('Gravação voltou para a lista geral.');
       render();
     });
   });
@@ -2242,7 +2242,7 @@ function wireEncontrosTab(encontros) {
       const profile = await getCurrentProfile();
       const { error } = await linkSessionToMeeting(sessionKey, clientId, meeting, profile.id);
       if (error) { toast('Erro ao anexar.', { tone: 'error' }); btn.disabled = false; return; }
-      toast('Gravação anexada ao encontro. A cliente já pode assistir na página Encontros.');
+      toast('Gravação anexada ao encontro. Já aparece para assistir na página Encontros do app.');
       render();
     });
   });
@@ -2260,13 +2260,13 @@ async function loadExtraction() {
   return { ...q, questions: questions || [] };
 }
 
-const viewAsLink = (page, label = 'Ver como ela vê ↗') => `<a href="/client/${page}?ver_como=${clientId}" target="_blank" rel="noopener" class="btn-text">${label}</a>`;
+const viewAsLink = (page, label = 'Ver como aparece no app ↗') => `<a href="/client/${page}?ver_como=${clientId}" target="_blank" rel="noopener" class="btn-text">${label}</a>`;
 const escHtml = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
 function questionnairesTabHtml({ extraction, archetypeState, surveyState, valueAssessment }) {
   const answered = extraction?.questions.filter((x) => String(x.answer ?? '').trim()).length || 0;
   const extractionBody = !extraction
-    ? '<p class="text-xs" style="color:var(--muted);">Ela ainda não abriu o Diagnóstico Estratégico de Entrada.</p>'
+    ? '<p class="text-xs" style="color:var(--muted);">O Diagnóstico Estratégico de Entrada ainda não foi aberto.</p>'
     : groupBySection(extraction.questions).map((g, gi) => `
         ${g.name ? `<p class="text-xs uppercase mt-6 mb-3" style="color:var(--terracotta);letter-spacing:.2em;">${gi + 1}. ${escHtml(g.name)}</p>` : ''}
         <div class="space-y-4">${g.items.map(({ q: x, n }) => `
@@ -2391,12 +2391,12 @@ function messagesTabHtml(ctx, data) {
   const needsMeeting = ['meeting', 'reminder'].includes(msgState.kind);
   const generated = buildMessage(msgState.kind, { ...ctx, meetings: data.meetings });
   const body = msgState.draft ?? generated ?? '';
-  const missing = needsMeeting && !data.meetings.length ? 'Ela não tem nenhum encontro agendado. Agende em Agenda e volte aqui.'
-    : msgState.kind === 'installment' && !openLines.length ? 'Nenhuma parcela em aberto para ela.' : '';
+  const missing = needsMeeting && !data.meetings.length ? 'Nenhum encontro agendado. Agende em Agenda e volte aqui.'
+    : msgState.kind === 'installment' && !openLines.length ? 'Nenhuma parcela em aberto.' : '';
   return `
     ${card(`
       <p class="text-sm text-white/50 mb-1">Enviar mensagem para ${escHtml(client.full_name.split(' ')[0])}</p>
-      <p class="text-xs text-white/30 mb-4">Escolha o tipo: a mensagem já vem preenchida com os dados dela. Ajuste o que quiser e envie pelo WhatsApp ou e-mail.</p>
+      <p class="text-xs text-white/30 mb-4">Escolha o tipo: a mensagem já vem preenchida com os dados do cadastro. Ajuste o que quiser e envie pelo WhatsApp ou e-mail.</p>
       <div class="flex flex-wrap gap-2 mb-4">
         ${MSG_KINDS.map(([k, l]) => `<button type="button" data-msg-kind="${k}" class="${msgState.kind === k ? 'btn-primary' : 'btn-ghost'}" style="padding:7px 14px;font-size:12px;">${l}</button>`).join('')}
       </div>
@@ -2405,7 +2405,7 @@ function messagesTabHtml(ctx, data) {
       ${missing ? `<p class="text-sm" style="color:var(--muted);">${missing}</p>` : `
       <textarea data-msg-body class="field text-sm" rows="12" style="line-height:1.6;">${escHtml(body)}</textarea>
       <div class="flex items-center gap-2 flex-wrap mt-3">
-        ${phone ? '<button type="button" data-msg-send="whatsapp" class="btn-primary" style="padding:8px 16px;font-size:12px;">Enviar no WhatsApp</button>' : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro dela.</span>'}
+        ${phone ? '<button type="button" data-msg-send="whatsapp" class="btn-primary" style="padding:8px 16px;font-size:12px;">Enviar no WhatsApp</button>' : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro.</span>'}
         ${client.email ? '<button type="button" data-msg-send="email" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Enviar por e-mail</button>' : ''}
         <button type="button" data-msg-send="copy" class="btn-text">Copiar</button>
         ${msgState.draft !== null ? '<button type="button" data-msg-reset class="btn-text">Restaurar texto original</button>' : ''}
@@ -2511,7 +2511,7 @@ async function render() {
           <div>
             <p class="text-sm text-white/50 mb-1">Contrato</p>
             <p class="text-xs" style="color:var(--muted);">${contract ? (CONTRACT_STATUS_LABEL[contract.status] || contract.status) : 'Nenhum contrato preparado ainda.'}</p>
-            ${!partyInfo?.submitted && !['signed', 'completed'].includes(contract?.status) ? '<p class="text-xs mt-1" style="color:var(--muted);">Pode preparar e editar o contrato antes do cadastro: os dados dela entram sozinhos quando ela preencher.</p>' : ''}
+            ${!partyInfo?.submitted && !['signed', 'completed'].includes(contract?.status) ? '<p class="text-xs mt-1" style="color:var(--muted);">Pode preparar e editar o contrato antes do cadastro: os dados entram sozinhos quando o cadastro for preenchido.</p>' : ''}
             ${contract?.body_text && !contract.autentique_document_id && !['signed', 'completed'].includes(contract.status)
               ? (contract.admin_reviewed_at
                 ? `<p class="text-xs mt-1" style="color:var(--gold);">✓ Revisado pela Nay em ${formatDateTime(contract.admin_reviewed_at)} — pode enviar para assinatura</p>`
@@ -2527,7 +2527,7 @@ async function render() {
         <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
             <p class="text-sm text-white/50 mb-1">Acesso</p>
-            <p class="text-xs" style="color:var(--muted);">Contrato assinado — envie o convite de acesso real para a cliente entrar em app.naymurta.com.</p>
+            <p class="text-xs" style="color:var(--muted);">Contrato assinado — envie o convite de acesso real para entrar em app.naymurta.com.</p>
           </div>
           <div class="flex gap-2 flex-wrap">
             <button id="send-invite" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Enviar convite por e-mail</button>
@@ -2539,7 +2539,7 @@ async function render() {
         <div class="flex items-center justify-between flex-wrap gap-3">
           <div>
             <p class="text-sm text-white/50 mb-1">Acesso</p>
-            <p class="text-xs" style="color:var(--muted);">Convite já enviado. Se o link expirou, foi perdido ou nunca chegou (verifique inclusive filtros de segurança do e-mail dela), você pode reenviar aqui.</p>
+            <p class="text-xs" style="color:var(--muted);">Convite já enviado. Se o link expirou, foi perdido ou nunca chegou (verifique inclusive filtros de segurança do e-mail), você pode reenviar aqui.</p>
           </div>
           <div class="flex gap-2 flex-wrap">
             <button id="resend-invite" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Reenviar por e-mail</button>
@@ -2587,7 +2587,7 @@ async function render() {
     const { error } = await supabase.from('clients').update({ phase_index: phaseIndex, skipped_phases: skips }).eq('id', clientId);
     btn.disabled = false;
     if (error) { toast(`Não foi possível salvar: ${error.message}`, { tone: 'error' }); return; }
-    toast('Jornada atualizada — ela já vê assim no app dela.');
+    toast('Jornada atualizada — já aparece assim no app.');
     render();
   });
   content.querySelectorAll('[data-tab]').forEach((btn) => {
@@ -2707,7 +2707,7 @@ async function render() {
       if (!file) return;
       const res = await attachInvoice(input.dataset.nfUpload, file);
       if (res.error) { toast(res.error, { tone: 'error' }); e.target.value = ''; return; }
-      toast('Nota fiscal enviada — disponível no Financeiro da cliente.');
+      toast('Nota fiscal enviada — disponível no Financeiro do app.');
       render();
     });
   });

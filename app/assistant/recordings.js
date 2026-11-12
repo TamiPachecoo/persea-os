@@ -56,7 +56,7 @@ function driveArtifactRow(a, clients) {
         <p class="text-sm font-medium">${ARTIFACT_TYPE_ICON[a.artifact_type] || '📁'} ${ARTIFACT_TYPE_TEXT_LABEL[a.artifact_type] || 'Arquivo'} <span class="text-white/30 font-normal">· ${a.name}</span></p>
         <p class="text-xs text-white/30 mt-0.5">
           ${formatDateTime(a.discovered_at)} descoberto
-          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cliente vinculada'}
+          ${isMatched ? ` · vinculado a ${a.clients?.full_name || '—'}${slotLabelFor(a) ? ` · ${slotLabelFor(a)}` : ''}${a.match_confidence === 'manual' ? ' (manual)' : ' (automático)'}` : ' · sem cadastro vinculado'}
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
@@ -93,7 +93,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
       </div>
     </div>
     <div class="hidden mb-4" id="drive-search-form" style="padding:14px; border:1px solid var(--line); border-radius:8px;">
-      <p class="text-xs text-white/30 mb-3">Procure algo mais antigo que 30 dias, ou por uma palavra do nome do arquivo (ex.: nome da cliente).</p>
+      <p class="text-xs text-white/30 mb-3">Procure algo mais antigo que 30 dias, ou por uma palavra do nome do arquivo (ex.: nome de quem é cliente).</p>
       <div class="grid sm:grid-cols-3 gap-3 items-end">
         <div>
           <label class="text-xs text-white/40 block mb-1">De</label>
@@ -105,7 +105,7 @@ function renderDriveArtifactsCard({ artifacts, error }, clients) {
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Palavra-chave</label>
-          <input type="text" id="drive-search-keyword" class="field text-sm" placeholder="Ex.: nome da cliente" />
+          <input type="text" id="drive-search-keyword" class="field text-sm" placeholder="Ex.: nome de quem é cliente" />
         </div>
       </div>
       <button type="button" id="run-drive-search" class="btn-primary mt-3" style="padding:8px 18px;font-size:12.5px;">Buscar</button>
@@ -207,7 +207,7 @@ async function render() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Recomendações de Conteúdo</p>
       <h1 class="text-3xl font-serif">Gravações para Revisar</h1>
-      <p class="text-sm text-white/40 mt-2 max-w-2xl">Reuniões atribuídas a você — status da gravação, da transcrição, e o que ainda falta fazer antes de preparar algo para a cliente.</p>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Reuniões atribuídas a você — status da gravação, da transcrição, e o que ainda falta fazer antes de preparar algo para o app.</p>
     </div>
 
     ${renderDriveArtifactsCard(driveArtifacts, clientOptions)}
@@ -295,7 +295,7 @@ async function render() {
   content.querySelectorAll('[data-link-artifact]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const select = content.querySelector(`[data-link-client-select="${btn.dataset.linkArtifact}"]`);
-      if (!select.value) { toast('Selecione uma cliente primeiro.', { tone: 'error' }); return; }
+      if (!select.value) { toast('Selecione o cadastro primeiro.', { tone: 'error' }); return; }
       const slotValue = content.querySelector(`[data-link-slot-select="${btn.dataset.linkArtifact}"]`).value;
       const profile = await getCurrentProfile();
       const { error } = await linkSessionToClient(btn.dataset.sessionKey, select.value, profile.id, {

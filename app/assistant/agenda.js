@@ -317,7 +317,7 @@ function openAgendaModal(itemId, defaultDateKey) {
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
-            <label class="text-xs text-white/40 block mb-1">Cliente Relacionada <span class="text-white/20">(ela verá isso no painel dela)</span></label>
+            <label class="text-xs text-white/40 block mb-1">Cadastro vinculado <span class="text-white/20">(aparece no painel de quem é cliente)</span></label>
             <select name="relatedStudentId" class="field">
               <option value="">— Nenhuma —</option>
               ${clients.map((c) => `<option value="${c.id}" ${data.relatedStudentId === c.id ? 'selected' : ''}>${c.fullName}</option>`).join('')}
@@ -329,11 +329,11 @@ function openAgendaModal(itemId, defaultDateKey) {
           </div>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para quem é cliente, se houver)</span></label>
           <input name="topic" class="field" value="${data.topic || ''}" />
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para quem é cliente, se houver)</span></label>
           <input name="onlineLink" class="field" value="${data.onlineLink || ''}" placeholder="https://..." />
         </div>
         <div>
@@ -586,10 +586,10 @@ function welcomeCard() {
     <p class="text-sm text-white/50 mb-5 max-w-2xl">Você não precisa aprender tudo hoje. Este é o mapa do sistema. Cada item do menu tem uma função só:</p>
     <div class="mb-6" style="border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
       ${row('Agenda', 'O que a Nay pediu para você e as suas tarefas. É aqui que o seu dia começa.')}
-      ${row('Clientes', 'As alunas ativas. Clique em uma para ver a jornada, os encontros e os materiais dela.')}
+      ${row('Clientes', 'As alunas ativas. Clique em um cadastro para ver a jornada, os encontros e os materiais.')}
       ${row('Cadastros', 'Alunas novas entrando: contrato, liberação do acesso ao app e à Hubla.')}
       ${row('Templates', 'Os modelos do Canva para cada entrega. Abra, duplique e adapte.')}
-      ${row('Financeiro', 'Anexar a nota fiscal de um pagamento. Ela aparece para a aluna.')}
+      ${row('Financeiro', 'Anexar a nota fiscal de um pagamento. Ela aparece no app de quem é cliente.')}
     </div>
     <p class="text-xs uppercase mb-3" style="color:var(--muted);letter-spacing:.12em;">Seus três primeiros passos</p>
     <ol class="text-sm text-white/70 space-y-2 mb-6" style="list-style:decimal;padding-left:20px;">

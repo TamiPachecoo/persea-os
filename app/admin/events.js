@@ -189,7 +189,7 @@ function inviteBlock(r) {
   const code = inviteCodes.find((c) => c.inviter_registration_id === r.id);
   if (!code) {
     return panel('✦', 'Convite para acompanhante', pill('Não gerado', false), `
-      <p class="text-xs text-white/40 mb-2">Link pessoal para ela convidar alguém com a condição especial de convidada.</p>
+      <p class="text-xs text-white/40 mb-2">Link pessoal para convidar alguém com a condição especial de convidada.</p>
       ${actionBtn(`data-gen-invite="${r.id}"`, 'Gerar convite', true)}`);
   }
   const guests = registrations.filter((g) => g.invite_code === code.code);
@@ -458,7 +458,7 @@ function resultsCard() {
     </details>`;
   return card(`
     <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
-      <p class="text-sm text-white/50">Resultados das mentoradas</p>
+      <p class="text-sm text-white/50">Resultados da mentoria</p>
       <span class="text-xs text-white/30">${n} ${n === 1 ? 'resposta' : 'respostas'}</span>
     </div>
     <p class="text-xs text-white/30 mb-2">Respostas do formulário de resultados (o link para enviar fica no alto da página).</p>
@@ -479,9 +479,9 @@ function resultsLinkCard() {
   return card(`
     <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
       <p class="text-sm text-white/50">Link do formulário de resultados</p>
-      <span class="text-xs text-white/30">para as mentoradas</span>
+      <span class="text-xs text-white/30">para quem faz a mentoria</span>
     </div>
-    <p class="text-xs text-white/30 mb-4">Formulário independente para as mentoradas contarem os resultados: faturamento, primeira venda e notas de antes e de hoje (0 a 10). Só pede o nome; as respostas aparecem no fim desta página.</p>
+    <p class="text-xs text-white/30 mb-4">Formulário independente para quem faz a mentoria contar os resultados: faturamento, primeira venda e notas de antes e de hoje (0 a 10). Só pede o nome; as respostas aparecem no fim desta página.</p>
     <div class="flex flex-wrap gap-2 items-center">
       <input readonly class="field text-sm" style="flex:1; min-width:240px;" value="${RESULTS_URL}" data-autoselect />
       ${actionBtn('data-copy-results-msg', 'Copiar mensagem', true)}
@@ -813,7 +813,7 @@ function render() {
       }).join('')}
     </div>`;
   const mentoria = `
-    <p class="text-white/40 text-sm mt-10 mb-3">Mentoria · resultados das mentoradas</p>
+    <p class="text-white/40 text-sm mt-10 mb-3">Mentoria · resultados de quem faz a mentoria</p>
     ${resultsLinkCard()}
     <div id="respostas-resultados">${resultsCard()}</div>`;
   if (edition === '2027') {
@@ -835,7 +835,7 @@ function render() {
         <p class="text-sm text-white/50">Link de cadastro direto</p>
         <span class="text-xs text-white/30">para quem não se inscreveu pelo site</span>
       </div>
-      <p class="text-xs text-white/30 mb-4">Um único link para todas as pessoas que vão ao evento mas não passaram pela página de inscrição. Ela preenche os dados (nome, e-mail, WhatsApp, Instagram/LinkedIn, idade) e o formulário de preparação; quando termina, aparece na lista abaixo como <b>Confirmada · Cadastro direto</b>. Se o mesmo e-mail já estiver inscrito, as respostas vão para a inscrição existente.</p>
+      <p class="text-xs text-white/30 mb-4">Um único link para todas as pessoas que vão ao evento mas não passaram pela página de inscrição. A própria pessoa preenche os dados (nome, e-mail, WhatsApp, Instagram/LinkedIn, idade) e o formulário de preparação; quando termina, aparece na lista abaixo como <b>Confirmada · Cadastro direto</b>. Se o mesmo e-mail já estiver inscrito, as respostas vão para a inscrição existente.</p>
       ${directSignupCode ? `
       <div class="flex flex-wrap gap-2 items-center">
         <input readonly class="field text-sm" style="flex:1; min-width:260px;" value="${esc(directUrl(directSignupCode))}" data-autoselect />

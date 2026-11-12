@@ -59,7 +59,7 @@ async function render() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Templates</p>
       <h1 class="text-3xl font-serif mb-3">Templates para Entregas</h1>
-      <p class="text-sm text-white/40 max-w-2xl">O template certo para cada entrega — escolha pela estação e variação da cliente na Cartela de Cores, ou pelo tipo de guia nos demais. Abra, duplique no Canva e adapte para ela.</p>
+      <p class="text-sm text-white/40 max-w-2xl">O template certo para cada entrega — escolha pela estação e variação definidas na Cartela de Cores, ou pelo tipo de guia nos demais. Abra, duplique no Canva e adapte a cada caso.</p>
     </div>
     ${grouped.map((cat) => categoryCard(cat, library)).join('')}
     ${singleLinksCard(single, library)}

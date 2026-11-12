@@ -423,7 +423,7 @@ function openResourceModal(resource, defaultTrack) {
           <div>
             <label class="text-xs text-white/40 block mb-1">Visibilidade</label>
             <select name="generalAudience" class="field">
-              <option value="true" ${data.generalAudience ? 'selected' : ''}>Geral (todas as clientes)</option>
+              <option value="true" ${data.generalAudience ? 'selected' : ''}>Geral (todo mundo)</option>
               <option value="false" ${!data.generalAudience ? 'selected' : ''}>Somente por indicação</option>
             </select>
           </div>
@@ -435,7 +435,7 @@ function openResourceModal(resource, defaultTrack) {
         <div>
           <label class="text-xs text-white/40 block mb-1">Link da Aula <span class="text-white/20">(Hubla ou gravação no Google Drive)</span></label>
           <input name="hublaUrl" class="field" value="${data.hublaUrl || ''}" placeholder="https://pay.hubla.com.br/... ou https://drive.google.com/..." />
-          <p class="text-xs text-white/20 mt-1">Para uma aula gravada no Google Meet: abra a gravação na Hubla ou no Google Drive, copie o link de compartilhamento e cole aqui — é exatamente esse link que abre quando a cliente clica em "Assistir".</p>
+          <p class="text-xs text-white/20 mt-1">Para uma aula gravada no Google Meet: abra a gravação na Hubla ou no Google Drive, copie o link de compartilhamento e cole aqui — é exatamente esse link que abre quando alguém clica em "Assistir".</p>
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Recomendação da Nay <span class="text-white/20">(opcional)</span></label>
@@ -489,7 +489,7 @@ async function openAssignmentModal(preselectedResourceId) {
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Motivo da Recomendação</label>
-          <textarea name="reason" rows="2" class="field" placeholder="Por que esse conteúdo faz sentido para ela agora?"></textarea>
+          <textarea name="reason" rows="2" class="field" placeholder="Por que esse conteúdo faz sentido neste momento?"></textarea>
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
@@ -550,7 +550,7 @@ async function render() {
     ${await renderGatewaySection()}
     <div class="divider mb-6" style="margin-top:8px;"></div>
     <p class="text-xs text-white/30 mb-1 uppercase tracking-[.15em]">Biblioteca de Aulas</p>
-    <p class="text-sm text-white/40 mb-8 max-w-2xl">Cada aula fica hospedada na Hubla ou como gravação no Google Drive — aqui você organiza como elas aparecem para as clientes e pode recomendar conteúdos específicos. Isso é diferente dos cards acima: aqui você gerencia aulas individuais, não as categorias em destaque.</p>
+    <p class="text-sm text-white/40 mb-8 max-w-2xl">Cada aula fica hospedada na Hubla ou como gravação no Google Drive — aqui você organiza como elas aparecem para quem é cliente e pode recomendar conteúdos específicos. Isso é diferente dos cards acima: aqui você gerencia aulas individuais, não as categorias em destaque.</p>
     ${await renderLibrary()}
     ${await renderAssignments()}
   `;

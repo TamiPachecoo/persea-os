@@ -290,7 +290,7 @@ async function render() {
       return `
         <details class="mb-8">
           <summary class="text-xs uppercase cursor-pointer" style="color:var(--muted); letter-spacing:.08em; list-style:none;">▸ Pipeline de Demonstração</summary>
-          <p class="text-xs text-white/20 mt-2 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cliente exista de fato no Supabase.</p>
+          <p class="text-xs text-white/20 mt-2 mb-4 max-w-2xl">Os números abaixo vêm dos dados de demonstração locais deste navegador (MockDB) — não são pagamentos reais e não persistem entre dispositivos. Servem para mostrar a forma do fluxo comercial (contratos, parcelas planejadas, previsão) até que cada cadastro de cliente exista de fato no Supabase.</p>
           ${renderKPIs(summary)}
           ${renderForecast()}
           ${renderByProgram(summary)}

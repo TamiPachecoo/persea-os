@@ -210,7 +210,7 @@ function encounterRequestRow(r) {
   const detail = r.status === 'awaiting_nay_confirmation'
     ? `Horário escolhido: ${formatDateTime(r.selectedTime)}`
     : r.status === 'client_unavailable' ? 'Nenhum horário ofertado funcionou'
-    : 'Aguardando a cliente escolher um horário';
+    : 'Aguardando a escolha de um horário';
   const needsNay = r.status !== 'awaiting_client_response';
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
@@ -219,7 +219,7 @@ function encounterRequestRow(r) {
           <p class="font-medium text-sm">${client ? client.fullName : r.clientId}</p>
           <p class="text-sm mt-1">${ENCOUNTER_LABEL[def.slug]} — ${detail}</p>
         </div>
-        <span class="badge ${needsNay ? 'badge-progress' : 'badge-locked'}">${needsNay ? 'Aguardando você' : 'Aguardando a cliente'}</span>
+        <span class="badge ${needsNay ? 'badge-progress' : 'badge-locked'}">${needsNay ? 'Aguardando você' : 'Aguardando resposta'}</span>
       </div>
       <div class="flex items-center gap-2 mt-3">
         <a href="client-detail.html?id=${r.clientId}&tab=e${r.encounterNumber}" class="btn-text">Abrir</a>
@@ -403,7 +403,7 @@ function openQuickScheduleModal(defaultDateKey) {
           <label class="text-xs text-white/40 block mb-1">O Que Agendar</label>
           <select id="qs-option" name="option" class="field"></select>
         </div>
-        <p id="qs-redirect-note" class="text-xs text-white/30" style="display:none;">Você será direcionada para o perfil da cliente para solicitar esse encontro (checklist de preparo + horários).</p>
+        <p id="qs-redirect-note" class="text-xs text-white/30" style="display:none;">Você vai para o perfil de quem é cliente para solicitar esse encontro (checklist de preparo + horários).</p>
         <div id="qs-title-wrap">
           <label class="text-xs text-white/40 block mb-1">Assunto</label>
           <input id="qs-title" name="title" class="field" />
@@ -544,7 +544,7 @@ function openAgendaModal(itemId, defaultDateKey) {
         </div>
         <div class="grid sm:grid-cols-2 gap-4">
           <div>
-            <label class="text-xs text-white/40 block mb-1">Cliente Relacionada <span class="text-white/20">(ela verá isso no painel dela)</span></label>
+            <label class="text-xs text-white/40 block mb-1">Cadastro vinculado <span class="text-white/20">(aparece no painel de quem é cliente)</span></label>
             <select name="relatedStudentId" class="field">
               <option value="">— Nenhuma —</option>
               ${clients.map((c) => `<option value="${c.id}" ${data.relatedStudentId === c.id ? 'selected' : ''}>${c.fullName}</option>`).join('')}
@@ -556,11 +556,11 @@ function openAgendaModal(itemId, defaultDateKey) {
           </div>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para quem é cliente, se houver)</span></label>
           <input name="topic" class="field" value="${data.topic || ''}" />
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para quem é cliente, se houver)</span></label>
           <input name="onlineLink" class="field" value="${data.onlineLink || ''}" placeholder="https://..." />
         </div>
         <div>
@@ -900,7 +900,7 @@ async function openQuickScheduleModalReal(defaultDateKey, presetClientId) {
     title: 'Novo Encontro',
     bodyHtml: `
       <form id="quick-schedule-form-real" class="space-y-4">
-        ${!clients.length ? '<p class="text-xs" style="color:var(--terracotta);">Nenhuma cliente real cadastrada ainda — crie uma cliente pelo CRM primeiro, ou agende um evento geral sem cliente.</p>' : ''}
+        ${!clients.length ? '<p class="text-xs" style="color:var(--terracotta);">Nenhum cadastro real de cliente ainda — crie um pelo CRM primeiro, ou agende um evento geral sem cliente.</p>' : ''}
         <div>
           <label class="text-xs text-white/40 block mb-1">Cliente</label>
           <select id="qsr-client" name="clientId" class="field">
@@ -1032,18 +1032,18 @@ async function openAgendaModalReal(itemId) {
           </div>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Cliente Relacionada <span class="text-white/20">(ela verá isso em Encontros)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Cadastro vinculado <span class="text-white/20">(aparece em Encontros, no app de quem é cliente)</span></label>
           <select name="relatedStudentId" class="field">
             <option value="">— Nenhuma —</option>
             ${clients.map((c) => `<option value="${c.id}" ${item.related_student_id === c.id ? 'selected' : ''}>${c.full_name}</option>`).join('')}
           </select>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Tópico <span class="text-white/20">(visível para quem é cliente, se houver)</span></label>
           <input name="topic" class="field" value="${item.topic || ''}" />
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para a cliente, se houver)</span></label>
+          <label class="text-xs text-white/40 block mb-1">Link da Reunião Online <span class="text-white/20">(visível para quem é cliente, se houver)</span></label>
           <input name="onlineLink" class="field" value="${item.online_link || ''}" placeholder="https://..." />
           ${!item.google_event_id && realCalendarStatus.connected ? `
             <button type="button" id="generate-meet-link" class="btn-ghost mt-2" style="padding:6px 12px; font-size:12px;">Gerar link do Meet</button>
@@ -1058,7 +1058,7 @@ async function openAgendaModalReal(itemId) {
             </select>
           </div>
           <div>
-            <label class="text-xs text-white/40 block mb-1">Instruções para a assistente <span class="text-white/20">(ela vê na Agenda dela)</span></label>
+            <label class="text-xs text-white/40 block mb-1">Instruções para a assistente <span class="text-white/20">(aparece na Agenda da equipe)</span></label>
             <input name="assigneeNotes" class="field" value="${(item.assignee_notes || '').replace(/"/g, '&quot;')}" placeholder="O que ela precisa fazer" />
           </div>
         </div>
@@ -1108,7 +1108,7 @@ async function openAgendaModalReal(itemId) {
     item.google_event_id = data.event_id;
     linkInput.value = onlineLink || '';
     btn.remove();
-    if (data.meet_url) toast('Link do Meet gerado — a cliente já pode entrar pela página Encontros.');
+    if (data.meet_url) toast('Link do Meet gerado — já dá para entrar pela página Encontros do app.');
   });
 
   // Hard delete for items booked by mistake (cancelling keeps them in the
@@ -1119,7 +1119,7 @@ async function openAgendaModalReal(itemId) {
     const { count: recordingCount } = await supabase.from('meeting_recordings').select('id', { count: 'exact', head: true }).eq('agenda_item_id', itemId);
     const warning = recordingCount
       ? 'Excluir este encontro? A gravação e a transcrição vinculadas também serão apagadas. Isto não pode ser desfeito.'
-      : 'Excluir este encontro? Ele some da agenda e da página da cliente. Isto não pode ser desfeito.';
+      : 'Excluir este encontro? Ele some da agenda e da página de quem é cliente. Isto não pode ser desfeito.';
     if (!confirm(warning)) return;
     btn.disabled = true;
     btn.textContent = 'Excluindo…';

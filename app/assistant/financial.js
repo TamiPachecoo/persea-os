@@ -75,7 +75,7 @@ async function renderReal() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Financeiro</p>
       <h1 class="text-3xl font-serif mb-3">Notas Fiscais</h1>
-      <p class="text-sm text-white/40 max-w-2xl">Emita sempre que a cliente solicitar, ou automaticamente quando a venda foi no cartão de crédito. O arquivo enviado aqui fica disponível para a cliente no Financeiro dela.</p>
+      <p class="text-sm text-white/40 max-w-2xl">Emita sempre que houver solicitação, ou automaticamente quando a venda foi no cartão de crédito. O arquivo enviado aqui fica disponível no Financeiro do app.</p>
     </div>
     ${rows.length ? `
       ${card(`
@@ -103,7 +103,7 @@ async function renderReal() {
         payment_id: paymentId, status: 'issued', issued_at: new Date().toISOString(), file_name: file.name, file_url: path,
       });
       if (error) { toast('Arquivo enviado, mas houve um erro ao registrar a nota.', { tone: 'error' }); return; }
-      toast('Nota fiscal enviada — disponível no Financeiro da cliente.');
+      toast('Nota fiscal enviada — disponível no Financeiro do app.');
       renderReal();
     });
   });
@@ -168,7 +168,7 @@ function renderDemo() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Financeiro</p>
       <h1 class="text-3xl font-serif mb-3">Notas Fiscais</h1>
-      <p class="text-sm text-white/40 max-w-2xl">Emita sempre que a cliente solicitar, ou automaticamente quando a venda foi no cartão de crédito. O arquivo enviado aqui fica disponível para a cliente no Financeiro dela.</p>
+      <p class="text-sm text-white/40 max-w-2xl">Emita sempre que houver solicitação, ou automaticamente quando a venda foi no cartão de crédito. O arquivo enviado aqui fica disponível no Financeiro do app.</p>
     </div>
     ${card(`
       <p class="text-sm text-white/50 mb-1">Pendentes de Emissão</p>
@@ -189,7 +189,7 @@ function renderDemo() {
       const [clientId, paymentId] = input.dataset.nfUpload.split(':');
       const dataUrl = await fileToDataUrl(file);
       MockDB.issueInvoice(clientId, paymentId, { fileName: file.name, fileUrl: dataUrl });
-      toast('Nota fiscal enviada — disponível no Financeiro da cliente.');
+      toast('Nota fiscal enviada — disponível no Financeiro do app.');
       renderDemo();
     });
   });
