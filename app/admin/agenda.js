@@ -293,7 +293,7 @@ function calChip(it) {
   }
   return `
     <button type="button" data-agenda-item="${it.id}" class="cal-chip ${it.status !== 'upcoming' ? 'cal-chip-done' : ''}">
-      <span class="cal-chip-time">${formatTime(it.date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}${it.confirmation === 'confirmed' ? ' <span title="Confirmado pela aluna" style="color:#8fae8b;">✓</span>' : it.confirmation === 'reschedule' ? ' <span title="Pediu para remarcar" style="color:#d0705a;">↻</span>' : ''}
+      <span class="cal-chip-time">${formatTime(it.date)}</span> ${AGENDA_TYPE_ICON[it.type] || ''} ${it.title}${it.confirmation === 'confirmed' ? ' <span title="Presença confirmada" style="color:#8fae8b;">✓</span>' : it.confirmation === 'reschedule' ? ' <span title="Pediu para remarcar" style="color:#d0705a;">↻</span>' : ''}
     </button>
   `;
 }
@@ -1059,7 +1059,7 @@ async function openAgendaModalReal(itemId) {
           </div>
           <div>
             <label class="text-xs text-white/40 block mb-1">Instruções para a assistente <span class="text-white/20">(aparece na Agenda da equipe)</span></label>
-            <input name="assigneeNotes" class="field" value="${(item.assignee_notes || '').replace(/"/g, '&quot;')}" placeholder="O que ela precisa fazer" />
+            <input name="assigneeNotes" class="field" value="${(item.assignee_notes || '').replace(/"/g, '&quot;')}" placeholder="O que precisa ser feito" />
           </div>
         </div>
         <div>

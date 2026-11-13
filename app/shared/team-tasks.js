@@ -42,16 +42,21 @@ async function loadClientsMap() {
   const { data } = await supabase.from('clients').select('id, full_name, is_demo').order('full_name');
   return data || [];
 }
+// Assistants (both roles can see the team's names through team_members(),
+// since an assistant can't read profiles directly). Without it (older
+// database), the admin still reads profiles and the assistant just gets Nay.
 async function loadAssistants(profile) {
+  const { data, error } = await supabase.rpc('team_members');
+  if (!error && data) return data.filter((m) => m.role === 'assistant').map((m) => ({ id: m.id, full_name: m.full_name || 'Assistente' }));
   if (profile.role !== 'admin') return [];
-  const { data } = await supabase.from('profiles').select('id, full_name').eq('role', 'assistant').order('full_name');
-  return data || [];
+  const { data: rows } = await supabase.from('profiles').select('id, full_name').eq('role', 'assistant').order('full_name');
+  return rows || [];
 }
 
 // --- rows ----------------------------------------------------------------
 function taskRow(t, { profile, clientsById, showClient = true }) {
   const client = showClient && t.client_id ? clientsById.get(t.client_id) : null;
-  const toWho = t.assigned_role === 'admin' ? 'Nay' : (t.assigned_to_name || 'Equipe');
+  const toWho = t.assigned_role === 'admin' ? 'Nay' : (t.assigned_to_name ? firstName(t.assigned_to_name) : 'Assistente');
   const fromWho = t.source === 'auto' ? 'Sistema' : firstName(t.created_by_name) || 'Equipe';
   const due = t.status === 'done' ? `<span class="task-due">feita ${t.completed_at ? formatDateTime(t.completed_at) : ''}</span>` : dueChip(t);
   return `
@@ -105,8 +110,10 @@ export async function openNewTaskModal(profile, { clientId = null, kind = 'task'
               ${isAdmin
                 ? `<option value="role:assistant">Assistente${assistants.length > 1 ? ' (qualquer uma)' : ''}</option>
                    ${assistants.length > 1 ? assistants.map((a) => `<option value="id:${a.id}">${esc(a.full_name)}</option>`).join('') : ''}
-                   <option value="role:admin">Eu mesma (lembrete)</option>`
-                : `<option value="role:admin">Nay</option><option value="role:assistant">Eu mesma (lembrete)</option>`}
+                   <option value="role:admin">Para mim (lembrete)</option>`
+                : `<option value="role:admin">Nay</option>
+                   ${assistants.filter((a) => a.id !== profile.id).map((a) => `<option value="id:${a.id}">${esc(a.full_name)} (assistente)</option>`).join('')}
+                   <option value="id:${profile.id}">Para mim (lembrete)</option>`}
             </select>
           </div>
           <div>
@@ -115,13 +122,13 @@ export async function openNewTaskModal(profile, { clientId = null, kind = 'task'
           </div>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Sobre qual aluna (opcional)</label>
+          <label class="text-xs text-white/40 block mb-1">Sobre quem é cliente (opcional)</label>
           <select name="client_id" class="field">
             <option value="">— Nenhuma —</option>
             ${clients.map((c) => `<option value="${c.id}" ${c.id === clientId ? 'selected' : ''}>${esc(c.full_name)}${c.is_demo ? ' (demo)' : ''}</option>`).join('')}
           </select>
         </div>
-        <p class="text-xs text-white/30">Quem recebe é avisada no app (e por notificação no celular, se ativou). Um dia antes do prazo e se atrasar, o sistema avisa de novo.</p>
+        <p class="text-xs text-white/30">Quem recebe é avisado no app (e por notificação no celular, se ativou). Um dia antes do prazo e se atrasar, o sistema avisa de novo.</p>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn-ghost" data-cancel style="padding:9px 18px;font-size:12.5px;">Cancelar</button>
           <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${isAdmin ? 'Delegar' : 'Enviar'}</button>
@@ -175,7 +182,7 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
       <p class="font-serif text-xl mb-2">${esc(t.title)}</p>
       ${t.notes ? `<p class="text-sm text-white/60 mb-3" style="white-space:pre-wrap;">${esc(t.notes)}</p>` : ''}
       <p class="text-xs text-white/40 mb-4">
-        ${t.source === 'auto' ? 'Sistema' : `De ${esc(firstName(t.created_by_name) || 'equipe')}`} → ${t.assigned_role === 'admin' ? 'Nay' : 'Assistente'} · criada ${formatDateTime(t.created_at)}
+        ${t.source === 'auto' ? 'Sistema' : `De ${esc(firstName(t.created_by_name) || 'equipe')}`} → ${t.assigned_role === 'admin' ? 'Nay' : esc(t.assigned_to_name ? firstName(t.assigned_to_name) : 'Assistente')} · criada ${formatDateTime(t.created_at)}
         ${client ? ` · <a href="${clientHref}" style="color:var(--gold);">${esc(client.full_name)} →</a>` : ''}
         ${t.status === 'done' && t.completed_at ? `<br/>Concluída por ${esc(firstName(t.completed_by_name) || 'equipe')} em ${formatDateTime(t.completed_at)}` : ''}
       </p>
@@ -218,7 +225,7 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
     toast('Prazo atualizado.'); done();
   });
   el.querySelector('[data-delete-task]')?.addEventListener('click', async () => {
-    if (!confirm('Apagar esta tarefa e a conversa dela?')) return;
+    if (!confirm('Apagar esta tarefa e a conversa?')) return;
     const { error } = await supabase.from('team_tasks').delete().eq('id', t.id);
     if (error) { toast(error.message, { tone: 'error' }); return; }
     toast('Tarefa apagada.'); done();
@@ -327,7 +334,7 @@ export async function mountTasksPage(content, profile) {
         <div>
           <p class="text-white/40 text-sm mb-1">Tarefas</p>
           <h1 class="text-3xl font-serif">${isAdmin ? 'Tarefas da equipe' : 'Suas tarefas'}</h1>
-          <p class="text-sm text-white/40 mt-2 max-w-xl">${isAdmin ? 'Delegue para a assistente com prazo. Ela recebe aqui e no celular, e pode te mandar perguntas de volta.' : 'O que a Nay pediu, com prazo. Dúvida? Mande uma pergunta para ela por aqui — fica tudo registrado.'}</p>
+          <p class="text-sm text-white/40 mt-2 max-w-xl">${isAdmin ? 'Delegue para a assistente com prazo. A pessoa recebe aqui e no celular, e pode te mandar perguntas de volta.' : 'O que a Nay pediu, com prazo — e a conversa da equipe. Em "+ Nova tarefa" você escolhe para quem: a Nay ou a outra assistente. Fica tudo registrado.'}</p>
         </div>
         <div class="flex gap-2 flex-wrap">
           ${isAdmin ? '' : '<button type="button" id="new-question" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">? Perguntar à Nay</button>'}
@@ -389,10 +396,10 @@ export async function mountClientTasks(container, profile, clientId) {
     const clientsById = new Map(c ? [[c.id, c]] : []);
     container.innerHTML = card(`
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <p class="text-sm text-white/50">Tarefas da equipe sobre esta aluna</p>
+        <p class="text-sm text-white/50">Tarefas da equipe sobre este cadastro</p>
         <button type="button" data-client-task-new class="btn-ghost" style="padding:7px 14px;font-size:12px;">${profile.role === 'admin' ? '+ Delegar' : '+ Tarefa / pergunta'}</button>
       </div>
-      ${tasks.length ? tasks.map((t) => taskRow(t, { profile, clientsById, showClient: false })).join('') : '<p class="text-xs text-white/30">Nenhuma tarefa aberta para ela.</p>'}
+      ${tasks.length ? tasks.map((t) => taskRow(t, { profile, clientsById, showClient: false })).join('') : '<p class="text-xs text-white/30">Nenhuma tarefa aberta aqui.</p>'}
     `, 'mb-6');
     container.querySelector('[data-client-task-new]').addEventListener('click', () => openNewTaskModal(profile, { clientId, onSaved: render }));
     container.querySelectorAll('[data-task-open]').forEach((b) => b.addEventListener('click', () => openTaskModal(b.dataset.taskOpen, profile, { onChanged: render })));

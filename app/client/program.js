@@ -14,6 +14,7 @@
 import { getCurrentClientContext } from '../shared/client-context.js';
 import { renderShell, card, progressBar, toast, formatDate, formatDateTime, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderPhaseTracker, wirePhaseTrackerNav } from '../shared/ui.js';
 import { loadProgramState, loadNextMeeting } from '../shared/program-model.js';
+import { loadStudentTimeline, studentTimelineHtml, wireStudentTimeline } from '../shared/encounter-journey.js';
 import { supabase } from '../shared/supabase-client.js';
 
 const __clientCtx = await getCurrentClientContext('../login.html', { page: 'program' });
@@ -157,6 +158,8 @@ async function render() {
     loadContractMonths(clientId),
   ]);
   const { programDef, phases, progress } = state;
+  // Encounter timeline with the homework before each one (Persea only).
+  const timeline = await loadStudentTimeline(clientId, client, { programState: state });
 
   if (!programDef) {
     content.innerHTML = card('<p class="text-sm" style="color:var(--muted);">Seu programa ainda está sendo configurado — fale com a equipe PERSEA.</p>');
@@ -199,6 +202,8 @@ async function render() {
 
     ${nextMeetingCard(nextMeeting)}
 
+    ${timeline ? studentTimelineHtml(timeline) : ''}
+
     <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">Sua Jornada</p>
     <div class="journey-phases">${phaseCardsHtml.join('')}</div>
 
@@ -213,6 +218,7 @@ async function render() {
     });
   });
   wirePhaseTrackerNav(content);
+  if (timeline) wireStudentTimeline(content);
 }
 
 try {

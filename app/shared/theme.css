@@ -907,3 +907,13 @@ a.enc-chip:hover{ transform:scale(1.12); }
 select, input, textarea{ color-scheme: dark; }
 select option, select optgroup{ background-color:#1a1512; color:var(--cream); }
 select option:checked{ background-color:#3a2c1c; color:var(--cream); }
+
+/* Student timeline list (studentTimelineHtml) — one row per encounter. */
+.enc-tl-list{ position:relative; }
+.enc-tl-item{ border:1px solid var(--line); border-radius:6px; padding:12px 14px; margin-bottom:8px; background:rgba(242,236,224,.02); }
+.enc-tl-item summary::-webkit-details-marker{ display:none; }
+.enc-tl-current{ border-color:rgba(201,169,110,.55); background:rgba(201,169,110,.06); }
+.enc-tl-done{ opacity:.75; }
+.enc-tl-dot{ flex:none; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; font-size:11px; font-weight:700; border:1px solid var(--line); color:var(--muted); }
+.enc-tl-current .enc-tl-dot{ background:var(--gold); border-color:var(--gold); color:#16100a; }
+.enc-tl-done .enc-tl-dot{ background:#8fae8b; border-color:#8fae8b; color:#16100a; }

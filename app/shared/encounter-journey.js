@@ -198,10 +198,10 @@ export function encounterDetailHtml({ def, homework, deliverables, audience = 'a
       </div>
       <p class="text-sm text-white/50 mb-5">${esc(def.purpose)}</p>
       ${section(
-        isClient ? 'Sua lição de casa — conclua antes deste encontro' : 'Lição de casa da aluna — antes do encontro',
-        homework.length ? (homework[0].status == null ? 'Atividades do app que a aluna conclui antes deste encontro.' : `${hwDone} de ${homework.length} concluída${homework.length === 1 ? '' : 's'}. Não bloqueia o encontro, mas é importante chegar com tudo feito.`) : '',
+        isClient ? 'Sua lição de casa — conclua antes deste encontro' : 'Lição de casa — antes do encontro',
+        homework.length ? (homework[0].status == null ? 'Atividades do app a concluir antes deste encontro.' : `${hwDone} de ${homework.length} concluída${homework.length === 1 ? '' : 's'}. Não bloqueia o encontro, mas é importante chegar com tudo feito.`) : '',
         homework.length ? `<ul>${hwRows}</ul>` : `<p class="text-sm" style="color:var(--muted);">${isClient ? 'Nenhuma atividade obrigatória antes deste encontro. É só comparecer!' : 'Sem atividade do app antes deste encontro.'}</p>`,
-        'student', isClient ? 'Você faz' : 'Aluna faz',
+        'student', isClient ? 'Você faz' : 'Cliente faz',
       )}
       ${!isClient ? section(
         'Entregas da Nay e da equipe — prontas antes do encontro',
@@ -210,10 +210,10 @@ export function encounterDetailHtml({ def, homework, deliverables, audience = 'a
         'team', 'Nay e equipe fazem',
       ) : ''}
       ${deliverables.released.length ? section(
-        isClient ? 'O que você recebe neste encontro' : 'Liberado para a aluna neste encontro',
+        isClient ? 'O que você recebe neste encontro' : 'Liberado no app neste encontro',
         '',
         list(deliverables.released),
-        'release', isClient ? 'Você recebe' : 'Aluna recebe',
+        'release', isClient ? 'Você recebe' : 'Cliente recebe',
       ) : ''}
     </div>`;
 }
@@ -245,4 +245,100 @@ export function studentTrackHtml(nodes, { title = 'Linha dos encontros', subtitl
       </div>
       <p class="text-xs text-white/30 mt-3">Toque em um encontro para ver a lição de casa e as entregas.</p>
     </div>`;
+}
+
+// --- The student's own timeline (client app) ---------------------------
+// Same data the team sees for this student: her encounters in her order,
+// where she is now and, under EACH encounter, the homework to finish
+// before it (a checklist, never a lock) and what she receives there.
+// Used on her home (program.js) and on Encontros (encontros.js).
+export async function loadStudentTimeline(clientId, client, { programState = null, completedCount = null } = {}) {
+  if (!usesPerseaJourney(client)) return null;
+  try {
+    const { loadProgramState } = await import('./program-model.js');
+    const [refs, plan, state, counts] = await Promise.all([
+      loadEncounterRefs(), loadPlan(clientId),
+      programState ? Promise.resolve(programState) : loadProgramState(clientId, client),
+      completedCount == null ? loadCompletedCounts([clientId]) : Promise.resolve(null),
+    ]);
+    const seq = clientSequence(refs.defs, client, plan);
+    const done = completedCount == null ? (counts.get(clientId) || 0) : completedCount;
+    const pos = positionOf(seq, done, plan);
+    const activityStatus = activityStatusFromProgramState(state);
+    const nodes = seq.map((def, i) => {
+      const homework = homeworkFor(def.number, refs, activityStatus);
+      return { def, state: i < pos.index ? 'done' : i === pos.index ? 'current' : 'upcoming', homework, hw: homeworkProgress(homework) };
+    });
+    return { refs, activityStatus, nodes, pos };
+  } catch {
+    return null; // the rest of the page still renders
+  }
+}
+
+const STATE_LABEL = { done: 'Concluído', current: 'Seu próximo encontro', upcoming: 'Mais adiante' };
+function timelineItemHtml(n, refs) {
+  const released = teamDeliverablesFor(n.def.number, refs).released;
+  const pending = n.homework.filter((h) => !h.completed).length;
+  const hwHtml = n.homework.length
+    ? `<ul class="mt-2">${n.homework.map((h) => `
+        <li class="flex items-center justify-between gap-3 py-1.5 border-b border-white/5 last:border-0">
+          <a href="${esc(h.route || '#')}" class="text-sm min-w-0" style="color:${h.completed ? 'var(--muted)' : 'var(--cream)'};${h.completed ? 'text-decoration:line-through;' : 'text-decoration:underline;text-underline-offset:3px;'}">${h.completed ? '✓' : '○'} ${esc(h.title)}</a>
+          ${h.statusLabel ? `<span class="badge ${h.badgeClass}" style="flex:none;">${esc(h.statusLabel)}</span>` : ''}
+        </li>`).join('')}</ul>`
+    : '<p class="text-xs mt-1" style="color:var(--muted);">Nenhuma atividade antes deste encontro. É só comparecer!</p>';
+  const summary = n.homework.length
+    ? (pending ? `Lição de casa: ${n.homework.length - pending}/${n.homework.length}` : '✓ Lição de casa concluída')
+    : 'Sem lição de casa';
+  const isCurrent = n.state === 'current';
+  return `
+    <details class="enc-tl-item enc-tl-${n.state}" ${isCurrent ? 'open' : ''}>
+      <summary class="flex items-center justify-between gap-3 flex-wrap" style="cursor:pointer;list-style:none;">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="enc-tl-dot">${n.state === 'done' ? '✓' : `E${n.def.number}`}</span>
+          <div class="min-w-0">
+            <p class="text-sm font-medium">E${n.def.number} · ${esc(n.def.name)}</p>
+            <p class="text-xs" style="color:${isCurrent ? 'var(--gold)' : 'var(--muted)'};">${STATE_LABEL[n.state]} · ${summary}</p>
+          </div>
+        </div>
+        ${n.def.premium_only ? '<span class="premium-badge" style="font-size:10px;">Premium</span>' : ''}
+      </summary>
+      <div class="enc-tl-body">
+        <div class="enc-sec enc-sec-student mt-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap"><p class="enc-sec-title">Lição de casa — conclua antes deste encontro</p><span class="enc-sec-who">Você faz</span></div>
+          ${hwHtml}
+        </div>
+        ${released.length ? `<div class="enc-sec enc-sec-release mt-3"><div class="flex items-center justify-between gap-2 flex-wrap"><p class="enc-sec-title">O que você recebe neste encontro</p><span class="enc-sec-who">Você recebe</span></div><p class="text-sm mt-1">${released.map(esc).join(' · ')}</p></div>` : ''}
+      </div>
+    </details>`;
+}
+
+// Strip + "before your next encounter" + the full list, one per encounter.
+export function studentTimelineHtml(track, { title = 'Sua linha de encontros' } = {}) {
+  if (!track?.nodes.length) return '';
+  const cur = track.nodes.find((n) => n.state === 'current');
+  const pending = cur ? cur.homework.filter((h) => !h.completed) : [];
+  const nextNote = !cur ? '<p class="text-sm" style="color:#8fae8b;">✓ Todos os encontros concluídos.</p>'
+    : !cur.homework.length ? `<p class="text-sm text-white/60">Nada a concluir antes do E${cur.def.number}. É só comparecer!</p>`
+    : pending.length ? `<p class="text-sm text-white/60">Para o <b>E${cur.def.number} · ${esc(cur.def.name)}</b>, falta concluir: ${pending.map((h) => `<a href="${esc(h.route || '#')}" style="color:var(--cream);text-decoration:underline;text-underline-offset:3px;">${esc(h.title)}</a>`).join(', ')}.</p>`
+    : `<p class="text-sm" style="color:#8fae8b;">✓ Lição de casa do E${cur.def.number} concluída. Tudo pronto para o encontro!</p>`;
+  return `
+    ${studentTrackHtml(track.nodes.map(({ def, state, hw }) => ({ def, state, hw })), { title, subtitle: cur ? `Agora: E${cur.def.number} · ${esc(cur.def.name)}` : 'Todos os encontros concluídos' })}
+    <div class="card mb-6 enc-timeline">
+      <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.1em;">Antes do seu próximo encontro</p>
+      ${nextNote}
+      <p class="text-xs uppercase mt-6 mb-2" style="color:var(--muted);letter-spacing:.1em;">Todos os seus encontros e a lição de casa de cada um</p>
+      <div class="enc-tl-list">${track.nodes.map((n) => timelineItemHtml(n, track.refs)).join('')}</div>
+    </div>`;
+}
+
+// Tapping a node of the strip opens that encounter in the list below.
+export function wireStudentTimeline(root) {
+  root.querySelectorAll('[data-encounter-open]').forEach((btn) => btn.addEventListener('click', () => {
+    const items = [...root.querySelectorAll('.enc-tl-item')];
+    const idx = [...root.querySelectorAll('[data-encounter-open]')].indexOf(btn);
+    const item = items[idx];
+    if (!item) return;
+    item.open = true;
+    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }));
 }

@@ -866,10 +866,10 @@ function encounterPlanCard(client, refs, plan) {
   const custom = !!plan?.encounter_order?.length;
   return card(`
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <p class="text-sm text-white/50">Ordem dos encontros desta aluna</p>
+      <p class="text-sm text-white/50">Ordem dos encontros deste cadastro</p>
       ${custom ? '<span class="text-xs" style="color:var(--gold);">Ordem personalizada</span>' : '<span class="text-xs text-white/30">Ordem padrão</span>'}
     </div>
-    <p class="text-xs text-white/30 mb-3">Use ↑ ↓ para mudar a ordem só para ela (ex.: E3 antes do E2). A lição de casa de cada encontro vai junto. Nada muda para as outras alunas.</p>
+    <p class="text-xs text-white/30 mb-3">Use ↑ ↓ para mudar a ordem só neste caso (ex.: E3 antes do E2). A lição de casa de cada encontro vai junto. Nada muda nos outros cadastros.</p>
     <form id="encounter-plan">
       <div id="enc-order-list">
         ${seq.map((d, i) => `
@@ -881,7 +881,7 @@ function encounterPlanCard(client, refs, plan) {
           </div>`).join('')}
       </div>
       <div class="mt-4">
-        <label class="text-xs text-white/40 block mb-1">Encontro em que ela está agora</label>
+        <label class="text-xs text-white/40 block mb-1">Encontro atual</label>
         <select name="current_encounter" class="field text-sm" style="width:auto;">
           <option value="">Automático (pelos encontros realizados)</option>
           ${seq.map((d) => `<option value="${d.number}" ${plan?.current_encounter === d.number ? 'selected' : ''}>E${d.number} — ${escHtml(d.name)}</option>`).join('')}
@@ -907,7 +907,7 @@ function wireEncounterTrack(root) {
         homework: homeworkFor(number, encounterCtx.refs, encounterCtx.activityStatus),
         deliverables: teamDeliverablesFor(number, encounterCtx.refs),
         audience: isAssistant ? 'assistant' : 'admin',
-        positionLabel: { completed: 'Concluído', scheduled: `Agendado · ${def.scheduledAt ? formatDateTime(def.scheduledAt) : ''}`, pending: 'Próximo — a agendar', waiting_on_client: 'Próximo — aguardando a aluna', locked: 'Mais adiante' }[def.status] || '',
+        positionLabel: { completed: 'Concluído', scheduled: `Agendado · ${def.scheduledAt ? formatDateTime(def.scheduledAt) : ''}`, pending: 'Próximo — a agendar', waiting_on_client: 'Próximo — aguardando resposta', locked: 'Mais adiante' }[def.status] || '',
       }) + `<div class="flex gap-3 flex-wrap mt-2">${(homeworkFor(number, encounterCtx.refs, encounterCtx.activityStatus)).map((h) => ACTIVITY_STAFF_TAB[h.slug] ? `<button type="button" class="btn-text" data-modal-tab="${ACTIVITY_STAFF_TAB[h.slug]}">Ver ${escHtml(h.title)} →</button>` : '').join('')}</div>`,
     });
     el.querySelectorAll('[data-modal-tab]').forEach((b) => b.addEventListener('click', () => { close(); activeTab = b.dataset.modalTab; render(); }));
@@ -935,7 +935,7 @@ function wireEncounterTrack(root) {
   const save = async (order, current) => {
     const { error } = await savePlan(clientId, { encounterOrder: order, currentEncounter: current }, profile.id);
     if (error) { toast(`Não foi possível salvar: ${error.message}`, { tone: 'error' }); return false; }
-    toast('Ordem dos encontros salva — já aparece assim para a aluna e para a equipe.');
+    toast('Ordem dos encontros salva — já aparece assim no app e para a equipe.');
     render();
     return true;
   };
@@ -948,7 +948,7 @@ function wireEncounterTrack(root) {
     if (!(await save(isDefault ? null : order, current))) btn.disabled = false;
   });
   form.querySelector('#encounter-plan-reset')?.addEventListener('click', async () => {
-    if (!confirm('Voltar à ordem padrão (E1, E2, E3…) para esta aluna?')) return;
+    if (!confirm('Voltar à ordem padrão (E1, E2, E3…) neste cadastro?')) return;
     await save(null, Number(new FormData(form).get('current_encounter')) || null);
   });
 }
@@ -1779,7 +1779,7 @@ function openDeliverableModal({ key, label, row, isKit }) {
         <div>
           <label class="text-xs text-white/40 block mb-1">Link do Kit Digital</label>
           <input name="file_url" class="field text-sm" value="${escHtml(data.file_url || '')}" placeholder="https://www.canva.com/…" />
-          <p class="text-xs text-white/30 mt-1">O Kit Digital é entregue como link — é este link que a aluna abre no app. Confira se ele abre sem pedir login.</p>
+          <p class="text-xs text-white/30 mt-1">O Kit Digital é entregue como link — é este link que abre no app. Confira se ele abre sem pedir login.</p>
         </div>
         <details>
           <summary class="text-xs text-white/40 cursor-pointer">Ou enviar um arquivo (opcional)</summary>

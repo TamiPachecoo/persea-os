@@ -564,7 +564,7 @@ function nayAgendaCard() {
       <p class="text-sm text-white/50">Agenda da Nay — próximos 7 dias</p>
       ${toConfirm ? `<span class="text-xs" style="color:var(--gold);">${toConfirm} encontro${toConfirm === 1 ? '' : 's'} para confirmar</span>` : '<span class="text-xs" style="color:#8fae8b;">Tudo confirmado ✓</span>'}
     </div>
-    <p class="text-xs text-white/30 mb-3">Confirme cada encontro com a aluna pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>
+    <p class="text-xs text-white/30 mb-3">Confirme cada encontro pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>
     ${[...byDay.entries()].map(([k, items]) => `
       <p class="text-xs uppercase mt-4 mb-1" style="color:var(--muted);letter-spacing:.1em;">${new Date(k).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
       ${items.map((it) => {
@@ -582,7 +582,7 @@ function nayAgendaCard() {
               <div class="flex gap-2 flex-wrap mt-2">
                 ${phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(confirmationMessage(it, currentMe))}" target="_blank" rel="noopener" data-wa-confirm="${it.id}" class="btn-primary" style="padding:6px 12px;font-size:12px;">WhatsApp: confirmar</a>`
                   : '<span class="text-xs" style="color:#d0705a;">Sem WhatsApp no cadastro</span>'}
-                ${it.confirmation_status !== 'confirmed' ? `<button type="button" data-set-conf="confirmed" data-item="${it.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">✓ Ela confirmou</button>` : ''}
+                ${it.confirmation_status !== 'confirmed' ? `<button type="button" data-set-conf="confirmed" data-item="${it.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">✓ Confirmado</button>` : ''}
                 ${it.confirmation_status !== 'reschedule' ? `<button type="button" data-set-conf="reschedule" data-item="${it.id}" class="btn-text" style="font-size:12px;">Pediu para remarcar</button>` : ''}
                 ${it.confirmation_status ? `<button type="button" data-set-conf="" data-item="${it.id}" class="btn-text" style="font-size:12px;color:var(--muted);">Desfazer</button>` : ''}
               </div>` : ''}
@@ -684,15 +684,15 @@ function welcomeCard() {
     <p class="text-sm text-white/50 mb-5 max-w-2xl">Você não precisa aprender tudo hoje. Este é o mapa do sistema. Cada item do menu tem uma função só:</p>
     <div class="mb-6" style="border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
       ${row('Agenda', 'O que a Nay pediu para você e as suas tarefas. É aqui que o seu dia começa.')}
-      ${row('Clientes', 'As alunas ativas. Clique em um cadastro para ver a jornada, os encontros e os materiais.')}
-      ${row('Cadastros', 'Alunas novas entrando: contrato, liberação do acesso ao app e à Hubla.')}
+      ${row('Clientes', 'Cadastros ativos. Clique em um cadastro para ver a jornada, os encontros e os materiais.')}
+      ${row('Cadastros', 'Novos cadastros entrando: contrato, liberação do acesso ao app e à Hubla.')}
       ${row('Templates', 'Os modelos do Canva para cada entrega. Abra, duplique e adapte.')}
       ${row('Financeiro', 'Anexar a nota fiscal de um pagamento. Ela aparece no app de quem é cliente.')}
     </div>
     <p class="text-xs uppercase mb-3" style="color:var(--muted);letter-spacing:.12em;">Seus três primeiros passos</p>
     <ol class="text-sm text-white/70 space-y-2 mb-6" style="list-style:decimal;padding-left:20px;">
       <li>Veja abaixo o que está para <b>hoje</b> e para os próximos dias.</li>
-      <li>Abra <a href="clients.html" style="color:var(--gold);">Clientes</a> e conheça a página de uma aluna, aba por aba.</li>
+      <li>Abra <a href="clients.html" style="color:var(--gold);">Clientes</a> e conheça a página de um cadastro, aba por aba.</li>
       <li>Instale o PERSEA no seu computador e no celular: <a href="/tutorial-instalar.html" target="_blank" rel="noopener" style="color:var(--gold);">veja como (1 minuto)</a>.</li>
     </ol>
     <div class="flex items-center justify-between gap-3 flex-wrap">

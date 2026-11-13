@@ -60,8 +60,8 @@ export async function mountEncounterBoard(container, clients) {
   const sortChips = (arr) => [...arr].sort((a, b) => Number(b.persea) - Number(a.persea) || a.client.full_name.localeCompare(b.client.full_name));
   container.innerHTML = card(`
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <p class="text-sm text-white/50">Onde cada aluna está — encontros E1 a E8</p>
-      <p class="text-xs text-white/30">Toque em um encontro para ver a lição de casa e as entregas · toque na inicial para abrir a aluna</p>
+      <p class="text-sm text-white/50">Onde cada cliente está — encontros E1 a E8</p>
+      <p class="text-xs text-white/30">Toque em um encontro para ver a lição de casa e as entregas · toque na inicial para abrir o cadastro</p>
     </div>
     <div class="flex items-center gap-4 flex-wrap text-xs text-white/40 mb-4">
       <span class="flex items-center gap-1.5"><span class="enc-chip enc-chip-legend">AB</span> Mentoria Persea</span>
@@ -101,7 +101,7 @@ async function openEncounterModal(number, refs, here) {
       ${encounterDetailHtml({ def, homework: homeworkFor(number, refs), deliverables: teamDeliverablesFor(number, refs), audience: 'admin' })}
       <div class="enc-sec enc-sec-people">
         <p class="enc-sec-title mb-2">Quem está aqui agora (${here.length})</p>
-        <div id="enc-here">${here.length ? '<p class="text-xs text-white/30">Carregando a lição de casa de cada aluna…</p>' : '<p class="text-sm text-white/30">Nenhuma aluna neste encontro agora.</p>'}</div>
+        <div id="enc-here">${here.length ? '<p class="text-xs text-white/30">Carregando a lição de casa de cada cliente…</p>' : '<p class="text-sm text-white/30">Ninguém neste encontro agora.</p>'}</div>
       </div>`,
   });
   if (!here.length) return;

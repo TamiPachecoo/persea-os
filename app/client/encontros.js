@@ -21,66 +21,17 @@ import { ENCOUNTER_MATERIALS, encounterNumber, loadEncounterMaterials } from '..
 import { applicableEncounters } from '../shared/journey-skips.js';
 import { loadProgramState } from '../shared/program-model.js';
 import {
-  loadEncounterRefs, loadPlan, clientSequence, positionOf, homeworkFor, teamDeliverablesFor,
-  activityStatusFromProgramState, homeworkProgress, encounterDetailHtml, studentTrackHtml,
+  loadStudentTimeline, studentTimelineHtml, wireStudentTimeline,
 } from '../shared/encounter-journey.js';
 
-// Sua linha de encontros: her encounters in her order (Nay may reorder them
-// for her), where she is now, and — for each one — the homework to finish
-// before it (a checklist, never a lock) and what she receives there.
+// Sua linha de encontros: shared with her home page (program.js) — see
+// loadStudentTimeline / studentTimelineHtml in shared/encounter-journey.js.
 async function loadStudentTrack(items) {
-  const client = __clientCtx.client;
-  if (!client?.program_slug?.startsWith('persea')) return null;
-  try {
-    const [refs, plan, state] = await Promise.all([loadEncounterRefs(), loadPlan(clientId), loadProgramState(clientId, client)]);
-    client._encounter_order = plan?.encounter_order || null;
-    const seq = clientSequence(refs.defs, client, plan);
-    const completedCount = items.filter((it) => it.type === 'individual_meeting' && it.status === 'completed').length;
-    const pos = positionOf(seq, completedCount, plan);
-    const activityStatus = activityStatusFromProgramState(state);
-    const nodes = seq.map((def, i) => ({
-      def, state: i < pos.index ? 'done' : i === pos.index ? 'current' : 'upcoming',
-      hw: homeworkProgress(homeworkFor(def.number, refs, activityStatus)),
-    }));
-    return { refs, activityStatus, nodes, pos };
-  } catch {
-    return null; // the rest of the page still renders
-  }
+  const completedCount = items.filter((it) => it.type === 'individual_meeting' && it.status === 'completed').length;
+  return loadStudentTimeline(clientId, __clientCtx.client, { completedCount });
 }
-function studentTrackSection(track) {
-  if (!track?.nodes.length) return '';
-  const cur = track.pos.def;
-  const curHw = cur ? homeworkFor(cur.number, track.refs, track.activityStatus) : [];
-  const pending = curHw.filter((h) => !h.completed);
-  const nextCard = cur ? card(`
-    <p class="text-xs uppercase mb-1" style="color:var(--gold);letter-spacing:.1em;">Antes do seu próximo encontro · E${cur.number} — ${cur.name}</p>
-    ${curHw.length
-      ? (pending.length
-        ? `<p class="text-sm text-white/60 mb-2">Conclua estas atividades antes do encontro:</p>
-           <ul>${curHw.map((h) => `<li class="flex items-center justify-between gap-3 py-1.5 border-b border-white/5 last:border-0"><a href="${h.route || '#'}" class="text-sm" style="color:${h.completed ? 'var(--muted)' : 'var(--cream)'};${h.completed ? 'text-decoration:line-through;' : 'text-decoration:underline;text-underline-offset:3px;'}">${h.completed ? '✓' : '○'} ${h.title}</a>${h.statusLabel ? `<span class="badge ${h.badgeClass}">${h.statusLabel}</span>` : ''}</li>`).join('')}</ul>`
-        : '<p class="text-sm" style="color:#8fae8b;">✓ Lição de casa concluída. Você está pronta para este encontro!</p>')
-      : '<p class="text-sm text-white/50">Nenhuma atividade obrigatória antes deste encontro.</p>'}
-  `, 'mb-6') : '';
-  return studentTrackHtml(track.nodes, { title: 'Sua linha de encontros', subtitle: cur ? `Agora: E${cur.number} · ${cur.name}` : 'Todos os encontros concluídos' }) + nextCard;
-}
-function wireStudentTrack(root, track) {
-  if (!track) return;
-  root.querySelectorAll('[data-encounter-open]').forEach((btn) => btn.addEventListener('click', () => {
-    const number = Number(btn.dataset.encounterOpen);
-    const node = track.nodes.find((n) => n.def.number === number);
-    openModal({
-      title: `Encontro ${number}`,
-      bodyHtml: encounterDetailHtml({
-        def: node.def,
-        homework: homeworkFor(number, track.refs, track.activityStatus),
-        deliverables: teamDeliverablesFor(number, track.refs),
-        audience: 'client',
-        activityHref: (h) => h.route || null,
-        positionLabel: node.state === 'done' ? 'Concluído' : node.state === 'current' ? 'Seu próximo encontro' : '',
-      }),
-    });
-  }));
-}
+const studentTrackSection = (track) => studentTimelineHtml(track);
+const wireStudentTrack = (root, track) => { if (track) wireStudentTimeline(root); };
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥', online_event: '🌐', photo_review: '📸',
