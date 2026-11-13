@@ -591,7 +591,7 @@ async function renderProductionCRM() {
     // id=undefined on every single client created this way (harmless to
     // the client creation itself, but a real failed request every time).
     content.querySelector('#new-client').addEventListener('click', () => openCreateClientModal());
-    if (lastLoadedClients.length) mountEncounterBoard(content.querySelector('#encounter-board'), lastLoadedClients);
+    if (lastLoadedClients.length) mountEncounterBoard(content.querySelector('#encounter-board'), lastLoadedClients, crmProfile);
   }
 }
 let lastLoadedClients = [];

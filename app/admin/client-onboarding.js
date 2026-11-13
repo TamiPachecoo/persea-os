@@ -860,7 +860,6 @@ function encounterTrackCard(journey, refs, activityStatus, plan) {
 }
 
 function encounterPlanCard(client, refs, plan) {
-  if (isAssistant) return '';
   const seq = clientSequence(refs.defs, client, plan);
   if (!seq.length) return '';
   const custom = !!plan?.encounter_order?.length;
@@ -2102,7 +2101,10 @@ function sessionPickerHtml(meetingId, sessions) {
 // She sees them on her Encontros page. Editable by whoever can write the
 // meeting (admin always; the assistant only on her own meetings — same
 // rule as agenda_items' RLS).
-const canEditMeeting = (m) => !isAssistant || m.assigned_to === 'assistant';
+// Also the meetings of encounters the assistant leads (E3 — see
+// encounter_defs.led_by_role), even when booked on Nay's agenda.
+const assistantLedEncounter = (m) => !!encounterCtx?.refs?.defByNumber.get(encounterNumber(m.title))?.led_by_role?.startsWith('assistant');
+const canEditMeeting = (m) => !isAssistant || m.assigned_to === 'assistant' || assistantLedEncounter(m);
 // Photos and documents for the meeting: private bucket, one folder per
 // student and meeting (<client>/<meeting>/...), the student can only read
 // her own folder (see migration meeting_shared_files).

@@ -18,14 +18,16 @@ import { renderShell, card, formatDate, isProductionEnvironment } from '../share
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { computeTeamNextStep } from '../shared/team-action-model.js';
+import { mountEncounterBoard } from '../admin/encounter-board.js';
 
-if (!(await requireProfile('assistant'))) throw new Error('not authorized');
+const assistantProfile = await requireProfile('assistant');
+if (!assistantProfile) throw new Error('not authorized');
 document.body.innerHTML = renderShell({ role: 'assistant', active: 'clients.html', title: 'Clientes' });
 const content = document.getElementById('app-content');
 
 async function loadRealActiveClients() {
   const { data: clients } = await supabase.from('clients')
-    .select('id, full_name, email, program_slug, tier')
+    .select('*')
     .eq('is_demo', false).eq('access_status', 'created')
     .order('full_name', { ascending: true });
   const rows = clients || [];
@@ -38,7 +40,8 @@ async function loadRealActiveClients() {
     : { data: [] };
   const nextMeetingByClient = new Map(); // first write per client wins — already ordered soonest-first
   (meetings || []).forEach((m) => { if (!nextMeetingByClient.has(m.related_student_id)) nextMeetingByClient.set(m.related_student_id, m); });
-  const withMeeting = rows.map((c) => ({ ...c, _nextMeeting: nextMeetingByClient.get(c.id) || null }));
+  // _status: the timeline board treats 'Acesso ativo' as past onboarding.
+  const withMeeting = rows.map((c) => ({ ...c, _status: { label: 'Acesso ativo' }, _nextMeeting: nextMeetingByClient.get(c.id) || null }));
   // Same real gap as admin/crm.js, same fix, same shared function — see
   // shared/team-action-model.js's own header for why this exists at all.
   await Promise.all(withMeeting.map(async (c) => { c._teamNextStep = await computeTeamNextStep(c, c.id); }));
@@ -69,14 +72,16 @@ async function renderProductionClientes() {
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Clientes</p>
-      <h1 class="text-3xl font-serif">Suas Clientes</h1>
-      <p class="text-sm text-white/40 mt-2 max-w-2xl">Clientes reais com acesso ativo ao Persea OS. Clique em um cadastro para abrir o workspace real.</p>
+      <h1 class="text-3xl font-serif">Clientes</h1>
+      <p class="text-sm text-white/40 mt-2 max-w-2xl">Cadastros com acesso ativo ao Persea OS. Na linha dos encontros, toque em um encontro para ver quem está nele, mover alguém de encontro ou editar o encontro (os conduzidos pela assistente, como o E3). Clique em um nome para abrir o workspace.</p>
     </div>
-    ${card(`<p class="text-sm text-white/50">${clients.length} cliente${clients.length === 1 ? '' : 's'} ativa${clients.length === 1 ? '' : 's'}</p>`, 'mb-6')}
+    <div id="encounter-board"></div>
+    ${card(`<p class="text-sm text-white/50">${clients.length} cadastro${clients.length === 1 ? '' : 's'} com acesso ativo</p>`, 'mb-6')}
     ${clients.length
       ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
       : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro ativo no momento — assim que um acesso for criado em Cadastros, ele aparece aqui.</p>')}
   `;
+  if (clients.length) mountEncounterBoard(content.querySelector('#encounter-board'), clients, assistantProfile);
 }
 
 function clientRow(c) {
@@ -101,7 +106,7 @@ function render() {
   content.innerHTML = `
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Clientes</p>
-      <h1 class="text-3xl font-serif">Suas Clientes</h1>
+      <h1 class="text-3xl font-serif">Clientes</h1>
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Contrato, links de pagamento, WhatsApp, projeto de imagens, guias, Kit Digital e acesso à Hubla — tudo o que falta fazer em cada caso, e o contexto para fazer bem.</p>
     </div>
     ${card(`<div class="divide-y" style="border-color:var(--line);">${all.map(clientRow).join('')}</div>`)}

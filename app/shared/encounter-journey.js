@@ -28,6 +28,8 @@ export const usesPerseaJourney = (client) => !!client?.program_slug?.startsWith(
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let refsPromise = null;
+// After editing an encounter (text, homework, checklist), reload it.
+export function resetEncounterRefs() { refsPromise = null; }
 // Reference data, identical for every student — loaded once per page.
 export function loadEncounterRefs() {
   if (!refsPromise) {
@@ -195,6 +197,7 @@ export function encounterDetailHtml({ def, homework, deliverables, audience = 'a
         <p class="font-serif text-lg">${esc(def.name)}</p>
         ${def.premium_only ? '<span class="premium-badge" style="font-size:10px;">Premium</span>' : ''}
         ${positionLabel ? `<span class="text-xs" style="color:var(--gold);">${esc(positionLabel)}</span>` : ''}
+        ${!isClient && def.led_by_role === 'assistant' ? '<span class="badge badge-progress" style="font-size:10px;">Conduzido pela assistente</span>' : ''}
       </div>
       <p class="text-sm text-white/50 mb-5">${esc(def.purpose)}</p>
       ${section(
