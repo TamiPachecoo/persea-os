@@ -214,7 +214,7 @@ async function render() {
     <div class="mb-8">
       <p class="text-white/40 text-sm mb-1">Boas-vindas à Persea,</p>
       <h1 class="text-3xl font-serif">${client.full_name}</h1>
-      <p class="text-sm text-white/40 mt-2">Antes de começar a Fase 1 da mentoria, vamos concluir seu cadastro.</p>
+      <p class="text-sm text-white/40 mt-2">Antes do seu primeiro encontro, vamos concluir seu cadastro.</p>
     </div>
     ${renderStepper(s)}
     <div ${!s.partyInfo?.submitted ? 'style="border-left:3px solid var(--terracotta); border-radius:4px;"' : ''}>${renderInfoForm(s.partyInfo)}</div>

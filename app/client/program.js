@@ -166,7 +166,8 @@ async function render() {
     return;
   }
 
-  const phaseCardsHtml = await Promise.all(phases.map(async (phase) => {
+  // Persea students follow the encounter timeline only — no "Fase" blocks.
+  const phaseCardsHtml = timeline ? [] : await Promise.all(phases.map(async (phase) => {
     const cards = await Promise.all(phase.activities.map(activityCard));
     return renderPhaseSection(phase, cards.join(''));
   }));
@@ -180,7 +181,7 @@ async function render() {
       <p class="text-xs text-white/30">${(contractMonths || programDef.duration_months) ? `Duração: ${contractMonths || programDef.duration_months} meses` : 'Duração a confirmar com a Nay'}</p>
     </div>
 
-    ${renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}${p.status === 'skipped' ? ' · não se aplica' : ''}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
+    ${timeline ? '' : renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}${p.status === 'skipped' ? ' · não se aplica' : ''}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
 
     ${card(`
       <div class="grid sm:grid-cols-3 gap-6 mb-5">
@@ -204,8 +205,9 @@ async function render() {
 
     ${timeline ? studentTimelineHtml(timeline) : ''}
 
+    ${timeline ? '' : `
     <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">Sua Jornada</p>
-    <div class="journey-phases">${phaseCardsHtml.join('')}</div>
+    <div class="journey-phases">${phaseCardsHtml.join('')}</div>`}
 
   `;
 
@@ -217,7 +219,7 @@ async function render() {
       render();
     });
   });
-  wirePhaseTrackerNav(content);
+  if (!timeline) wirePhaseTrackerNav(content);
   if (timeline) wireStudentTimeline(content);
 }
 
