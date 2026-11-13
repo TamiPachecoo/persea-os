@@ -509,21 +509,84 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '
 async function loadReal() {
   const from = new Date(Date.now() - 2 * 3600e3).toISOString();
   const to = new Date(Date.now() + 8 * 86400e3).toISOString();
-  const [{ data: items }, { data: clients }, { data: nayItems }] = await Promise.all([
+  const [{ data: items }, { data: clients }, { data: nayItems }, nayGoogle] = await Promise.all([
     supabase.from('agenda_items').select('*').eq('assigned_to', 'assistant').order('item_date'),
-    supabase.from('clients').select('id, full_name').eq('is_demo', false).order('full_name'),
+    supabase.from('clients').select('id, full_name, email').eq('is_demo', false).order('full_name'),
     // Nay's own agenda (everything not assigned to the assistant), next 7 days.
     supabase.from('agenda_items').select('*').or('assigned_to.is.null,assigned_to.eq.nay').eq('status', 'upcoming')
       .gte('item_date', from).lte('item_date', to).order('item_date'),
+    loadNayGoogleEvents(from, to),
   ]);
   realItems = items || [];
   realClients = new Map((clients || []).map((c) => [c.id, c.full_name]));
   nayAgenda = nayItems || [];
+  nayGoogleStatus = nayGoogle.status;
+  // Nay books most meetings straight in her Google Calendar: merge them in
+  // (skipping the ones that already exist here as agenda items) and find the
+  // student of each one, so the WhatsApp confirmation works for them too.
+  const linked = new Set(nayAgenda.map((it) => it.google_event_id).filter(Boolean));
+  const gEvents = nayGoogle.events.filter((e) => !linked.has(e.id) && !e.all_day && e.start);
+  const { data: allParties } = gEvents.length
+    ? await supabase.from('party_info').select('client_id, email, whatsapp, social_name, full_name')
+    : { data: [] };
+  const { data: confs } = gEvents.length
+    ? await supabase.from('calendar_event_confirmations').select('*').in('event_id', gEvents.map((e) => e.id))
+    : { data: [] };
+  const confById = new Map((confs || []).map((c) => [c.event_id, c]));
+  const match = studentMatcher(clients || [], allParties || []);
+  nayAgenda = [...nayAgenda, ...gEvents.map((e) => {
+    const conf = confById.get(e.id);
+    const meet = [e.hangout_link, e.meet_url, e.location].find((v) => /^https?:\/\//i.test(v || '')) || null;
+    return {
+      id: `g:${e.id}`, google_id: e.id, source: 'google', title: e.summary || '(sem título)', item_date: e.start,
+      type: 'individual_meeting', online_link: meet, html_link: e.html_link,
+      related_student_id: conf?.client_id || match(e),
+      confirmation_status: conf?.status || null, confirmation_by_name: conf?.confirmed_by_name || null,
+    };
+  })].sort((a, b) => new Date(a.item_date) - new Date(b.item_date));
   const studentIds = [...new Set(nayAgenda.map((it) => it.related_student_id).filter(Boolean))];
   const { data: parties } = studentIds.length
     ? await supabase.from('party_info').select('client_id, whatsapp, social_name, full_name').in('client_id', studentIds)
     : { data: [] };
   partyByClient = new Map((parties || []).map((p) => [p.client_id, p]));
+}
+
+// Nay's Google Calendar, read server-side with HER connection (the
+// assistant's own Google account is a different calendar). The function
+// answers owner:'nay' only to staff; an older deployment that ignores the
+// option would return the caller's own calendar, so anything not tagged
+// owner:'nay' is dropped rather than shown as Nay's.
+let nayGoogleStatus = 'ok';
+async function loadNayGoogleEvents(from, to) {
+  try {
+    const { data, error } = await supabase.functions.invoke('google-calendar-list-events', { body: { owner: 'nay', time_min: from, time_max: to } });
+    if (error || data?.error) return { status: data?.error === 'not_connected' ? 'not_connected' : 'error', events: [] };
+    if (data?.owner !== 'nay') return { status: 'error', events: [] };
+    return { status: 'ok', events: data.events || [] };
+  } catch { return { status: 'error', events: [] }; }
+}
+
+// Which student is this Google event with? 1) an attendee's e-mail matches
+// the student's (cadastro or login e-mail); 2) the student's full name, or
+// first + last name, appears in the event title.
+function studentMatcher(clients, parties) {
+  const norm = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const byEmail = new Map();
+  clients.forEach((c) => { if (c.email) byEmail.set(norm(c.email), c.id); });
+  parties.forEach((p) => { if (p.email && p.client_id) byEmail.set(norm(p.email), p.client_id); });
+  const names = [];
+  clients.forEach((c) => {
+    const parts = norm(c.full_name).split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) names.push([c.id, norm(c.full_name)], [c.id, `${parts[0]} ${parts[parts.length - 1]}`]);
+  });
+  parties.forEach((p) => { const n = norm(p.social_name); if (p.client_id && n.split(/\s+/).length >= 2) names.push([p.client_id, n]); });
+  names.sort((a, b) => b[1].length - a[1].length);
+  return (e) => {
+    for (const a of e.attendees || []) { const id = byEmail.get(norm(a.email || a)); if (id) return id; }
+    const t = ` ${norm(`${e.summary || ''} ${e.description || ''}`).replace(/[^a-z0-9]+/g, ' ')} `;
+    const hit = names.find(([, n]) => t.includes(` ${n} `));
+    return hit ? hit[0] : null;
+  };
 }
 
 // --- Agenda da Nay: confirmar encontros pelo WhatsApp --------------------
@@ -555,7 +618,10 @@ function confirmationMessage(it, me) {
   return `Olá, ${first}! Aqui é a ${sender}, da equipe da Nay.\n\nPassando para confirmar o seu encontro com a Nay *${it.title}*, ${when}, às *${hour}*.${link}\n\nPode me confirmar se está tudo certo? 😊\n\nCom carinho,\n${sender} · Equipe PERSEA`;
 }
 function nayAgendaCard() {
-  if (!nayAgenda.length) return card('<p class="text-sm text-white/50 mb-1">Agenda da Nay — próximos 7 dias</p><p class="text-xs text-white/30">Nada na agenda da Nay nos próximos 7 dias.</p>', 'mb-6');
+  const gNote = nayGoogleStatus === 'not_connected'
+    ? '<p class="text-xs mt-2" style="color:#d0705a;">O Google Calendar da Nay não está conectado — peça para ela conectar em Agenda → Connect Google Calendar.</p>'
+    : nayGoogleStatus === 'error' ? '<p class="text-xs mt-2" style="color:#d0705a;">Não foi possível ler o Google Calendar da Nay agora.</p>' : '';
+  if (!nayAgenda.length) return card(`<p class="text-sm text-white/50 mb-1">Agenda da Nay — próximos 7 dias</p><p class="text-xs text-white/30">Nada na agenda da Nay nos próximos 7 dias.</p>${gNote}`, 'mb-6');
   const byDay = new Map();
   nayAgenda.forEach((it) => { const k = new Date(it.item_date).toDateString(); (byDay.get(k) || byDay.set(k, []).get(k)).push(it); });
   const toConfirm = nayAgenda.filter((it) => CONFIRMABLE.has(it.type) && it.related_student_id && it.confirmation_status !== 'confirmed').length;
@@ -564,7 +630,7 @@ function nayAgendaCard() {
       <p class="text-sm text-white/50">Agenda da Nay — próximos 7 dias</p>
       ${toConfirm ? `<span class="text-xs" style="color:var(--gold);">${toConfirm} encontro${toConfirm === 1 ? '' : 's'} para confirmar</span>` : '<span class="text-xs" style="color:#8fae8b;">Tudo confirmado ✓</span>'}
     </div>
-    <p class="text-xs text-white/30 mb-3">Confirme cada encontro pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>
+    <p class="text-xs text-white/30 mb-3">Inclui os eventos do Google Calendar da Nay. Confirme cada encontro pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>${gNote}
     ${[...byDay.entries()].map(([k, items]) => `
       <p class="text-xs uppercase mt-4 mb-1" style="color:var(--muted);letter-spacing:.1em;">${new Date(k).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
       ${items.map((it) => {
@@ -575,9 +641,14 @@ function nayAgendaCard() {
         return `
           <div class="py-2 border-b border-white/5 last:border-0">
             <div class="flex items-center justify-between gap-3 flex-wrap">
-              <p class="text-sm"><span class="text-white/50">${formatTime(it.item_date)}</span> · ${AGENDA_TYPE_ICON[it.type] || ''} ${esc(it.title)}${student ? ` <span class="text-white/40">— ${esc(student)}</span>` : ''}</p>
+              <p class="text-sm"><span class="text-white/50">${formatTime(it.item_date)}</span> · ${it.source === 'google' ? '<span title="Google Calendar da Nay">📅</span>' : AGENDA_TYPE_ICON[it.type] || ''} ${it.html_link ? `<a href="${esc(it.html_link)}" target="_blank" rel="noopener" class="hover:underline">${esc(it.title)}</a>` : esc(it.title)}${student ? ` <span class="text-white/40">— ${esc(student)}</span>` : ''}</p>
               ${conf ? `<span class="text-xs" style="color:${conf[1]};">${conf[0]}${it.confirmation_by_name ? ` · ${esc(it.confirmation_by_name)}` : ''}</span>` : confirmable ? '<span class="text-xs text-white/30">Não confirmado</span>' : ''}
             </div>
+            ${it.source === 'google' && !it.related_student_id ? `
+              <div class="mt-2"><select data-pick-student="${esc(it.id)}" class="input" style="padding:6px 10px;font-size:12px;max-width:280px;">
+                <option value="">Encontro com qual cliente? (para confirmar)</option>
+                ${[...realClients.entries()].map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}
+              </select></div>` : ''}
             ${confirmable ? `
               <div class="flex gap-2 flex-wrap mt-2">
                 ${phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(confirmationMessage(it, currentMe))}" target="_blank" rel="noopener" data-wa-confirm="${it.id}" class="btn-primary" style="padding:6px 12px;font-size:12px;">WhatsApp: confirmar</a>`
@@ -592,7 +663,16 @@ function nayAgendaCard() {
 }
 let currentMe = null;
 function wireNayAgenda(root) {
-  const setConf = async (id, status) => {
+  const setConf = async (id, status, clientId) => {
+    const it = nayAgenda.find((x) => x.id === id);
+    if (it?.source === 'google') {
+      const { error } = await supabase.from('calendar_event_confirmations').upsert({
+        event_id: it.google_id, client_id: clientId || it.related_student_id || null, event_start: it.item_date,
+        status: clientId ? it.confirmation_status : (status || null),
+      });
+      if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return false; }
+      return true;
+    }
     const { error } = await supabase.rpc('set_meeting_confirmation', { p_item: id, p_status: status || null });
     if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return false; }
     return true;
@@ -602,6 +682,14 @@ function wireNayAgenda(root) {
     if (!it) return;
     supabase.from('client_message_log').insert({ client_id: it.related_student_id, kind: 'reminder', channel: 'whatsapp', body: confirmationMessage(it, currentMe), sent_by: currentMe?.id, sent_by_name: String(currentMe?.full_name || '').replace(/\(.*?\)/g, '').trim() || null }).then(() => {});
     if (!it.confirmation_status) { await setConf(it.id, 'message_sent'); setTimeout(renderReal, 600); }
+  }));
+  // Google event the matcher couldn't place: the assistant picks the student
+  // once; it's saved with the event, so the WhatsApp button appears.
+  root.querySelectorAll('[data-pick-student]').forEach((sel) => sel.addEventListener('change', async () => {
+    const it = nayAgenda.find((x) => x.id === sel.dataset.pickStudent);
+    if (!it || !sel.value) return;
+    sel.disabled = true;
+    if (await setConf(it.id, null, sel.value)) renderReal(); else sel.disabled = false;
   }));
   root.querySelectorAll('[data-set-conf]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
