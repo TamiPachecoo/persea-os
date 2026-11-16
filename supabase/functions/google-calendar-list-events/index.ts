@@ -118,6 +118,7 @@ Deno.serve(async (req) => {
           location: e.location || null,
           description: typeof e.description === "string" ? e.description.slice(0, 500) : null,
           attendees: (e.attendees || []).filter((a: any) => !a.self && !a.organizer && a.email).map((a: any) => ({ email: a.email })),
+          recurring_event_id: e.recurringEventId || null,
         } : {}),
       }));
 

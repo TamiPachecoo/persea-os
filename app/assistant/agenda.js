@@ -530,17 +530,19 @@ async function loadReal() {
     ? await supabase.from('party_info').select('client_id, email, whatsapp, social_name, full_name')
     : { data: [] };
   const { data: confs } = gEvents.length
-    ? await supabase.from('calendar_event_confirmations').select('*').in('event_id', gEvents.map((e) => e.id))
+    ? await supabase.from('calendar_event_confirmations').select('*')
+      .in('event_id', [...gEvents.map((e) => e.id), ...new Set(gEvents.map((e) => e.recurring_event_id).filter(Boolean).map((r) => `series:${r}`))])
     : { data: [] };
   const confById = new Map((confs || []).map((c) => [c.event_id, c]));
   const match = studentMatcher(clients || [], allParties || []);
   nayAgenda = [...nayAgenda, ...gEvents.map((e) => {
-    const conf = confById.get(e.id);
+    const series = e.recurring_event_id ? confById.get(`series:${e.recurring_event_id}`) : null;
+    const conf = confById.get(e.id)?.status || confById.get(e.id)?.client_id ? confById.get(e.id) : series || confById.get(e.id);
     const meet = [e.hangout_link, e.meet_url, e.location].find((v) => /^https?:\/\//i.test(v || '')) || null;
     return {
-      id: `g:${e.id}`, google_id: e.id, source: 'google', title: e.summary || '(sem título)', item_date: e.start,
+      id: `g:${e.id}`, google_id: e.id, recurring_event_id: e.recurring_event_id || null, source: 'google', title: e.summary || '(sem título)', item_date: e.start,
       type: 'individual_meeting', online_link: meet, html_link: e.html_link,
-      related_student_id: conf?.client_id || match(e),
+      related_student_id: conf?.status === 'personal' ? null : conf?.client_id || match(e),
       confirmation_status: conf?.status || null, confirmation_by_name: conf?.confirmed_by_name || null,
     };
   })].sort((a, b) => new Date(a.item_date) - new Date(b.item_date));
@@ -598,6 +600,7 @@ let nayAgenda = [];
 let partyByClient = new Map();
 const CONFIRMABLE = new Set(['individual_meeting', 'checkpoint', 'photo_review', 'class']);
 const CONF_LABEL = {
+  personal: ['🌙 Pessoal', 'var(--muted)'],
   message_sent: ['Mensagem enviada · aguardando resposta', 'var(--gold)'],
   confirmed: ['✓ Confirmado', '#8fae8b'],
   reschedule: ['↻ Pediu para remarcar', '#d0705a'],
@@ -617,48 +620,91 @@ function confirmationMessage(it, me) {
   const link = /^https?:\/\//i.test(it.online_link || '') ? `\n\nLink da reunião: ${it.online_link}` : '';
   return `Olá, ${first}! Aqui é a ${sender}, da equipe da Nay.\n\nPassando para confirmar o seu encontro com a Nay *${it.title}*, ${when}, às *${hour}*.${link}\n\nPode me confirmar se está tudo certo? 😊\n\nCom carinho,\n${sender} · Equipe PERSEA`;
 }
+// Week strip (7 day tiles) + the chosen day's meetings. A Google event can
+// be marked "Pessoal" (Nay's own time): it leaves the confirmation count and
+// folds into a dimmed line; for a repeating event, every repetition.
+let nayDay = null; // toDateString() of the open day
+const isPersonal = (it) => it.confirmation_status === 'personal';
+const needsConfirm = (it) => !isPersonal(it) && CONFIRMABLE.has(it.type) && it.related_student_id && it.confirmation_status !== 'confirmed';
+const needsTriage = (it) => it.source === 'google' && !it.related_student_id && !isPersonal(it);
+function nayItemHtml(it) {
+  const student = realClients.get(it.related_student_id);
+  const confirmable = CONFIRMABLE.has(it.type) && it.related_student_id;
+  const phone = confirmable ? waDigits(partyByClient.get(it.related_student_id)?.whatsapp) : '';
+  const conf = CONF_LABEL[it.confirmation_status];
+  const titleHtml = it.html_link ? `<a href="${esc(it.html_link)}" target="_blank" rel="noopener" class="hover:underline">${esc(it.title)}</a>` : esc(it.title);
+  return `
+    <div class="nay-item ${conf ? `nay-item-${it.confirmation_status}` : needsTriage(it) || confirmable ? 'nay-item-open' : ''}">
+      <div class="nay-item-time">${formatTime(it.item_date)}</div>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-2 flex-wrap">
+          <div class="min-w-0">
+            <p class="text-sm font-medium">${titleHtml}</p>
+            ${student ? `<p class="text-xs mt-0.5" style="color:var(--gold);">${esc(student)}</p>` : ''}
+          </div>
+          ${conf ? `<span class="nay-pill" style="color:${conf[1]};border-color:${conf[1]};">${conf[0]}</span>` : confirmable ? '<span class="nay-pill">A confirmar</span>' : ''}
+        </div>
+        ${needsTriage(it) ? `
+          <div class="flex gap-2 flex-wrap items-center mt-2">
+            <select data-pick-student="${esc(it.id)}" class="field" style="padding:6px 10px;font-size:12px;width:auto;max-width:100%;">
+              <option value="">Encontro com qual cliente?</option>
+              ${[...realClients.entries()].map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}
+            </select>
+            <button type="button" data-set-conf="personal" data-item="${esc(it.id)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">🌙 É pessoal</button>
+          </div>` : ''}
+        ${confirmable ? `
+          <div class="flex gap-2 flex-wrap mt-2">
+            ${it.confirmation_status !== 'confirmed' ? (phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(confirmationMessage(it, currentMe))}" target="_blank" rel="noopener" data-wa-confirm="${esc(it.id)}" class="btn-primary" style="padding:6px 12px;font-size:12px;">WhatsApp</a>`
+              : '<span class="text-xs" style="color:#d0705a;">Sem WhatsApp no cadastro</span>') : ''}
+            ${it.confirmation_status !== 'confirmed' ? `<button type="button" data-set-conf="confirmed" data-item="${esc(it.id)}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">✓ Confirmou</button>` : ''}
+            ${!['reschedule', 'confirmed'].includes(it.confirmation_status) ? `<button type="button" data-set-conf="reschedule" data-item="${esc(it.id)}" class="btn-text" style="font-size:12px;">Remarcar</button>` : ''}
+            ${it.confirmation_status ? `<button type="button" data-set-conf="" data-item="${esc(it.id)}" class="btn-text" style="font-size:12px;color:var(--muted);">Desfazer</button>` : ''}
+            ${it.source === 'google' && !it.confirmation_status ? `<button type="button" data-set-conf="personal" data-item="${esc(it.id)}" class="btn-text" style="font-size:12px;color:var(--muted);">É pessoal</button>` : ''}
+          </div>` : ''}
+      </div>
+    </div>`;
+}
 function nayAgendaCard() {
   const gNote = nayGoogleStatus === 'not_connected'
     ? '<p class="text-xs mt-2" style="color:#d0705a;">O Google Calendar da Nay não está conectado — peça para ela conectar em Agenda → Connect Google Calendar.</p>'
     : nayGoogleStatus === 'error' ? '<p class="text-xs mt-2" style="color:#d0705a;">Não foi possível ler o Google Calendar da Nay agora.</p>' : '';
-  if (!nayAgenda.length) return card(`<p class="text-sm text-white/50 mb-1">Agenda da Nay — próximos 7 dias</p><p class="text-xs text-white/30">Nada na agenda da Nay nos próximos 7 dias.</p>${gNote}`, 'mb-6');
-  const byDay = new Map();
-  nayAgenda.forEach((it) => { const k = new Date(it.item_date).toDateString(); (byDay.get(k) || byDay.set(k, []).get(k)).push(it); });
-  const toConfirm = nayAgenda.filter((it) => CONFIRMABLE.has(it.type) && it.related_student_id && it.confirmation_status !== 'confirmed').length;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return d; });
+  const byDay = new Map(days.map((d) => [d.toDateString(), []]));
+  nayAgenda.forEach((it) => byDay.get(new Date(it.item_date).toDateString())?.push(it));
+  const pending = (list) => list.filter((it) => needsConfirm(it) || needsTriage(it)).length;
+  if (!nayDay || !byDay.has(nayDay)) nayDay = (days.find((d) => pending(byDay.get(d.toDateString()))) || days[0]).toDateString();
+  const totalPending = [...byDay.values()].reduce((n, l) => n + pending(l), 0);
+  const tile = (d) => {
+    const k = d.toDateString(); const list = byDay.get(k); const work = list.filter((it) => !isPersonal(it));
+    const p = pending(list);
+    return `
+      <button type="button" data-nay-day="${k}" class="nay-day ${k === nayDay ? 'nay-day-on' : ''} ${work.length ? '' : 'nay-day-empty'}">
+        <span class="nay-day-wd">${k === start.toDateString() ? 'Hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
+        <span class="nay-day-n">${d.getDate()}</span>
+        <span class="nay-day-st">${p ? `<span class="nay-badge">${p}</span>` : work.length ? '<span style="color:#8fae8b;">✓</span>' : '·'}</span>
+      </button>`;
+  };
+  const list = byDay.get(nayDay) || [];
+  const work = list.filter((it) => !isPersonal(it));
+  const personal = list.filter(isPersonal);
+  const dayLabel = new Date(nayDay).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   return card(`
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <p class="text-sm text-white/50">Agenda da Nay — próximos 7 dias</p>
-      ${toConfirm ? `<span class="text-xs" style="color:var(--gold);">${toConfirm} encontro${toConfirm === 1 ? '' : 's'} para confirmar</span>` : '<span class="text-xs" style="color:#8fae8b;">Tudo confirmado ✓</span>'}
+      <p class="text-sm text-white/50">Agenda da Nay</p>
+      ${totalPending ? `<span class="text-xs" style="color:var(--gold);">${totalPending} para confirmar na semana</span>` : '<span class="text-xs" style="color:#8fae8b;">Semana em dia ✓</span>'}
     </div>
-    <p class="text-xs text-white/30 mb-3">Inclui os eventos do Google Calendar da Nay. Confirme cada encontro pelo WhatsApp e marque a resposta aqui — a Nay vê na agenda dela.</p>${gNote}
-    ${[...byDay.entries()].map(([k, items]) => `
-      <p class="text-xs uppercase mt-4 mb-1" style="color:var(--muted);letter-spacing:.1em;">${new Date(k).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-      ${items.map((it) => {
-        const student = realClients.get(it.related_student_id);
-        const confirmable = CONFIRMABLE.has(it.type) && it.related_student_id;
-        const phone = confirmable ? waDigits(partyByClient.get(it.related_student_id)?.whatsapp) : '';
-        const conf = CONF_LABEL[it.confirmation_status];
-        return `
-          <div class="py-2 border-b border-white/5 last:border-0">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
-              <p class="text-sm"><span class="text-white/50">${formatTime(it.item_date)}</span> · ${it.source === 'google' ? '<span title="Google Calendar da Nay">📅</span>' : AGENDA_TYPE_ICON[it.type] || ''} ${it.html_link ? `<a href="${esc(it.html_link)}" target="_blank" rel="noopener" class="hover:underline">${esc(it.title)}</a>` : esc(it.title)}${student ? ` <span class="text-white/40">— ${esc(student)}</span>` : ''}</p>
-              ${conf ? `<span class="text-xs" style="color:${conf[1]};">${conf[0]}${it.confirmation_by_name ? ` · ${esc(it.confirmation_by_name)}` : ''}</span>` : confirmable ? '<span class="text-xs text-white/30">Não confirmado</span>' : ''}
-            </div>
-            ${it.source === 'google' && !it.related_student_id ? `
-              <div class="mt-2"><select data-pick-student="${esc(it.id)}" class="input" style="padding:6px 10px;font-size:12px;max-width:280px;">
-                <option value="">Encontro com qual cliente? (para confirmar)</option>
-                ${[...realClients.entries()].map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}
-              </select></div>` : ''}
-            ${confirmable ? `
-              <div class="flex gap-2 flex-wrap mt-2">
-                ${phone ? `<a href="https://wa.me/${phone}?text=${encodeURIComponent(confirmationMessage(it, currentMe))}" target="_blank" rel="noopener" data-wa-confirm="${it.id}" class="btn-primary" style="padding:6px 12px;font-size:12px;">WhatsApp: confirmar</a>`
-                  : '<span class="text-xs" style="color:#d0705a;">Sem WhatsApp no cadastro</span>'}
-                ${it.confirmation_status !== 'confirmed' ? `<button type="button" data-set-conf="confirmed" data-item="${it.id}" class="btn-ghost" style="padding:6px 12px;font-size:12px;">✓ Confirmado</button>` : ''}
-                ${it.confirmation_status !== 'reschedule' ? `<button type="button" data-set-conf="reschedule" data-item="${it.id}" class="btn-text" style="font-size:12px;">Pediu para remarcar</button>` : ''}
-                ${it.confirmation_status ? `<button type="button" data-set-conf="" data-item="${it.id}" class="btn-text" style="font-size:12px;color:var(--muted);">Desfazer</button>` : ''}
-              </div>` : ''}
-          </div>`;
-      }).join('')}`).join('')}
+    ${gNote}
+    <div class="nay-week mt-3">${days.map(tile).join('')}</div>
+    <div class="nay-dayview">
+      <p class="text-xs uppercase mb-2" style="color:var(--muted);letter-spacing:.1em;">${dayLabel}</p>
+      ${work.length ? work.map(nayItemHtml).join('') : `<p class="text-sm text-white/30 py-3">${personal.length ? 'Só tempo pessoal neste dia.' : 'Nada na agenda da Nay neste dia.'}</p>`}
+      ${personal.length ? `
+        <details class="mt-3">
+          <summary class="text-xs cursor-pointer" style="color:var(--muted);">🌙 Tempo pessoal (${personal.length})</summary>
+          ${personal.map((it) => `<div class="flex items-center justify-between gap-2 py-1.5 text-xs" style="color:var(--muted);"><span>${formatTime(it.item_date)} · ${esc(it.title)}</span><button type="button" data-set-conf="" data-item="${esc(it.id)}" class="btn-text" style="font-size:11px;">Não é pessoal</button></div>`).join('')}
+        </details>` : ''}
+    </div>
   `, 'mb-6');
 }
 let currentMe = null;
@@ -666,8 +712,18 @@ function wireNayAgenda(root) {
   const setConf = async (id, status, clientId) => {
     const it = nayAgenda.find((x) => x.id === id);
     if (it?.source === 'google') {
+      const tbl = supabase.from('calendar_event_confirmations');
+      // "Pessoal" on a repeating event marks the whole series (series:<id>);
+      // undoing it clears the series too.
+      const series = it.recurring_event_id ? `series:${it.recurring_event_id}` : null;
+      if (series && (status === 'personal' || (!status && !clientId && it.confirmation_status === 'personal'))) {
+        const { error: sErr } = status === 'personal'
+          ? await tbl.upsert({ event_id: series, status: 'personal', client_id: null })
+          : await supabase.from('calendar_event_confirmations').delete().eq('event_id', series);
+        if (sErr) { toast('Não foi possível salvar agora.', { tone: 'error' }); return false; }
+      }
       const { error } = await supabase.from('calendar_event_confirmations').upsert({
-        event_id: it.google_id, client_id: clientId || it.related_student_id || null, event_start: it.item_date,
+        event_id: it.google_id, client_id: status === 'personal' ? null : clientId || it.related_student_id || null, event_start: it.item_date,
         status: clientId ? it.confirmation_status : (status || null),
       });
       if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return false; }
@@ -691,10 +747,17 @@ function wireNayAgenda(root) {
     sel.disabled = true;
     if (await setConf(it.id, null, sel.value)) renderReal(); else sel.disabled = false;
   }));
+  root.querySelectorAll('[data-nay-day]').forEach((b) => b.addEventListener('click', () => {
+    nayDay = b.dataset.nayDay;
+    const cardEl = b.closest('.nay-week')?.parentElement;
+    if (cardEl) { cardEl.outerHTML = nayAgendaCard(); wireNayAgenda(root); }
+  }));
   root.querySelectorAll('[data-set-conf]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
     if (await setConf(b.dataset.item, b.dataset.setConf)) {
-      toast(b.dataset.setConf === 'confirmed' ? 'Encontro confirmado ✓' : b.dataset.setConf === 'reschedule' ? 'Marcado: pediu para remarcar. Avise a Nay.' : 'Desfeito.');
+      const it = nayAgenda.find((x) => x.id === b.dataset.item);
+      toast(b.dataset.setConf === 'confirmed' ? 'Encontro confirmado ✓' : b.dataset.setConf === 'reschedule' ? 'Marcado: pediu para remarcar. Avise a Nay.'
+        : b.dataset.setConf === 'personal' ? (it?.recurring_event_id ? 'Marcado como pessoal — e as repetições deste evento também.' : 'Marcado como pessoal.') : 'Desfeito.');
       renderReal();
     } else b.disabled = false;
   }));
@@ -803,7 +866,6 @@ async function renderReal() {
   const at = (it) => new Date(it.item_date);
   const overdue = open.filter((it) => at(it) < startToday);
   const today = open.filter((it) => at(it) >= startToday && at(it) < endToday);
-  const week = open.filter((it) => at(it) >= endToday && at(it) < end7);
   content.innerHTML = `
     <div class="mb-8 flex items-end justify-between gap-4 flex-wrap">
       <div>
@@ -818,7 +880,6 @@ async function renderReal() {
     ${nayAgendaCard()}
     ${overdue.length ? realSection('⚠ Atrasados', overdue, '', 'color:var(--terracotta);') : ''}
     ${realSection('Hoje', today, 'Nada para hoje.')}
-    ${realSection('Próximos 7 dias', week, 'Nada nos próximos 7 dias.')}
     ${realCalendar()}
     ${welcomeClosed() ? '<button type="button" id="open-welcome" class="btn-text">Ver o guia de boas-vindas</button>' : ''}
   `;
