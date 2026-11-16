@@ -97,7 +97,7 @@ export const ENCOUNTER_DEFS = [
     premiumOnly: false,
   },
   {
-    number: 4, slug: 'e4', name: 'Comunicação e Vendas', phase: 2,
+    number: 4, slug: 'e4', name: 'Projeção Digital', phase: 2,
     purpose: 'COMO e ONDE vender — cliente já fez o ensaio fotográfico profissional. Nay apresenta o novo Kit Digital e o Playbook de Marca Pessoal, alinhando posicionamento, metas tangíveis e precificação.',
     premiumOnly: false,
   },
