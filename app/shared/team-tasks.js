@@ -53,6 +53,57 @@ async function loadAssistants(profile) {
   return rows || [];
 }
 
+// --- history ---------------------------------------------------------------
+// Every task/question with its whole conversation, newest activity first:
+// the record of what the team did — per student (client page) or for the
+// team's own workflow (tasks with no student), in Tarefas → Histórico.
+export async function loadHistory({ clientId = null } = {}) {
+  let q = supabase.from('team_tasks').select('*').order('updated_at', { ascending: false }).limit(clientId ? 300 : 500);
+  if (clientId) q = q.eq('client_id', clientId);
+  const { data: tasks } = await q;
+  const ids = (tasks || []).map((t) => t.id);
+  const comments = [];
+  for (let i = 0; i < ids.length; i += 80) {
+    const { data } = await supabase.from('team_task_comments').select('*').in('task_id', ids.slice(i, i + 80)).order('created_at');
+    comments.push(...(data || []));
+  }
+  const byTask = new Map();
+  comments.forEach((c) => (byTask.get(c.task_id) || byTask.set(c.task_id, []).get(c.task_id)).push(c));
+  return (tasks || []).map((t) => {
+    const msgs = byTask.get(t.id) || [];
+    const last = [t.updated_at, t.created_at, t.completed_at, msgs.at(-1)?.created_at].filter(Boolean).map((d) => new Date(d).getTime());
+    return { ...t, comments: msgs, lastActivity: Math.max(...last) };
+  }).sort((a, b) => b.lastActivity - a.lastActivity);
+}
+
+function historyThread(t, { profile, clientsById, showClient = true }) {
+  const client = showClient && t.client_id ? clientsById.get(t.client_id) : null;
+  const toWho = t.assigned_role === 'admin' ? 'Nay' : (t.assigned_to_name ? firstName(t.assigned_to_name) : 'Assistente');
+  const fromWho = t.source === 'auto' ? 'Sistema' : firstName(t.created_by_name) || 'Equipe';
+  const events = [
+    { at: t.created_at, html: `<b>${esc(fromWho)}</b> ${t.kind === 'question' ? 'perguntou' : 'pediu'} para <b>${esc(toWho)}</b>${t.notes ? `<span class="block text-white/60 mt-0.5" style="white-space:pre-wrap;">${esc(t.notes)}</span>` : ''}` },
+    ...t.comments.map((c) => ({ at: c.created_at, html: `<b>${esc(firstName(c.author_name) || 'Equipe')}</b><span class="block text-white/70 mt-0.5" style="white-space:pre-wrap;">${esc(c.body)}</span>` })),
+    ...(t.status === 'done' && t.completed_at ? [{ at: t.completed_at, html: `✓ Concluída por <b>${esc(firstName(t.completed_by_name) || 'equipe')}</b>` }] : []),
+  ].sort((a, b) => new Date(a.at) - new Date(b.at));
+  const shown = events.slice(-4);
+  const hidden = events.slice(0, -4);
+  const ev = (e) => `<div class="hist-ev"><span class="hist-ev-at">${formatDateTime(e.at)}</span><span class="text-xs">${e.html}</span></div>`;
+  return `
+    <div class="hist-thread">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <button type="button" data-task-open="${t.id}" class="hist-title text-left min-w-0">
+          <span class="text-sm ${t.status === 'done' ? 'text-white/60' : ''}">${t.kind === 'question' ? '<span class="task-kind">Pergunta</span> ' : ''}${esc(t.title)}</span>
+          ${client ? `<span class="block text-xs mt-0.5" style="color:var(--gold);">${esc(client.full_name)}</span>` : showClient ? '<span class="block text-xs mt-0.5 text-white/30">Equipe · fluxo de trabalho</span>' : ''}
+        </button>
+        <span class="badge ${t.status === 'done' ? 'badge-completed' : t.status === 'in_progress' ? 'badge-progress' : 'badge-locked'}">${STATUS_LABEL[t.status]}</span>
+      </div>
+      <div class="hist-evs">
+        ${hidden.length ? `<details><summary class="text-xs text-white/30 cursor-pointer py-1">+ ${hidden.length} mensage${hidden.length === 1 ? 'm' : 'ns'} anterior${hidden.length === 1 ? '' : 'es'}</summary>${hidden.map(ev).join('')}</details>` : ''}
+        ${shown.map(ev).join('')}
+      </div>
+    </div>`;
+}
+
 // --- rows ----------------------------------------------------------------
 function taskRow(t, { profile, clientsById, showClient = true }) {
   const client = showClient && t.client_id ? clientsById.get(t.client_id) : null;
@@ -122,13 +173,13 @@ export async function openNewTaskModal(profile, { clientId = null, kind = 'task'
           </div>
         </div>
         <div>
-          <label class="text-xs text-white/40 block mb-1">Sobre quem é cliente (opcional)</label>
+          <label class="text-xs text-white/40 block mb-1">É sobre qual cliente?</label>
           <select name="client_id" class="field">
-            <option value="">— Nenhuma —</option>
+            <option value="">Nenhum — é sobre o trabalho da equipe</option>
             ${clients.map((c) => `<option value="${c.id}" ${c.id === clientId ? 'selected' : ''}>${esc(c.full_name)}${c.is_demo ? ' (demo)' : ''}</option>`).join('')}
           </select>
         </div>
-        <p class="text-xs text-white/30">Quem recebe é avisado no app (e por notificação no celular, se ativou). Um dia antes do prazo e se atrasar, o sistema avisa de novo.</p>
+        <p class="text-xs text-white/30">Escolhendo o cliente, a tarefa e toda a conversa ficam no histórico do perfil dele. Sem cliente, ficam no Histórico da equipe (Tarefas → Histórico). Quem recebe é avisado no app (e por notificação no celular, se ativou). Um dia antes do prazo e se atrasar, o sistema avisa de novo.</p>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn-ghost" data-cancel style="padding:9px 18px;font-size:12.5px;">Cancelar</button>
           <button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${isAdmin ? 'Delegar' : 'Enviar'}</button>
@@ -183,7 +234,8 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
       ${t.notes ? `<p class="text-sm text-white/60 mb-3" style="white-space:pre-wrap;">${esc(t.notes)}</p>` : ''}
       <p class="text-xs text-white/40 mb-4">
         ${t.source === 'auto' ? 'Sistema' : `De ${esc(firstName(t.created_by_name) || 'equipe')}`} → ${t.assigned_role === 'admin' ? 'Nay' : esc(t.assigned_to_name ? firstName(t.assigned_to_name) : 'Assistente')} · criada ${formatDateTime(t.created_at)}
-        ${client ? ` · <a href="${clientHref}" style="color:var(--gold);">${esc(client.full_name)} →</a>` : ''}
+        ${client ? ` · <a href="${clientHref}" style="color:var(--gold);">${esc(client.full_name)} →</a>` : ' · Equipe (sem cliente)'}
+        · <button type="button" class="btn-text" data-relink style="font-size:12px;">${client ? 'Trocar cliente' : 'Vincular a um cliente'}</button>
         ${t.status === 'done' && t.completed_at ? `<br/>Concluída por ${esc(firstName(t.completed_by_name) || 'equipe')} em ${formatDateTime(t.completed_at)}` : ''}
       </p>
       <div class="flex gap-2 flex-wrap mb-5">
@@ -191,6 +243,10 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
         ${t.status !== 'done' ? '<button type="button" class="btn-primary" data-set-status="done" style="padding:8px 14px;font-size:12px;">✓ Concluir</button>' : '<button type="button" class="btn-ghost" data-set-status="open" style="padding:8px 14px;font-size:12px;">Reabrir</button>'}
         ${t.status !== 'done' ? '<button type="button" class="btn-text" data-edit-due style="font-size:12px;">Mudar prazo</button>' : ''}
         ${canDelete ? '<button type="button" class="btn-text" data-delete-task style="font-size:12px;color:var(--terracotta);">Apagar</button>' : ''}
+      </div>
+      <div id="relink-editor" style="display:none;" class="mb-5 flex gap-2 items-center flex-wrap">
+        <select class="field" style="width:auto;max-width:100%;"><option value="">Nenhum — trabalho da equipe</option></select>
+        <button type="button" class="btn-ghost" data-save-relink style="padding:8px 14px;font-size:12px;">Salvar</button>
       </div>
       <div id="due-editor" style="display:none;" class="mb-5 flex gap-2 items-center flex-wrap">
         <input type="datetime-local" class="field" style="width:auto;" value="${toLocalInput(t.due_at)}" />
@@ -217,6 +273,21 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
     toast(b.dataset.setStatus === 'done' ? 'Concluída ✓' : 'Atualizada.');
     done();
   }));
+  el.querySelector('[data-relink]').addEventListener('click', async () => {
+    const box = el.querySelector('#relink-editor');
+    const sel = box.querySelector('select');
+    if (sel.options.length === 1) {
+      const clients = await loadClientsMap();
+      sel.insertAdjacentHTML('beforeend', clients.map((c) => `<option value="${c.id}" ${c.id === t.client_id ? 'selected' : ''}>${esc(c.full_name)}${c.is_demo ? ' (demo)' : ''}</option>`).join(''));
+    }
+    box.style.display = 'flex';
+  });
+  el.querySelector('[data-save-relink]').addEventListener('click', async () => {
+    const v = el.querySelector('#relink-editor select').value || null;
+    const { error } = await supabase.from('team_tasks').update({ client_id: v }).eq('id', t.id);
+    if (error) { toast(error.message, { tone: 'error' }); return; }
+    toast(v ? 'Vinculada ao cliente — aparece no histórico do perfil.' : 'Agora é uma tarefa da equipe.'); done();
+  });
   el.querySelector('[data-edit-due]')?.addEventListener('click', () => { el.querySelector('#due-editor').style.display = 'flex'; });
   el.querySelector('[data-save-due]')?.addEventListener('click', async () => {
     const v = el.querySelector('#due-editor input').value;
@@ -311,9 +382,12 @@ export function wirePushButton(root, profile, onChange) {
 export async function mountTasksPage(content, profile) {
   const params = new URLSearchParams(location.search);
   let showDone = false;
-  let view = 'mine'; // mine | sent | all
+  let view = params.get('view') === 'history' ? 'history' : 'mine'; // mine | sent | all | history
+  let histFilter = ''; // '' = tudo, 'team' = sem cliente, or a client id
+  let histSearch = '';
   const render = async () => {
     const [tasks, clients, pushBtn] = await Promise.all([loadTasks({ includeDone: showDone }), loadClientsMap(), pushButtonHtml()]);
+    if (view === 'history') return renderHistory(clients, pushBtn, tasks);
     const clientsById = new Map(clients.map((c) => [c.id, c]));
     const open = tasks.filter((t) => t.status !== 'done');
     const mine = open.filter((t) => isMine(t, profile));
@@ -347,6 +421,7 @@ export async function mountTasksPage(content, profile) {
           <button type="button" data-view="mine" class="tab-btn ${view === 'mine' ? 'active' : ''}">Para mim (${mine.length})</button>
           <button type="button" data-view="sent" class="tab-btn ${view === 'sent' ? 'active' : ''}">Que eu pedi (${sent.length})</button>
           ${isAdmin ? `<button type="button" data-view="all" class="tab-btn ${view === 'all' ? 'active' : ''}">Todas abertas (${open.length})</button>` : ''}
+          <button type="button" data-view="history" class="tab-btn">Histórico</button>
         </div>
         ${list.length ? `${section('⚠ Atrasadas', overdue, 'color:#d0705a;')}${section('⏰ Vencem em 24h', soon, 'color:var(--gold);')}${section(overdue.length || soon.length ? 'Próximas' : 'Abertas', rest, 'color:var(--muted);')}`
           : `<p class="text-sm text-white/40 py-6 text-center">${view === 'mine' ? 'Nada pendente para você. 🎉' : 'Nenhuma tarefa aberta aqui.'}</p>`}
@@ -360,6 +435,62 @@ export async function mountTasksPage(content, profile) {
     content.querySelector('#show-done').addEventListener('change', (e) => { showDone = e.target.checked; render(); });
     content.querySelector('#new-task').addEventListener('click', () => openNewTaskModal(profile, { onSaved: render }));
     content.querySelector('#new-question')?.addEventListener('click', () => openNewTaskModal(profile, { kind: 'question', onSaved: render }));
+    content.querySelectorAll('[data-task-open]').forEach((b) => b.addEventListener('click', () => openTaskModal(b.dataset.taskOpen, profile, { onChanged: render })));
+    wirePushButton(content, profile, render);
+  };
+  const header = (isAdmin) => `
+      <div class="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <p class="text-white/40 text-sm mb-1">Tarefas</p>
+          <h1 class="text-3xl font-serif">Histórico da equipe</h1>
+          <p class="text-sm text-white/40 mt-2 max-w-xl">Tudo o que a equipe conversou e fez, mais recente primeiro. O que é sobre um cliente também aparece no perfil dele; o que é do fluxo de trabalho fica em "Equipe".</p>
+        </div>
+        <button type="button" id="new-task" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${isAdmin ? '+ Delegar tarefa' : '+ Nova tarefa'}</button>
+      </div>`;
+  const renderHistory = async (clients, pushBtn, openTasks) => {
+    const isAdmin = profile.role === 'admin';
+    const clientsById = new Map(clients.map((c) => [c.id, c]));
+    const all = await loadHistory();
+    const mineCount = openTasks.filter((t) => t.status !== 'done' && isMine(t, profile)).length;
+    const norm = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const q = norm(histSearch);
+    const list = all.filter((t) => (histFilter === 'team' ? !t.client_id : histFilter ? t.client_id === histFilter : true))
+      .filter((t) => !q || norm([t.title, t.notes, clientsById.get(t.client_id)?.full_name, ...t.comments.map((c) => c.body)].join(' ')).includes(q));
+    const teamCount = all.filter((t) => !t.client_id).length;
+    const withClients = [...new Set(all.map((t) => t.client_id).filter(Boolean))].map((id) => clientsById.get(id)).filter(Boolean)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+    content.innerHTML = `${header(isAdmin)}
+      <div class="mb-4">${pushBtn}</div>
+      ${card(`
+        <div class="flex gap-1 border-b border-white/10 mb-4 flex-wrap">
+          <button type="button" data-view="mine" class="tab-btn">Para mim (${mineCount})</button>
+          <button type="button" data-view="sent" class="tab-btn">Que eu pedi</button>
+          ${isAdmin ? '<button type="button" data-view="all" class="tab-btn">Todas abertas</button>' : ''}
+          <button type="button" data-view="history" class="tab-btn active">Histórico</button>
+        </div>
+        <div class="flex gap-2 flex-wrap mb-4">
+          <select id="hist-filter" class="field" style="width:auto;max-width:100%;">
+            <option value="" ${histFilter === '' ? 'selected' : ''}>Tudo (${all.length})</option>
+            <option value="team" ${histFilter === 'team' ? 'selected' : ''}>Equipe · fluxo de trabalho (${teamCount})</option>
+            ${withClients.map((c) => `<option value="${c.id}" ${histFilter === c.id ? 'selected' : ''}>${esc(c.full_name)}</option>`).join('')}
+          </select>
+          <input id="hist-search" class="field" style="width:auto;flex:1;min-width:180px;" placeholder="Buscar nas conversas…" value="${esc(histSearch)}" />
+        </div>
+        ${list.length ? list.map((t) => historyThread(t, { profile, clientsById })).join('') : '<p class="text-sm text-white/40 py-6 text-center">Nada encontrado.</p>'}
+      `)}`;
+    content.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view; render(); }));
+    content.querySelector('#hist-filter').addEventListener('change', (e) => { histFilter = e.target.value; render(); });
+    let timer;
+    content.querySelector('#hist-search').addEventListener('input', (e) => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        histSearch = e.target.value;
+        const pos = e.target.selectionStart;
+        await render();
+        const inp = content.querySelector('#hist-search'); inp?.focus(); inp?.setSelectionRange(pos, pos);
+      }, 350);
+    });
+    content.querySelector('#new-task').addEventListener('click', () => openNewTaskModal(profile, { onSaved: render }));
     content.querySelectorAll('[data-task-open]').forEach((b) => b.addEventListener('click', () => openTaskModal(b.dataset.taskOpen, profile, { onChanged: render })));
     wirePushButton(content, profile, render);
   };
@@ -392,14 +523,22 @@ export async function dueStripHtml(profile) {
 export async function mountClientTasks(container, profile, clientId) {
   if (!container) return;
   const render = async () => {
-    const [tasks, { data: c }] = await Promise.all([loadTasks({ clientId }), supabase.from('clients').select('id, full_name').eq('id', clientId).maybeSingle()]);
+    const [history, { data: c }] = await Promise.all([loadHistory({ clientId }), supabase.from('clients').select('id, full_name').eq('id', clientId).maybeSingle()]);
     const clientsById = new Map(c ? [[c.id, c]] : []);
+    const tasks = history.filter((t) => t.status !== 'done')
+      .sort((a, b) => (a.due_at ? new Date(a.due_at) : Infinity) - (b.due_at ? new Date(b.due_at) : Infinity));
+    const ctx = { profile, clientsById, showClient: false };
     container.innerHTML = card(`
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <p class="text-sm text-white/50">Tarefas da equipe sobre este cadastro</p>
+        <p class="text-sm text-white/50">Equipe — tarefas e conversas sobre este cliente</p>
         <button type="button" data-client-task-new class="btn-ghost" style="padding:7px 14px;font-size:12px;">${profile.role === 'admin' ? '+ Delegar' : '+ Tarefa / pergunta'}</button>
       </div>
-      ${tasks.length ? tasks.map((t) => taskRow(t, { profile, clientsById, showClient: false })).join('') : '<p class="text-xs text-white/30">Nenhuma tarefa aberta aqui.</p>'}
+      ${tasks.length ? tasks.map((t) => taskRow(t, ctx)).join('') : '<p class="text-xs text-white/30">Nenhuma tarefa aberta.</p>'}
+      ${history.length ? `
+        <details class="mt-4" ${tasks.length ? '' : 'open'}>
+          <summary class="text-xs uppercase cursor-pointer" style="color:var(--gold);letter-spacing:.1em;">Histórico da equipe (${history.length})</summary>
+          <div class="mt-2">${history.map((t) => historyThread(t, ctx)).join('')}</div>
+        </details>` : ''}
     `, 'mb-6');
     container.querySelector('[data-client-task-new]').addEventListener('click', () => openNewTaskModal(profile, { clientId, onSaved: render }));
     container.querySelectorAll('[data-task-open]').forEach((b) => b.addEventListener('click', () => openTaskModal(b.dataset.taskOpen, profile, { onChanged: render })));

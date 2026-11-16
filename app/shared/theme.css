@@ -917,3 +917,13 @@ select option:checked{ background-color:#3a2c1c; color:var(--cream); }
 .enc-tl-dot{ flex:none; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; font-size:11px; font-weight:700; border:1px solid var(--line); color:var(--muted); }
 .enc-tl-current .enc-tl-dot{ background:var(--gold); border-color:var(--gold); color:#16100a; }
 .enc-tl-done .enc-tl-dot{ background:#8fae8b; border-color:#8fae8b; color:#16100a; }
+
+/* Histórico da equipe (Tarefas → Histórico and the client page) */
+.hist-thread{ padding:12px 0; border-bottom:1px solid rgba(242,236,224,.06); }
+.hist-thread:last-child{ border-bottom:0; }
+.hist-evs{ margin-top:8px; padding-left:12px; border-left:2px solid rgba(201,169,110,.25); }
+.hist-ev{ display:flex; flex-direction:column; gap:1px; padding:4px 0; }
+.hist-ev-at{ font-size:10.5px; color:var(--muted); }
+.hist-title{ background:none; border:0; padding:0; color:inherit; cursor:pointer; font:inherit; }
+.hist-title:hover > span:first-child{ text-decoration:underline; }
+.hist-ev .text-xs > b{ font-weight:600; }
