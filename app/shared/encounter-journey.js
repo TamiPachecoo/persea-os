@@ -21,8 +21,8 @@
 // it is attached to the encounter number, not to a position.
 import { supabase } from './supabase-client.js';
 import { ENCOUNTER_MATERIALS } from './encounter-materials.js';
-const E3_MATERIAL_LABELS = ['Cartela de Cores', 'Guia de Produções', 'Ferramentas para Nova Imagem', 'Ensaio Fotográfico'];
 import { applicableEncounters } from './journey-skips.js';
+import { E3_DEFAULT, GUIDE_LABELS, ENSAIO_SLUG } from './image-guides.js';
 
 export const usesPerseaJourney = (client) => !!client?.program_slug?.startsWith('persea');
 
@@ -150,8 +150,11 @@ export function teamDeliverablesFor(number, refs) {
   const material = ENCOUNTER_MATERIALS[number];
   return {
     prep: refs.prepByNumber.get(number) || [],
-    // E3's materials are the Projeto de Imagem guides (image_guides).
-    released: number === 3 ? E3_MATERIAL_LABELS : material ? [material.label] : [],
+    // E3's materials are the Projeto de Imagem guides Nay chooses per
+    // student (default listed here); E4 adds the Ensaio Fotográfico.
+    released: number === 3 ? E3_DEFAULT.map((s) => GUIDE_LABELS[s])
+      : number === 4 ? [material.label, GUIDE_LABELS[ENSAIO_SLUG]]
+      : material ? [material.label] : [],
   };
 }
 export function homeworkProgress(list) {

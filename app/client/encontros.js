@@ -19,6 +19,7 @@ import { sessionKeyFor } from '../shared/drive-artifacts-model.js';
 import { renderShell, card, formatDateTime, formatDate, toast, initClientSwitcher, isValidHttpUrl, externalLinkAttrs, renderClientRecordingBlock, openModal } from '../shared/ui.js';
 import { ENCOUNTER_MATERIALS, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
 import { applicableEncounters } from '../shared/journey-skips.js';
+import { GUIDE_LABELS, ENSAIO_SLUG, e3Slugs, guideLabel, guideLinks } from '../shared/image-guides.js';
 import { loadProgramState } from '../shared/program-model.js';
 import {
   loadStudentTimeline, studentTimelineHtml, wireStudentTimeline,
@@ -35,20 +36,33 @@ const studentTrackSection = (track, extras) => studentTimelineHtml(track, { extr
 // Under each encounter of her timeline: the meeting itself (date, link,
 // recording + transcription), the deliverables with their real links and
 // the extra material Nay shared on that meeting.
-const E3_GUIDE_LABEL = { paleta_cores: 'Cartela de Cores', guia_producoes_completo: 'Guia de Produções', guia_looks_mensal: 'Guia de Produções (Mensal)', ferramentas_nova_imagem: 'Ferramentas para Nova Imagem', moodboard_ensaio: 'Ensaio Fotográfico' };
-async function loadE3Guides() {
-  const { data } = await supabase.from('image_guides').select('*').eq('client_id', clientId).not('delivered_at', 'is', null);
-  return (await Promise.all((data || []).map(async (g) => {
-    let url = isValidHttpUrl(g.file_url) ? g.file_url : null;
+// Delivered Projeto de Imagem guides (the database only returns them once
+// Nay delivered) with every link each one has, plus Nay's E3 choice.
+async function loadGuides() {
+  const [{ data }, { data: plan }] = await Promise.all([
+    supabase.from('image_guides').select('*').eq('client_id', clientId).not('delivered_at', 'is', null),
+    supabase.from('client_encounter_plans').select('e3_items').eq('client_id', clientId).maybeSingle(),
+  ]);
+  const bySlug = {};
+  await Promise.all((data || []).map(async (g) => {
+    let signed = null;
     if (g.file_path) {
-      const { data: signed } = await supabase.storage.from('client-shared-files').createSignedUrl(g.file_path, 3600);
-      if (signed?.signedUrl) url = signed.signedUrl;
+      const { data: s } = await supabase.storage.from('client-shared-files').createSignedUrl(g.file_path, 3600);
+      signed = s?.signedUrl || null;
     }
-    return url ? { url, label: E3_GUIDE_LABEL[g.slug] || g.summary || g.slug } : null;
-  }))).filter(Boolean);
+    const links = guideLinks(g, signed);
+    if (links.length) bySlug[g.slug] = { row: g, label: guideLabel(g.slug, g), links };
+  }));
+  return { bySlug, e3: e3Slugs(plan, Object.fromEntries(Object.entries(bySlug).map(([k, v]) => [k, v.row]))) };
+}
+// One guide: a single link → one button named after it; several (Ensaio:
+// Pinterest + Canva + PDF) → the name, then one button per link.
+function guideHtml(g) {
+  if (g.links.length === 1) return linkBtn(g.links[0].url, g.label);
+  return `<div class="w-full mt-1"><p class="text-sm mb-1">${escText(g.label)}</p><div class="flex flex-wrap gap-2">${g.links.map((l) => linkBtn(l.url, l.label)).join('')}</div></div>`;
 }
 const linkBtn = (url, label, primary = false) => `<a ${externalLinkAttrs(url)} class="${primary ? 'btn-primary' : 'btn-ghost'}" style="padding:7px 14px;font-size:12px;">${escText(label)} ↗</a>`;
-function buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts, e3Guides) {
+function buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts, guides) {
   const extras = new Map();
   if (!track) return extras;
   const now = new Date();
@@ -75,16 +89,21 @@ function buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts,
     const def = ENCOUNTER_MATERIALS[num];
     const mat = def && encounterMaterials[def.key];
     let released = '';
+    const later = (labels) => `<p class="text-sm mt-1">${labels.map(escText).join(' · ')} <span class="text-xs" style="color:var(--muted);">— ${labels.length > 1 ? 'liberados' : 'liberado'} aqui depois do encontro</span></p>`;
+    const guideBlock = (slugs) => {
+      const ready = slugs.map((sl) => guides.bySlug[sl]).filter(Boolean);
+      const waiting = slugs.filter((sl) => !guides.bySlug[sl]).map((sl) => GUIDE_LABELS[sl]).filter(Boolean);
+      if (ready.length) flags.push('📎 entregas');
+      return `${ready.length ? `<div class="flex flex-wrap gap-2 mt-2">${ready.map(guideHtml).join('')}</div>` : ''}${waiting.length ? later(waiting) : ''}`;
+    };
     if (num === 3) {
-      released = e3Guides.length
-        ? `<div class="flex flex-wrap gap-2 mt-2">${e3Guides.map((g) => linkBtn(g.url, g.label)).join('')}</div>`
-        : '<p class="text-sm mt-1">Cartela de Cores · Guia de Produções · Ferramentas para Nova Imagem · Ensaio Fotográfico <span class="text-xs" style="color:var(--muted);">— liberados aqui depois do encontro</span></p>';
-      if (e3Guides.length) flags.push('📎 entregas');
+      released = guideBlock(guides.e3);
     } else if (def) {
       released = mat?.row?.delivered_at && mat.url
         ? `<div class="mt-2">${linkBtn(mat.url, `Abrir ${def.label}`, true)}</div>`
-        : `<p class="text-sm mt-1">${escText(def.label)} <span class="text-xs" style="color:var(--muted);">— liberado aqui depois do encontro</span></p>`;
+        : later([def.label]);
       if (mat?.row?.delivered_at && mat.url) flags.push('📎 entrega');
+      if (num === 4) released += guideBlock([ENSAIO_SLUG]);
     }
     const more = meetings.map((it) => sharedNotesBlock(it, { bare: true })).join('');
     if (more) flags.push('✦ materiais');
@@ -476,8 +495,8 @@ async function render() {
     (signed || []).forEach((d) => { if (d.signedUrl) sharedFileUrls[d.path] = d.signedUrl; });
   }
   const driveArtifacts = driveArtifactsRaw || [];
-  const e3Guides = track ? await loadE3Guides() : [];
-  const extras = buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts, e3Guides);
+  const guides = track ? await loadGuides() : { bySlug: {}, e3: [] };
+  const extras = buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts, guides);
   // Encounter meetings already live under their encounter in the timeline;
   // "Anteriores" keeps the rest (check-ins, group meetings, unmatched).
   const inTimeline = (it) => track && it.type === 'individual_meeting' && extras.has(encounterNumber(it.title));

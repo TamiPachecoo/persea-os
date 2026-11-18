@@ -38,6 +38,7 @@ import { markHublaAccessGranted } from '../shared/hubla-model.js';
 import { loadArtifactsForClient, loadUnlinkedArtifacts, linkSessionToMeeting, detachArtifactFromMeeting, sessionKeyFor, unlinkArtifact } from '../shared/drive-artifacts-model.js';
 import { DIAGNOSTIC_TITLE, groupBySection } from '../shared/diagnostic-template.js';
 import { ENCOUNTER_MATERIALS, MATERIALS_BUCKET, encounterNumber, loadEncounterMaterials } from '../shared/encounter-materials.js';
+import { GUIDE_LABELS, ENSAIO_SLUG, E3_OPTIONS, e3Slugs, guideLabel } from '../shared/image-guides.js';
 import { IMAGE_PHASE, skippedPhaseSet, applicableEncounters } from '../shared/journey-skips.js';
 import {
   loadEncounterRefs, loadPlan, savePlan, clientSequence, homeworkFor, teamDeliverablesFor,
@@ -804,6 +805,7 @@ function encounterRow(e) {
       <p class="text-xs text-white/30 max-w-2xl">${detail}</p>
       ${jornadaMaterials && ENCOUNTER_MATERIALS[e.number] && e.status !== 'skipped' ? materialSlotHtml(e.number, jornadaMaterials) : ''}
       ${jornadaMaterials && e.number === 3 && e.status !== 'skipped' ? e3MaterialsHtml(currentImageProject) : ''}
+      ${jornadaMaterials && e.number === 4 && e.status !== 'skipped' ? ensaioMaterialsHtml(currentImageProject) : ''}
     </div>
   `;
 }
@@ -1699,18 +1701,15 @@ function hublaAccessCard(c) {
 // enforces that only admin can set/clear it — see the
 // admin_only_notes_and_deliverable_approval migration — so "assistant
 // prepares, admin approves" is a real boundary, not a hidden button.
-const IMAGE_GUIDE_DEFS = [
-  { slug: 'paleta_cores', label: 'Cartela de Cores' },
-  { slug: 'guia_producoes_completo', label: 'Guia de Produções (Completo)' },
-  { slug: 'guia_looks_mensal', label: 'Guia de Produções (Mensal)' },
-  { slug: 'ferramentas_nova_imagem', label: 'Ferramentas para Nova Imagem' },
-  { slug: 'moodboard_ensaio', label: 'Ensaio Fotográfico' },
-];
+// E3 = what Nay chose for this student (shared/image-guides.js);
+// Ensaio Fotográfico belongs to E4.
+const e3Items = (ip) => e3Slugs(ip?.plan, ip?.guideBySlug).map((slug) => ({ slug, label: guideLabel(slug, ip?.guideBySlug?.[slug]) }));
 
 async function loadImageProject() {
-  const [{ data: guides }, { data: kit }] = await Promise.all([
+  const [{ data: guides }, { data: kit }, { data: plan }] = await Promise.all([
     supabase.from('image_guides').select('*').eq('client_id', clientId),
     supabase.from('digital_kits').select('*').eq('client_id', clientId).maybeSingle(),
+    supabase.from('client_encounter_plans').select('*').eq('client_id', clientId).maybeSingle(),
   ]);
   // Uploaded files open through a short-lived signed link (private bucket).
   const sign = async (row) => {
@@ -1719,18 +1718,18 @@ async function loadImageProject() {
     return { ...row, signedFileUrl: data?.signedUrl || null };
   };
   const signedGuides = await Promise.all((guides || []).map(sign));
-  return { guideBySlug: Object.fromEntries(signedGuides.map((g) => [g.slug, g])), kit: await sign(kit) || null };
+  return { guideBySlug: Object.fromEntries(signedGuides.map((g) => [g.slug, g])), kit: await sign(kit) || null, plan: plan || null };
 }
 
 function deliverableStatus(row) {
   if (row?.delivered_at) return { label: 'Entregue', cls: 'badge-completed' };
-  if (row?.file_url || row?.canva_url || row?.file_path) return { label: 'Aguardando aprovação', cls: 'badge-progress' };
+  if (row?.file_url || row?.canva_url || row?.file_path || row?.pinterest_url) return { label: 'Aguardando aprovação', cls: 'badge-progress' };
   return { label: 'Não iniciado', cls: 'badge-locked' };
 }
 
 function imageDeliverableRow({ key, label, row, isKit }) {
   const status = deliverableStatus(row);
-  const hasContent = !!(row?.file_url || row?.canva_url || row?.file_path);
+  const hasContent = !!(row?.file_url || row?.canva_url || row?.file_path || row?.pinterest_url);
   return `
     <div class="py-3 border-b border-white/5 last:border-0">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -1743,6 +1742,7 @@ function imageDeliverableRow({ key, label, row, isKit }) {
         ${row?.signedFileUrl ? `<a ${externalLinkAttrs(row.signedFileUrl)} class="btn-text">📄 ${escHtml(row.file_name || 'Arquivo')} ↗</a>` : ''}
         ${isValidHttpUrl(row?.file_url) ? `<a ${externalLinkAttrs(row.file_url)} class="btn-text">Ver link ↗</a>` : ''}
         ${isValidHttpUrl(row?.canva_url) ? `<a ${externalLinkAttrs(row.canva_url)} class="btn-text">Abrir no Canva ↗</a>` : ''}
+        ${isValidHttpUrl(row?.pinterest_url) ? `<a ${externalLinkAttrs(row.pinterest_url)} class="btn-text">Pinterest ↗</a>` : ''}
         ${!isAssistant && hasContent && !row?.delivered_at ? `<button type="button" data-approve-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-primary" style="padding:6px 14px;font-size:12px;">Aprovar e Entregar</button>` : ''}
         ${!isAssistant && row?.delivered_at ? `<button type="button" data-revert-deliverable="${key}" data-is-kit="${isKit ? '1' : '0'}" class="btn-text" style="color:var(--terracotta);">Reverter entrega</button>` : ''}
       </div>
@@ -1763,21 +1763,80 @@ function e3MaterialsHtml(imageProject) {
         <span class="text-xs text-white/30">conduzido pela assistente</span>
       </div>
       <p class="text-xs text-white/40 mb-1">${isAssistant ? 'Envie aqui o que você preparou (arquivo, link ou Canva). A Nay aprova e entrega no app.' : 'Materiais que a assistente prepara para o E3. Aprove para entregar no app.'}</p>
-      ${IMAGE_GUIDE_DEFS.map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: imageProject.guideBySlug[d.slug], isKit: false })).join('')}
+      ${e3Items(imageProject).map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: imageProject.guideBySlug[d.slug], isKit: false })).join('') || '<p class="text-xs text-white/30 py-2">Nenhum material escolhido para o E3.</p>'}
+      ${!isAssistant ? '<button type="button" data-e3-choose class="btn-text mt-2" style="font-size:12px;">✎ Escolher o que entra no E3</button>' : ''}
     </div>`;
 }
 
-function imageProjectCard({ guideBySlug, kit }) {
+// E4 · Ensaio Fotográfico — the assistant can prepare it too: Pinterest
+// moodboard, Canva and/or PDF; Nay approves, the student sees what's filled.
+function ensaioMaterialsHtml(imageProject) {
+  if (!imageProject) return '';
+  return `
+    <div class="mt-3 rounded" style="padding:14px 16px;border:1px solid var(--line);background:rgba(255,255,255,.03);">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">E4 · Ensaio Fotográfico</p>
+        <span class="text-xs text-white/30">a assistente pode preparar</span>
+      </div>
+      <p class="text-xs text-white/40 mb-1">Moodboard no Pinterest, Canva e/ou PDF — o que estiver preenchido aparece para a cliente${isAssistant ? ' depois que a Nay aprovar' : ' quando você aprovar'}.</p>
+      ${imageDeliverableRow({ key: ENSAIO_SLUG, label: GUIDE_LABELS[ENSAIO_SLUG], row: imageProject.guideBySlug[ENSAIO_SLUG], isKit: false })}
+    </div>`;
+}
+
+// Nay picks what E3 includes for this student (and can add her own items).
+function openE3ChooserModal(imageProject) {
+  const current = new Set(e3Slugs(imageProject.plan, imageProject.guideBySlug));
+  const customs = Object.values(imageProject.guideBySlug).filter((g) => g.slug.startsWith('custom_'));
+  const opt = (slug, label) => `<label class="flex items-center gap-2 text-sm py-1.5"><input type="checkbox" name="item" value="${escHtml(slug)}" ${current.has(slug) ? 'checked' : ''}/> ${escHtml(label)}</label>`;
+  const { el, close } = openModal({
+    title: 'O que entra no E3',
+    bodyHtml: `
+      <form id="e3-form">
+        <p class="text-xs text-white/40 mb-2">Marque os materiais deste E3. Só os marcados aparecem para a equipe preparar e para a cliente.</p>
+        ${E3_OPTIONS.map((slug) => opt(slug, GUIDE_LABELS[slug])).join('')}
+        ${customs.map((g) => opt(g.slug, guideLabel(g.slug, g))).join('')}
+        <div class="flex gap-2 mt-3">
+          <input name="new_item" class="field text-sm" placeholder="Adicionar outro material (ex.: Guia de Acessórios)" />
+        </div>
+        <div class="flex justify-end pt-4"><button type="submit" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Salvar</button></div>
+      </form>`,
+  });
+  el.querySelector('#e3-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const items = fd.getAll('item');
+    const newLabel = String(fd.get('new_item') || '').trim();
+    if (newLabel) {
+      const slug = `custom_${crypto.randomUUID().slice(0, 8)}`;
+      const { error } = await supabase.from('image_guides').insert({ client_id: clientId, slug, label: newLabel.slice(0, 120) });
+      if (error) { toast('Não foi possível adicionar agora.', { tone: 'error' }); return; }
+      items.push(slug);
+    }
+    const { error } = await supabase.from('client_encounter_plans').upsert({ client_id: clientId, e3_items: items, updated_by: profile.id, updated_at: new Date().toISOString() }, { onConflict: 'client_id' });
+    if (error) { toast('Não foi possível salvar agora.', { tone: 'error' }); return; }
+    close();
+    toast('E3 atualizado.');
+    render();
+  });
+}
+
+function imageProjectCard(imageProject) {
+  const { guideBySlug, kit } = imageProject;
   return card(`
     <p class="text-sm text-white/50 mb-1">Projeto de Imagem</p>
     <p class="text-xs text-white/20 mb-4">${isAssistant ? 'Prepare cada material abaixo — a Nay revisa e aprova antes de aparecer no app.' : 'Revise e aprove cada material preparado pela assistente antes de aparecer no app.'}</p>
-    ${IMAGE_GUIDE_DEFS.map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: guideBySlug[d.slug], isKit: false })).join('')}
+    <p class="text-xs uppercase mt-2" style="color:var(--gold);letter-spacing:.14em;">E3</p>
+    ${e3Items(imageProject).map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: guideBySlug[d.slug], isKit: false })).join('') || '<p class="text-xs text-white/30 py-2">Nenhum material escolhido para o E3.</p>'}
+    ${!isAssistant ? '<button type="button" data-e3-choose class="btn-text mt-2" style="font-size:12px;">✎ Escolher o que entra no E3</button>' : ''}
+    <p class="text-xs uppercase mt-5" style="color:var(--gold);letter-spacing:.14em;">E4</p>
+    ${imageDeliverableRow({ key: ENSAIO_SLUG, label: GUIDE_LABELS[ENSAIO_SLUG], row: guideBySlug[ENSAIO_SLUG], isKit: false })}
     ${imageDeliverableRow({ key: 'kit_digital', label: 'Kit Digital', row: kit, isKit: true })}
   `, 'mb-6');
 }
 
 function openDeliverableModal({ key, label, row, isKit }) {
   const data = row || {};
+  const isEnsaio = key === ENSAIO_SLUG;
   const { el, close } = openModal({
     title: `Editar — ${label}`,
     bodyHtml: `
@@ -1795,7 +1854,7 @@ function openDeliverableModal({ key, label, row, isKit }) {
         <details>
           <summary class="text-xs text-white/40 cursor-pointer">Ou enviar um arquivo (opcional)</summary>
           <div class="mt-2">` : '<div>'}
-          <label class="text-xs text-white/40 block mb-1">Arquivo <span class="text-white/20">(PDF, imagem, apresentação, vídeo — até ${SHARED_MAX_MB} MB; abre direto na plataforma)</span></label>
+          <label class="text-xs text-white/40 block mb-1">${isEnsaio ? 'PDF' : 'Arquivo'} <span class="text-white/20">(${isEnsaio ? 'opcional' : 'PDF, imagem, apresentação, vídeo'} — até ${SHARED_MAX_MB} MB; abre direto na plataforma)</span></label>
           ${data.file_path ? `<div class="flex items-center gap-3 flex-wrap mb-2 text-sm">
             ${data.signedFileUrl ? `<a ${externalLinkAttrs(data.signedFileUrl)} class="btn-text" style="display:inline;">📄 ${escHtml(data.file_name || 'Arquivo')} ↗</a>` : `<span>📄 ${escHtml(data.file_name || 'Arquivo')}</span>`}
             <label class="text-xs text-white/50 flex items-center gap-1"><input type="checkbox" name="remove_file" /> Remover arquivo</label>
@@ -1803,7 +1862,12 @@ function openDeliverableModal({ key, label, row, isKit }) {
           <input type="file" name="file" accept="image/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.xls,.xlsx,.zip" class="field text-sm" />
           ${data.file_path ? '<p class="text-xs text-white/30 mt-1">Escolher um novo arquivo substitui o atual.</p>' : ''}
         ${isKit ? '</div></details>' : '</div>'}
-        ${!isKit ? `
+        ${isEnsaio ? `
+        <div>
+          <label class="text-xs text-white/40 block mb-1">Moodboard no Pinterest <span class="text-white/20">(opcional)</span></label>
+          <input name="pinterest_url" class="field text-sm" value="${escHtml(data.pinterest_url || '')}" placeholder="https://pinterest.com/…" />
+        </div>` : ''}
+        ${!isKit && !isEnsaio ? `
         <div>
           <label class="text-xs text-white/40 block mb-1">Link <span class="text-white/20">(opcional — use só se o material não puder ser enviado como arquivo)</span></label>
           <input name="file_url" class="field text-sm" value="${data.file_url || ''}" placeholder="https://..." />
@@ -1827,7 +1891,12 @@ function openDeliverableModal({ key, label, row, isKit }) {
   el.querySelector('#deliverable-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const payload = { summary: fd.get('summary') || null, file_url: fd.get('file_url') || null, canva_url: fd.get('canva_url') || null };
+    const payload = { summary: fd.get('summary') || null, canva_url: fd.get('canva_url') || null };
+    if (fd.has('file_url')) payload.file_url = fd.get('file_url') || null;
+    if (isEnsaio) payload.pinterest_url = fd.get('pinterest_url') || null;
+    for (const [k, v] of [['canva_url', payload.canva_url], ['pinterest_url', payload.pinterest_url]]) {
+      if (v && !isValidHttpUrl(v)) { toast(k === 'canva_url' ? 'O link do Canva precisa começar com https://' : 'O link do Pinterest precisa começar com https://', { tone: 'error' }); return; }
+    }
     const saveBtn = e.target.querySelector('[type=submit]');
     saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
     const fail = (msg) => { toast(msg, { tone: 'error' }); saveBtn.disabled = false; saveBtn.textContent = 'Salvar'; };
@@ -2205,7 +2274,7 @@ function encontrosTabHtml(encontros, imageProject = null) {
   const materialsCard = card(`
     <p class="text-sm text-white/50 mb-1">Materiais dos encontros</p>
     <p class="text-xs text-white/30 mb-1">Envie quando quiser; só aparece no app depois que ${isAssistant ? 'a Nay liberar' : 'você liberar ("Liberar no app" / "Aprovar e Entregar")'}.</p>
-    ${[...new Set([...Object.keys(ENCOUNTER_MATERIALS).map(Number), 3])].sort((a, b) => a - b).map((n) => (n === 3 ? e3MaterialsHtml(imageProject) : materialSlotHtml(n, materials))).join('')}
+    ${[...new Set([...Object.keys(ENCOUNTER_MATERIALS).map(Number), 3])].sort((a, b) => a - b).map((n) => (n === 3 ? e3MaterialsHtml(imageProject) : materialSlotHtml(n, materials) + (n === 4 ? ensaioMaterialsHtml(imageProject) : ''))).join('')}
   `, 'mb-6');
   return `
     ${materialsCard}
@@ -2825,10 +2894,10 @@ async function render() {
     btn.addEventListener('click', () => {
       const key = btn.dataset.editDeliverable;
       const isKit = btn.dataset.isKit === '1';
-      const def = IMAGE_GUIDE_DEFS.find((d) => d.slug === key);
-      openDeliverableModal({ key, label: isKit ? 'Kit Digital' : def.label, row: isKit ? imageProject.kit : imageProject.guideBySlug[key], isKit });
+      openDeliverableModal({ key, label: isKit ? 'Kit Digital' : guideLabel(key, imageProject.guideBySlug[key]), row: isKit ? imageProject.kit : imageProject.guideBySlug[key], isKit });
     });
   });
+  content.querySelectorAll('[data-e3-choose]').forEach((btn) => btn.addEventListener('click', () => openE3ChooserModal(imageProject)));
   content.querySelectorAll('[data-approve-deliverable]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const error = await setDeliveryStatus({ key: btn.dataset.approveDeliverable, isKit: btn.dataset.isKit === '1', delivered: true });
