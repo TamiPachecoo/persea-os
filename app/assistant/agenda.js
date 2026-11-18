@@ -13,6 +13,7 @@ import { supabase } from '../shared/supabase-client.js';
 import { getCurrentProfile, requireProfile } from '../shared/supabase-auth.js';
 import { isProductionEnvironment } from '../shared/environment.js';
 import { dueStripHtml } from '../shared/team-tasks.js';
+import { loadSignature, voice } from '../shared/signature.js';
 
 const AGENDA_TYPE_ICON = {
   class: '🎓', individual_meeting: '👤', checkpoint: '☎️', group_meeting: '👥',
@@ -612,13 +613,13 @@ function waDigits(raw) {
 function confirmationMessage(it, me) {
   const party = partyByClient.get(it.related_student_id) || {};
   const first = String(party.social_name || party.full_name || realClients.get(it.related_student_id) || '').trim().split(/\s+/)[0];
-  const sender = String(me?.full_name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] || 'Equipe PERSEA';
+  const v = voice(me);
   const d = new Date(it.item_date); const today = new Date(); const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
   const when = d.toDateString() === today.toDateString() ? 'hoje' : d.toDateString() === tomorrow.toDateString() ? 'amanhã'
     : d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const hour = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const link = /^https?:\/\//i.test(it.online_link || '') ? `\n\nLink da reunião: ${it.online_link}` : '';
-  return `Olá, ${first}! Aqui é a ${sender}, da equipe da Nay.\n\nPassando para confirmar o seu encontro com a Nay *${it.title}*, ${when}, às *${hour}*.${link}\n\nPode me confirmar se está tudo certo? 😊\n\nCom carinho,\n${sender} · Equipe PERSEA`;
+  return `${v.hello(first)}\n\nPassando para confirmar o seu encontro com a Nay *${it.title}*, ${when}, às *${hour}*.${link}\n\nPode me confirmar se está tudo certo? 😊\n\n${v.sign}`;
 }
 // Week strip (7 day tiles) + the chosen day's meetings. A Google event can
 // be marked "Pessoal" (Nay's own time): it leaves the confirmation count and
@@ -857,6 +858,7 @@ async function renderReal() {
   await loadReal();
   const me = await getCurrentProfile();
   currentMe = me;
+  if (me) await loadSignature(me).catch(() => null);
   const strip = me ? await dueStripHtml(me).catch(() => '') : '';
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

@@ -44,6 +44,7 @@ import {
   activityStatusFromProgramState, homeworkProgress, encounterDetailHtml, studentTrackHtml,
 } from '../shared/encounter-journey.js';
 import { mountClientTasks } from '../shared/team-tasks.js';
+import { loadSignature, voice, openSignatureModal } from '../shared/signature.js';
 
 
 // Staff-side conversion of Business Survey / Brand Direction / Value
@@ -78,6 +79,7 @@ const BUSINESS_SURVEY_STAFF_ROLES = ['admin', 'assistant']; // business_surveys_
 const clientId = new URLSearchParams(location.search).get('id');
 
 const profile = await getCurrentProfile();
+await loadSignature(profile).catch(() => null); // staff signature for prepared messages
 if (profile?.role === 'client') {
   // A student on a staff page (shared computer): her own home, not a sign-out.
   location.href = '/client/program.html';
@@ -543,10 +545,9 @@ async function sendInviteWhatsApp(client, partyInfo) {
   const { data, error } = await supabase.functions.invoke('invite-client', { body: { client_id: clientId, channel: 'link' } });
   if (error || data?.error || !data?.url) { toast(await functionErrorMessage(data, error), { tone: 'error' }); return; }
   const first = (partyInfo?.social_name || client.full_name || '').trim().split(/\s+/)[0];
-  const isNay = profile.role === 'admin';
-  const senderFirst = String(profile.full_name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] || 'Equipe PERSEA';
+  const me = voice(profile);
   const msg = [
-    isNay ? `Olá, ${first}! ✨` : `Olá, ${first}! Aqui é a ${senderFirst}, da equipe da Nay. ✨`,
+    me.hello(first, { emoji: true }),
     '',
     'Seu acesso ao app *PERSEA* está pronto. Toque no link abaixo para criar a sua senha (mínimo de 8 caracteres):',
     data.url,
@@ -557,7 +558,7 @@ async function sendInviteWhatsApp(client, partyInfo) {
     '',
     'O link é pessoal e vale por 24 horas.',
     '',
-    isNay ? 'Com carinho,\nNay' : `Com carinho,\n${senderFirst} · Equipe PERSEA`,
+    me.sign,
   ].join('\n');
   const digits = (partyInfo?.whatsapp || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
   const { el } = openModal({
@@ -2522,9 +2523,9 @@ async function loadMessagesData() {
 function buildMessage(kind, { client, partyInfo, finState, meetings }) {
   const first = (partyInfo?.social_name || client.full_name || '').trim().split(/\s+/)[0];
   const isNay = profile.role === 'admin';
-  const senderFirst = String(profile.full_name || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0] || 'Equipe PERSEA';
-  const hello = isNay ? `Olá, ${first}!` : `Olá, ${first}! Aqui é a ${senderFirst}, da equipe da Nay.`;
-  const sign = isNay ? 'Com carinho,\nNay' : `Com carinho,\n${senderFirst} · Equipe PERSEA`;
+  const me = voice(profile);
+  const hello = me.hello(first);
+  const sign = me.sign;
   const meeting = meetings.find((m) => m.id === msgState.meetingId) || meetings[0];
   const lines = finState?.lines || [];
   const openLines = lines.filter((l) => l.outstanding_cents > 0 && l.method !== 'permuta'); // no payment reminders for a permuta
@@ -2590,6 +2591,7 @@ function messagesTabHtml(ctx, data) {
         ${phone ? '<button type="button" data-msg-send="whatsapp" class="btn-primary" style="padding:8px 16px;font-size:12px;">Enviar no WhatsApp</button>' : '<span class="text-xs" style="color:var(--terracotta);">Sem WhatsApp no cadastro.</span>'}
         ${client.email ? '<button type="button" data-msg-send="email" class="btn-ghost" style="padding:8px 16px;font-size:12px;">Enviar por e-mail</button>' : ''}
         <button type="button" data-msg-send="copy" class="btn-text">Copiar</button>
+        <button type="button" data-edit-signature class="btn-text" style="color:var(--muted);">✍️ Minha assinatura</button>
         ${msgState.draft !== null ? '<button type="button" data-msg-reset class="btn-text">Restaurar texto original</button>' : ''}
       </div>
       <p class="text-xs text-white/20 mt-2">Para: ${phone ? `WhatsApp ${escHtml(partyInfo.whatsapp)}` : ''}${phone && client.email ? ' · ' : ''}${client.email ? escHtml(client.email) : ''}</p>`}
@@ -2609,6 +2611,7 @@ function messagesTabHtml(ctx, data) {
 }
 
 function wireMessagesTab(ctx) {
+  content.querySelector('[data-edit-signature]')?.addEventListener('click', () => openSignatureModal(profile, { onSaved: () => { msgState = { ...msgState, draft: null }; render(); } }));
   content.querySelectorAll('[data-msg-kind]').forEach((b) => b.addEventListener('click', () => { msgState = { ...msgState, kind: b.dataset.msgKind, draft: null }; render(); }));
   content.querySelector('[data-msg-meeting]')?.addEventListener('change', (e) => { msgState = { ...msgState, meetingId: e.target.value, draft: null }; render(); });
   content.querySelector('[data-msg-line]')?.addEventListener('change', (e) => { msgState = { ...msgState, lineId: e.target.value, draft: null }; render(); });
