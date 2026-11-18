@@ -11,7 +11,7 @@
 //   ⚜️
 //
 // Stored per person in staff_signatures (each edits her own in "Minha
-// assinatura"). Nay without a saved signature keeps her short "Com carinho, Nay".
+// assinatura"). Without one, the old short sign-off stays.
 import { supabase } from './supabase-client.js';
 import { openModal, toast } from './ui.js';
 
@@ -37,11 +37,14 @@ export function voice(profile, sig = cache) {
   const first = full.split(' ')[0];
   const intro = clean(sig?.intro) || 'da equipe da Nay';
   const title = clean(sig?.title) || 'Equipe';
-  const nayShort = isNay && !sig?._saved;
+  const saved = !!sig?._saved;
+  // Without a saved signature everyone keeps the previous short sign-off
+  // (Nay: "Com carinho, Nay"; assistants: "Com carinho, <Nome> · Equipe
+  // PERSEA"). The full block below is the model for whoever saved one (Tami).
   return {
     isNay, first, full,
-    hello: (to, { emoji = false } = {}) => (nayShort ? `Olá, ${to}!` : `Olá, ${to}! Aqui é a ${first}, ${intro}.`) + (emoji ? ' ✨' : ''),
-    sign: nayShort ? 'Com carinho,\nNay' : `Com carinho,\n${full}\n\n${title}\nPERSEA\n⚜️`,
+    hello: (to, { emoji = false } = {}) => (isNay && !saved ? `Olá, ${to}!` : `Olá, ${to}! Aqui é a ${first}, ${intro}.`) + (emoji ? ' ✨' : ''),
+    sign: saved ? `Com carinho,\n${full}\n\n${title}\nPERSEA\n⚜️` : isNay ? 'Com carinho,\nNay' : `Com carinho,\n${first} · Equipe PERSEA`,
   };
 }
 
