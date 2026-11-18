@@ -803,6 +803,7 @@ function encounterRow(e) {
       </div>
       <p class="text-xs text-white/30 max-w-2xl">${detail}</p>
       ${jornadaMaterials && ENCOUNTER_MATERIALS[e.number] && e.status !== 'skipped' ? materialSlotHtml(e.number, jornadaMaterials) : ''}
+      ${jornadaMaterials && e.number === 3 && e.status !== 'skipped' ? e3MaterialsHtml(currentImageProject) : ''}
     </div>
   `;
 }
@@ -1749,6 +1750,23 @@ function imageDeliverableRow({ key, label, row, isKit }) {
   `;
 }
 
+// E3 (Imagem e Estratégia, led by the assistant) — its materials are the
+// Projeto de Imagem guides. Shown under E3 in Encontros → Materiais dos
+// encontros and in Jornada, so Nath finds them at the encounter itself.
+let currentImageProject = null;
+function e3MaterialsHtml(imageProject) {
+  if (!imageProject) return '';
+  return `
+    <div class="mt-3 rounded" style="padding:14px 16px;border:1px solid var(--line);background:rgba(255,255,255,.03);">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">E3 · Projeto de Imagem</p>
+        <span class="text-xs text-white/30">conduzido pela assistente</span>
+      </div>
+      <p class="text-xs text-white/40 mb-1">${isAssistant ? 'Envie aqui o que você preparou (arquivo, link ou Canva). A Nay aprova e entrega no app.' : 'Materiais que a assistente prepara para o E3. Aprove para entregar no app.'}</p>
+      ${IMAGE_GUIDE_DEFS.map((d) => imageDeliverableRow({ key: d.slug, label: d.label, row: imageProject.guideBySlug[d.slug], isKit: false })).join('')}
+    </div>`;
+}
+
 function imageProjectCard({ guideBySlug, kit }) {
   return card(`
     <p class="text-sm text-white/50 mb-1">Projeto de Imagem</p>
@@ -2178,7 +2196,7 @@ function isPastMeeting(m) {
   return m.status !== 'cancelled' && new Date(m.item_date) <= new Date();
 }
 
-function encontrosTabHtml(encontros) {
+function encontrosTabHtml(encontros, imageProject = null) {
   const { meetings, artifacts, sessions, fileUrls, materials } = encontros;
   const unassigned = artifacts.filter((a) => !a.agenda_item_id);
   const pastMeetings = meetings.filter(isPastMeeting);
@@ -2186,8 +2204,8 @@ function encontrosTabHtml(encontros) {
   // upload ahead of time.
   const materialsCard = card(`
     <p class="text-sm text-white/50 mb-1">Materiais dos encontros</p>
-    <p class="text-xs text-white/30 mb-1">Envie quando quiser; só aparece no app depois que você clicar em "Liberar no app" (normalmente durante o encontro).</p>
-    ${Object.keys(ENCOUNTER_MATERIALS).map((n) => materialSlotHtml(Number(n), materials)).join('')}
+    <p class="text-xs text-white/30 mb-1">Envie quando quiser; só aparece no app depois que ${isAssistant ? 'a Nay liberar' : 'você liberar ("Liberar no app" / "Aprovar e Entregar")'}.</p>
+    ${[...new Set([...Object.keys(ENCOUNTER_MATERIALS).map(Number), 3])].sort((a, b) => a - b).map((n) => (n === 3 ? e3MaterialsHtml(imageProject) : materialSlotHtml(n, materials))).join('')}
   `, 'mb-6');
   return `
     ${materialsCard}
@@ -2655,6 +2673,7 @@ async function render() {
     loadEncounterJourney(client, clientId),
     loadImageProject(),
   ]);
+  currentImageProject = imageProject;
   const programSummaryHtml = await programSummaryCard(client, state);
   // Linha dos encontros: her order + homework status (see encounterTrackCard).
   const [encRefs, encPlan] = await Promise.all([loadEncounterRefs(), loadPlan(clientId)]);
@@ -2685,7 +2704,7 @@ async function render() {
       ${journeyControlCard(client, state)}
       ${phaseBreakdownCard(state, journey)}
     `,
-    encontros: encontros ? encontrosTabHtml(encontros) : '',
+    encontros: encontros ? encontrosTabHtml(encontros, imageProject) : '',
     questionarios: questionnairesTabHtml({ extraction, archetypeState, surveyState, valueAssessment }),
     mensagens: messagesData ? messagesTabHtml({ client, partyInfo, finState }, messagesData) : '',
     financeiro: `
