@@ -945,5 +945,21 @@ select option:checked{ background-color:#3a2c1c; color:var(--cream); }
 .nay-item-confirmed{ border-left-color:#8fae8b; }
 .nay-item-reschedule{ border-left-color:#d0705a; }
 .nay-item-time{ flex:none; width:44px; font-size:13px; color:var(--muted); padding-top:1px; }
+.nay-seg{ display:inline-flex; border:1px solid rgba(242,236,224,.14); border-radius:999px; padding:2px; }
+.nay-seg button{ font-size:11.5px; padding:3px 10px; border-radius:999px; color:var(--muted); background:none; border:0; cursor:pointer; }
+.nay-seg button.on{ background:rgba(201,169,110,.18); color:var(--gold); }
+.nay-wgrid{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:6px; }
+.nay-wcol{ min-width:0; display:flex; flex-direction:column; gap:4px; padding:6px; border-radius:12px; background:rgba(242,236,224,.025); border:1px solid rgba(242,236,224,.06); }
+.nay-wcol-today{ border-color:rgba(201,169,110,.45); }
+.nay-wcol-head{ display:flex; align-items:baseline; justify-content:center; gap:6px; padding:4px 0 6px; background:none; border:0; color:inherit; cursor:pointer; }
+.nay-wcol-n{ font-family:var(--font-serif, Georgia, serif); font-size:18px; }
+.nay-wev{ display:flex; flex-direction:column; text-align:left; gap:1px; padding:6px 7px; border-radius:8px; background:rgba(242,236,224,.04); border:0; border-left:3px solid rgba(242,236,224,.35); color:inherit; cursor:pointer; min-width:0; }
+.nay-wev:hover{ background:rgba(201,169,110,.1); }
+.nay-wev-personal{ opacity:.5; }
+.nay-wev-t{ font-size:11px; color:var(--muted); }
+.nay-wev-title{ font-size:12px; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; word-break:break-word; }
+.nay-wev-st{ font-size:11px; color:var(--gold); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nay-wev-empty{ font-size:12px; color:var(--muted); text-align:center; opacity:.5; padding:6px 0; }
+@media (max-width:900px){ .nay-wgrid{ grid-template-columns:1fr; } .nay-wcol{ flex-direction:column; } .nay-wcol-head{ justify-content:flex-start; } }
 .nay-pill{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid rgba(242,236,224,.2); color:var(--muted); white-space:nowrap; }
 @media (max-width:420px){ .nay-week{ gap:4px; } .nay-day{ padding:8px 0 6px; } .nay-day-n{ font-size:18px; } .nay-item-time{ width:38px; } }

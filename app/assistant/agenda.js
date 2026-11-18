@@ -509,7 +509,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '
 
 async function loadReal() {
   const from = new Date(Date.now() - 2 * 3600e3).toISOString();
-  const to = new Date(Date.now() + 8 * 86400e3).toISOString();
+  const to = new Date(Date.now() + 15 * 86400e3).toISOString(); // two 7-day blocks (Agenda da Nay ‹ ›)
   const [{ data: items }, { data: clients }, { data: nayItems }, nayGoogle] = await Promise.all([
     supabase.from('agenda_items').select('*').eq('assigned_to', 'assistant').order('item_date'),
     supabase.from('clients').select('id, full_name, email').eq('is_demo', false).order('full_name'),
@@ -625,6 +625,10 @@ function confirmationMessage(it, me) {
 // be marked "Pessoal" (Nay's own time): it leaves the confirmation count and
 // folds into a dimmed line; for a repeating event, every repetition.
 let nayDay = null; // toDateString() of the open day
+// 'day' = tiles + the open day's list (to confirm); 'week' = all 7 days
+// side by side, to see her whole week at a glance and prep before meetings.
+let nayMode = (() => { try { return localStorage.getItem('persea.nayAgendaMode') === 'week' ? 'week' : 'day'; } catch { return 'day'; } })();
+let nayOffset = 0; // 0 = next 7 days, 1 = the 7 after
 const isPersonal = (it) => it.confirmation_status === 'personal';
 const needsConfirm = (it) => !isPersonal(it) && CONFIRMABLE.has(it.type) && it.related_student_id && it.confirmation_status !== 'confirmed';
 const needsTriage = (it) => it.source === 'google' && !it.related_student_id && !isPersonal(it);
@@ -669,7 +673,8 @@ function nayAgendaCard() {
   const gNote = nayGoogleStatus === 'not_connected'
     ? '<p class="text-xs mt-2" style="color:#d0705a;">O Google Calendar da Nay não está conectado — peça para ela conectar em Agenda → Connect Google Calendar.</p>'
     : nayGoogleStatus === 'error' ? '<p class="text-xs mt-2" style="color:#d0705a;">Não foi possível ler o Google Calendar da Nay agora.</p>' : '';
-  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today); start.setDate(start.getDate() + nayOffset * 7);
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return d; });
   const byDay = new Map(days.map((d) => [d.toDateString(), []]));
   nayAgenda.forEach((it) => byDay.get(new Date(it.item_date).toDateString())?.push(it));
@@ -681,7 +686,7 @@ function nayAgendaCard() {
     const p = pending(list);
     return `
       <button type="button" data-nay-day="${k}" class="nay-day ${k === nayDay ? 'nay-day-on' : ''} ${work.length ? '' : 'nay-day-empty'}">
-        <span class="nay-day-wd">${k === start.toDateString() ? 'Hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
+        <span class="nay-day-wd">${k === today.toDateString() ? 'Hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
         <span class="nay-day-n">${d.getDate()}</span>
         <span class="nay-day-st">${p ? `<span class="nay-badge">${p}</span>` : work.length ? '<span style="color:#8fae8b;">✓</span>' : '·'}</span>
       </button>`;
@@ -690,12 +695,54 @@ function nayAgendaCard() {
   const work = list.filter((it) => !isPersonal(it));
   const personal = list.filter(isPersonal);
   const dayLabel = new Date(nayDay).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  return card(`
-    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <p class="text-sm text-white/50">Agenda da Nay</p>
-      ${totalPending ? `<span class="text-xs" style="color:var(--gold);">${totalPending} para confirmar na semana</span>` : '<span class="text-xs" style="color:#8fae8b;">Semana em dia ✓</span>'}
+  const fmtShort = (d) => d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '');
+  const rangeLabel = `${fmtShort(days[0])} – ${fmtShort(days[6])}`;
+  const header = `
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="flex items-center gap-2 flex-wrap">
+        <p class="text-sm text-white/50">Agenda da Nay</p>
+        <div class="nay-seg">
+          <button type="button" data-nay-mode="day" class="${nayMode === 'day' ? 'on' : ''}">Dia</button>
+          <button type="button" data-nay-mode="week" class="${nayMode === 'week' ? 'on' : ''}">Semana</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        ${totalPending ? `<span class="text-xs" style="color:var(--gold);">${totalPending} para confirmar</span>` : '<span class="text-xs" style="color:#8fae8b;">Em dia ✓</span>'}
+        <button type="button" data-nay-shift="-1" class="btn-text" style="font-size:14px;padding:0 6px;${nayOffset === 0 ? 'opacity:.3;' : ''}" ${nayOffset === 0 ? 'disabled' : ''} aria-label="Semana anterior">‹</button>
+        <span class="text-xs" style="color:var(--muted);white-space:nowrap;">${rangeLabel}</span>
+        <button type="button" data-nay-shift="1" class="btn-text" style="font-size:14px;padding:0 6px;${nayOffset === 1 ? 'opacity:.3;' : ''}" ${nayOffset === 1 ? 'disabled' : ''} aria-label="Próxima semana">›</button>
+      </div>
     </div>
-    ${gNote}
+    ${gNote}`;
+  if (nayMode === 'week') {
+    const dot = (it) => isPersonal(it) ? 'var(--muted)' : CONF_LABEL[it.confirmation_status]?.[1] || (needsConfirm(it) || needsTriage(it) ? 'var(--gold)' : 'rgba(242,236,224,.35)');
+    const col = (d) => {
+      const k = d.toDateString(); const list = byDay.get(k);
+      return `
+        <div class="nay-wcol ${k === today.toDateString() ? 'nay-wcol-today' : ''}">
+          <button type="button" data-nay-open-day="${k}" class="nay-wcol-head">
+            <span class="nay-day-wd">${k === today.toDateString() ? 'Hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
+            <span class="nay-wcol-n">${d.getDate()}</span>
+          </button>
+          ${list.length ? list.map((it) => {
+            const student = realClients.get(it.related_student_id);
+            return `
+              <button type="button" data-nay-open-day="${k}" class="nay-wev ${isPersonal(it) ? 'nay-wev-personal' : ''}" style="border-left-color:${dot(it)};" title="${esc(it.title)}">
+                <span class="nay-wev-t">${formatTime(it.item_date)}${isPersonal(it) ? ' 🌙' : ''}</span>
+                <span class="nay-wev-title">${esc(it.title)}</span>
+                ${student ? `<span class="nay-wev-st">${esc(student)}</span>` : ''}
+              </button>`;
+          }).join('') : '<p class="nay-wev-empty">—</p>'}
+        </div>`;
+    };
+    return card(`
+      ${header}
+      <div class="nay-wgrid mt-3">${days.map(col).join('')}</div>
+      <p class="text-xs mt-3" style="color:var(--muted);">Toque em um dia para abrir e confirmar os encontros. <span style="color:var(--gold);">●</span> a confirmar · <span style="color:#8fae8b;">●</span> confirmado · <span style="color:#d0705a;">●</span> remarcar · 🌙 pessoal</p>
+    `, 'mb-6');
+  }
+  return card(`
+    ${header}
     <div class="nay-week mt-3">${days.map(tile).join('')}</div>
     <div class="nay-dayview">
       <p class="text-xs uppercase mb-2" style="color:var(--muted);letter-spacing:.1em;">${dayLabel}</p>
@@ -748,10 +795,28 @@ function wireNayAgenda(root) {
     sel.disabled = true;
     if (await setConf(it.id, null, sel.value)) renderReal(); else sel.disabled = false;
   }));
+  const redraw = (el) => {
+    const cardEl = el.closest('.card');
+    if (cardEl) { cardEl.outerHTML = nayAgendaCard(); wireNayAgenda(root); }
+  };
   root.querySelectorAll('[data-nay-day]').forEach((b) => b.addEventListener('click', () => {
     nayDay = b.dataset.nayDay;
-    const cardEl = b.closest('.nay-week')?.parentElement;
-    if (cardEl) { cardEl.outerHTML = nayAgendaCard(); wireNayAgenda(root); }
+    redraw(b);
+  }));
+  root.querySelectorAll('[data-nay-open-day]').forEach((b) => b.addEventListener('click', () => {
+    nayDay = b.dataset.nayOpenDay; nayMode = 'day';
+    try { localStorage.setItem('persea.nayAgendaMode', 'day'); } catch { /* storage blocked */ }
+    redraw(b);
+  }));
+  root.querySelectorAll('[data-nay-mode]').forEach((b) => b.addEventListener('click', () => {
+    nayMode = b.dataset.nayMode;
+    try { localStorage.setItem('persea.nayAgendaMode', nayMode); } catch { /* storage blocked */ }
+    redraw(b);
+  }));
+  root.querySelectorAll('[data-nay-shift]').forEach((b) => b.addEventListener('click', () => {
+    nayOffset = Math.min(1, Math.max(0, nayOffset + Number(b.dataset.nayShift)));
+    nayDay = null;
+    redraw(b);
   }));
   root.querySelectorAll('[data-set-conf]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;

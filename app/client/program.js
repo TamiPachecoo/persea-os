@@ -184,7 +184,7 @@ async function render() {
     ${timeline ? '' : renderPhaseTracker({ phases: phases.map((p) => `Fase ${p.id + 1}${p.status === 'skipped' ? ' · não se aplica' : ''}`), currentIndex: client.phase_index || 0, tier: client.program_slug?.startsWith('persea') ? client.tier : programDef.name })}
 
     ${card(`
-      <div class="grid sm:grid-cols-3 gap-6 mb-5">
+      <div class="grid sm:grid-cols-2 gap-6 mb-5">
         <div>
           <p class="text-xs text-white/30 mb-1">Progresso geral</p>
           <p class="text-2xl font-serif mb-2">${progress.pct}%</p>
@@ -193,10 +193,6 @@ async function render() {
         <div>
           <p class="text-xs text-white/30 mb-1">Atividades</p>
           <p class="text-2xl font-serif">${progress.completedCount} <span class="text-sm text-white/30">de ${progress.totalIncluded} concluídas</span></p>
-        </div>
-        <div>
-          <p class="text-xs text-white/30 mb-1">Próxima etapa</p>
-          <p class="text-lg font-serif">${progress.nextActivity ? progress.nextActivity.title : 'Tudo em dia ✦'}</p>
         </div>
       </div>
     `, 'mb-8')}

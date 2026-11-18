@@ -30,7 +30,68 @@ async function loadStudentTrack(items) {
   const completedCount = items.filter((it) => it.type === 'individual_meeting' && it.status === 'completed').length;
   return loadStudentTimeline(clientId, __clientCtx.client, { completedCount });
 }
-const studentTrackSection = (track) => studentTimelineHtml(track);
+const studentTrackSection = (track, extras) => studentTimelineHtml(track, { extras });
+
+// Under each encounter of her timeline: the meeting itself (date, link,
+// recording + transcription), the deliverables with their real links and
+// the extra material Nay shared on that meeting.
+const E3_GUIDE_LABEL = { paleta_cores: 'Cartela de Cores', guia_producoes_completo: 'Guia de Produções', guia_looks_mensal: 'Guia de Produções (Mensal)', ferramentas_nova_imagem: 'Ferramentas para Nova Imagem', moodboard_ensaio: 'Ensaio Fotográfico' };
+async function loadE3Guides() {
+  const { data } = await supabase.from('image_guides').select('*').eq('client_id', clientId).not('delivered_at', 'is', null);
+  return (await Promise.all((data || []).map(async (g) => {
+    let url = isValidHttpUrl(g.file_url) ? g.file_url : null;
+    if (g.file_path) {
+      const { data: signed } = await supabase.storage.from('client-shared-files').createSignedUrl(g.file_path, 3600);
+      if (signed?.signedUrl) url = signed.signedUrl;
+    }
+    return url ? { url, label: E3_GUIDE_LABEL[g.slug] || g.summary || g.slug } : null;
+  }))).filter(Boolean);
+}
+const linkBtn = (url, label, primary = false) => `<a ${externalLinkAttrs(url)} class="${primary ? 'btn-primary' : 'btn-ghost'}" style="padding:7px 14px;font-size:12px;">${escText(label)} ↗</a>`;
+function buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts, e3Guides) {
+  const extras = new Map();
+  if (!track) return extras;
+  const now = new Date();
+  track.nodes.forEach((n) => {
+    const num = n.def.number;
+    const meetings = items.filter((it) => it.type === 'individual_meeting' && it.status !== 'cancelled' && encounterNumber(it.title) === num)
+      .sort((a, b) => new Date(a.item_date) - new Date(b.item_date));
+    const flags = [];
+    const meetingHtml = meetings.map((it) => {
+      const shape = recordingShapeFor(it, recordingByAgendaId.get(it.id), driveArtifacts);
+      const upcoming = it.status === 'upcoming' && new Date(it.item_date) >= now;
+      const rec = shape.recording;
+      if (rec?.recordingStatus === 'disponivel' && rec.recordingUrl) flags.push('🎥 gravação');
+      if (rec?.transcriptStatus === 'disponivel' && rec.transcriptUrl) flags.push('📝 transcrição');
+      if (upcoming) flags.unshift(`📅 ${formatDateTime(it.item_date)}`);
+      return `
+        <div class="mt-2">
+          <p class="text-sm">${formatDateTime(it.item_date)} <span class="badge ${AGENDA_STATUS_BADGE[it.status] || 'badge-locked'}" style="margin-left:6px;">${AGENDA_STATUS_LABEL[it.status] || it.status}</span></p>
+          ${upcoming && isValidHttpUrl(it.online_link) ? `<div class="mt-2">${linkBtn(it.online_link, 'Entrar na Reunião', true)}</div>` : ''}
+          ${rec ? `<div class="mt-3">${renderClientRecordingBlock(shape)}</div>` : ''}
+        </div>`;
+    }).join('');
+    // Deliverables: real links once Nay releases them; before that, the name.
+    const def = ENCOUNTER_MATERIALS[num];
+    const mat = def && encounterMaterials[def.key];
+    let released = '';
+    if (num === 3) {
+      released = e3Guides.length
+        ? `<div class="flex flex-wrap gap-2 mt-2">${e3Guides.map((g) => linkBtn(g.url, g.label)).join('')}</div>`
+        : '<p class="text-sm mt-1">Cartela de Cores · Guia de Produções · Ferramentas para Nova Imagem · Ensaio Fotográfico <span class="text-xs" style="color:var(--muted);">— liberados aqui depois do encontro</span></p>';
+      if (e3Guides.length) flags.push('📎 entregas');
+    } else if (def) {
+      released = mat?.row?.delivered_at && mat.url
+        ? `<div class="mt-2">${linkBtn(mat.url, `Abrir ${def.label}`, true)}</div>`
+        : `<p class="text-sm mt-1">${escText(def.label)} <span class="text-xs" style="color:var(--muted);">— liberado aqui depois do encontro</span></p>`;
+      if (mat?.row?.delivered_at && mat.url) flags.push('📎 entrega');
+    }
+    const more = meetings.map((it) => sharedNotesBlock(it, { bare: true })).join('');
+    if (more) flags.push('✦ materiais');
+    extras.set(num, { meeting: meetingHtml, released, more, flags });
+  });
+  return extras;
+}
 const wireStudentTrack = (root, track) => { if (track) wireStudentTimeline(root); };
 
 const AGENDA_TYPE_ICON = {
@@ -147,10 +208,17 @@ function sharedFilesBlock(files) {
       : `<a ${externalLinkAttrs(url)} class="btn-ghost" style="padding:7px 14px;font-size:12px;">📄 ${escText(f.name)} ↗</a>`;
   }).join('')}</div>`;
 }
-function sharedNotesBlock(it) {
+function sharedNotesBlock(it, { bare = false } = {}) {
   const links = (Array.isArray(it.shared_links) ? it.shared_links : []).filter((l) => isValidHttpUrl(l.url));
   const files = Array.isArray(it.shared_files) ? it.shared_files : [];
   if (!it.shared_notes && !links.length && !files.length) return '';
+  if (bare) {
+    return `<div class="mt-2">
+      ${it.shared_notes ? `<p class="text-sm" style="white-space:pre-line;line-height:1.65;">${escText(it.shared_notes)}</p>` : ''}
+      ${links.length ? `<div class="flex flex-wrap gap-2 mt-2">${links.map((l) => linkBtn(l.url, l.label || 'Abrir link')).join('')}</div>` : ''}
+      ${sharedFilesBlock(files)}
+    </div>`;
+  }
   return `
     <div class="mt-4 pt-4" style="border-top:1px solid var(--line);">
       <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.14em;">Combinados do encontro</p>
@@ -408,10 +476,15 @@ async function render() {
     (signed || []).forEach((d) => { if (d.signedUrl) sharedFileUrls[d.path] = d.signedUrl; });
   }
   const driveArtifacts = driveArtifactsRaw || [];
+  const e3Guides = track ? await loadE3Guides() : [];
+  const extras = buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts, e3Guides);
+  // Encounter meetings already live under their encounter in the timeline;
+  // "Anteriores" keeps the rest (check-ins, group meetings, unmatched).
+  const inTimeline = (it) => track && it.type === 'individual_meeting' && extras.has(encounterNumber(it.title));
 
   const now = new Date();
   const upcoming = items.filter((it) => it.status === 'upcoming' && new Date(it.item_date) >= now).sort((a, b) => new Date(a.item_date) - new Date(b.item_date));
-  const past = items.filter((it) => it.status !== 'upcoming' || new Date(it.item_date) < now).sort((a, b) => new Date(b.item_date) - new Date(a.item_date));
+  const past = items.filter((it) => (it.status !== 'upcoming' || new Date(it.item_date) < now) && !inTimeline(it)).sort((a, b) => new Date(b.item_date) - new Date(a.item_date));
 
   content.innerHTML = `
     <div class="mb-8">
@@ -423,7 +496,7 @@ async function render() {
       <p class="text-sm mb-2" style="color:var(--muted);">O Encontro E1 (Diagnóstico) é realizado depois que a equipe analisa o material que você preencheu.</p>
       <p class="text-sm" style="color:var(--muted);">O Encontro E3 é marcado com a equipe depois do envio das imagens solicitadas na Análise da Imagem Atual.</p>
     `, 'mb-6') : ''}
-    ${studentTrackSection(track)}
+    ${studentTrackSection(track, extras)}
     ${encounterRequestsHtml}
     <div id="meeting-request-card" class="mb-8"></div>
     ${usageSummary(items, planned)}
@@ -433,7 +506,7 @@ async function render() {
     ${recordingsCard(looseFiles || [])}
 
     ${past.length ? `
-      <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">Anteriores</p>
+      <p class="text-xs uppercase mb-4 mt-10" style="color:var(--muted); letter-spacing:.12em;">${track ? 'Outros encontros anteriores' : 'Anteriores'}</p>
       ${past.map((it) => meetingCard(it, recordingByAgendaId, driveArtifacts)).join('')}
     ` : ''}
   `;

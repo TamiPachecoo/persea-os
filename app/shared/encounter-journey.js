@@ -281,7 +281,11 @@ export async function loadStudentTimeline(clientId, client, { programState = nul
 }
 
 const STATE_LABEL = { done: 'Concluído', current: 'Seu próximo encontro', upcoming: 'Mais adiante' };
-function timelineItemHtml(n, refs) {
+// extra (optional, from the Encontros page): { meeting, released, more,
+// flags } — HTML for her meeting(s) of this encounter (date, link,
+// recording + transcription), the materials with their real links, and the
+// extra material Nay shared; flags = short markers for the summary line.
+function timelineItemHtml(n, refs, extra = null) {
   const released = teamDeliverablesFor(n.def.number, refs).released;
   const pending = n.homework.filter((h) => !h.completed).length;
   const hwHtml = n.homework.length
@@ -295,6 +299,8 @@ function timelineItemHtml(n, refs) {
     ? (pending ? `Lição de casa: ${n.homework.length - pending}/${n.homework.length}` : '✓ Lição de casa concluída')
     : 'Sem lição de casa';
   const isCurrent = n.state === 'current';
+  const sec = (tone, title, who, inner) => `<div class="enc-sec enc-sec-${tone} mt-3"><div class="flex items-center justify-between gap-2 flex-wrap"><p class="enc-sec-title">${title}</p><span class="enc-sec-who">${who}</span></div>${inner}</div>`;
+  const releasedInner = extra?.released || (released.length ? `<p class="text-sm mt-1">${released.map(esc).join(' · ')}</p>` : '');
   return `
     <details class="enc-tl-item enc-tl-${n.state}" ${isCurrent ? 'open' : ''}>
       <summary class="flex items-center justify-between gap-3 flex-wrap" style="cursor:pointer;list-style:none;">
@@ -302,23 +308,22 @@ function timelineItemHtml(n, refs) {
           <span class="enc-tl-dot">${n.state === 'done' ? '✓' : `E${n.def.number}`}</span>
           <div class="min-w-0">
             <p class="text-sm font-medium">E${n.def.number} · ${esc(n.def.name)}</p>
-            <p class="text-xs" style="color:${isCurrent ? 'var(--gold)' : 'var(--muted)'};">${STATE_LABEL[n.state]} · ${summary}</p>
+            <p class="text-xs" style="color:${isCurrent ? 'var(--gold)' : 'var(--muted)'};">${STATE_LABEL[n.state]} · ${summary}${extra?.flags?.length ? ` · ${extra.flags.join(' · ')}` : ''}</p>
           </div>
         </div>
         ${n.def.premium_only ? '<span class="premium-badge" style="font-size:10px;">Premium</span>' : ''}
       </summary>
       <div class="enc-tl-body">
-        <div class="enc-sec enc-sec-student mt-3">
-          <div class="flex items-center justify-between gap-2 flex-wrap"><p class="enc-sec-title">Lição de casa — conclua antes deste encontro</p><span class="enc-sec-who">Você faz</span></div>
-          ${hwHtml}
-        </div>
-        ${released.length ? `<div class="enc-sec enc-sec-release mt-3"><div class="flex items-center justify-between gap-2 flex-wrap"><p class="enc-sec-title">O que você recebe neste encontro</p><span class="enc-sec-who">Você recebe</span></div><p class="text-sm mt-1">${released.map(esc).join(' · ')}</p></div>` : ''}
+        ${extra?.meeting ? sec('team', 'Seu encontro', 'Com a Nay', extra.meeting) : ''}
+        ${sec('student', n.homework.length ? `Atividades — ${n.homework.length - pending} de ${n.homework.length} concluída${n.homework.length === 1 ? '' : 's'}` : 'Atividades', 'Você faz', hwHtml)}
+        ${releasedInner ? sec('release', 'Suas entregas deste encontro', 'Você recebe', releasedInner) : ''}
+        ${extra?.more ? sec('release', 'Materiais extras', 'Da Nay para você', extra.more) : ''}
       </div>
     </details>`;
 }
 
 // Strip + "before your next encounter" + the full list, one per encounter.
-export function studentTimelineHtml(track, { title = 'Sua linha de encontros' } = {}) {
+export function studentTimelineHtml(track, { title = 'Sua linha de encontros', extras = null } = {}) {
   if (!track?.nodes.length) return '';
   const cur = track.nodes.find((n) => n.state === 'current');
   const pending = cur ? cur.homework.filter((h) => !h.completed) : [];
@@ -331,8 +336,8 @@ export function studentTimelineHtml(track, { title = 'Sua linha de encontros' } 
     <div class="card mb-6 enc-timeline">
       <p class="text-xs uppercase mb-2" style="color:var(--gold);letter-spacing:.1em;">Antes do seu próximo encontro</p>
       ${nextNote}
-      <p class="text-xs uppercase mt-6 mb-2" style="color:var(--muted);letter-spacing:.1em;">Todos os seus encontros e a lição de casa de cada um</p>
-      <div class="enc-tl-list">${track.nodes.map((n) => timelineItemHtml(n, track.refs)).join('')}</div>
+      <p class="text-xs uppercase mt-6 mb-2" style="color:var(--muted);letter-spacing:.1em;">Seus encontros — atividades, entregas, materiais e gravações</p>
+      <div class="enc-tl-list">${track.nodes.map((n) => timelineItemHtml(n, track.refs, extras?.get(n.def.number))).join('')}</div>
     </div>`;
 }
 
