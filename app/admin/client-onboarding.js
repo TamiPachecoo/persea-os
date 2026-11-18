@@ -44,7 +44,7 @@ import {
   activityStatusFromProgramState, homeworkProgress, encounterDetailHtml, studentTrackHtml,
 } from '../shared/encounter-journey.js';
 import { mountClientTasks } from '../shared/team-tasks.js';
-import { loadSignature, voice, openSignatureModal } from '../shared/signature.js';
+import { loadSignature, voice, openSignatureModal, openRegistrationMessageModal } from '../shared/signature.js';
 
 
 // Staff-side conversion of Business Survey / Brand Direction / Value
@@ -452,19 +452,12 @@ async function programSummaryCard(client, state) {
   `, 'mb-6');
 }
 
-function openLinkModal(url, expiresAt) {
-  const { el } = openModal({
-    title: 'Link de cadastro',
-    bodyHtml: `
-      <p class="text-sm text-white/50 mb-4">Envie este link para concluir o cadastro. Expira em ${formatDateTime(expiresAt)} e só pode ser usado uma vez.</p>
-      <div class="flex items-center gap-2">
-        <input class="field text-sm" readonly value="${url}" />
-        <button type="button" id="copy-reg-link" class="btn-ghost shrink-0">Copiar</button>
-      </div>
-    `,
-  });
-  el.querySelector('#copy-reg-link').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(url); toast('Link copiado.'); } catch { toast('Não foi possível copiar.', { tone: 'error' }); }
+async function openLinkModal(url, expiresAt) {
+  const { data: c } = await supabase.from('clients').select('full_name').eq('id', clientId).maybeSingle();
+  const { data: p } = await supabase.from('party_info').select('whatsapp, social_name').eq('client_id', clientId).maybeSingle();
+  openRegistrationMessageModal({
+    name: p?.social_name || c?.full_name, url, expiresAt, phone: p?.whatsapp, profile,
+    note: `Envie esta mensagem com o link de cadastro. O link expira em ${formatDateTime(expiresAt)} e só pode ser usado uma vez.`,
   });
 }
 

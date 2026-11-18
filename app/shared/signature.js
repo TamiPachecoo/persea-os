@@ -16,6 +16,11 @@ import { supabase } from './supabase-client.js';
 import { openModal, toast } from './ui.js';
 
 const clean = (s) => String(s || '').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
+// "Assistente (Tami)" → "Tami": a role word with the real name in parentheses.
+const personName = (s) => {
+  const inner = String(s || '').match(/\(([^)]+)\)/)?.[1];
+  return inner && /^(assistente|equipe|admin)$/i.test(clean(s)) ? clean(inner) : clean(s);
+};
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let cache = null;
@@ -33,7 +38,7 @@ export async function loadSignature(profile) {
 // Normalized voice for a profile + its saved signature.
 export function voice(profile, sig = cache) {
   const isNay = profile?.role === 'admin';
-  const full = clean(sig?.display_name) || clean(profile?.full_name) || (isNay ? 'Nay' : 'Equipe PERSEA');
+  const full = clean(sig?.display_name) || personName(profile?.full_name) || (isNay ? 'Nay' : 'Equipe PERSEA');
   const first = full.split(' ')[0];
   const intro = clean(sig?.intro) || 'da equipe da Nay';
   const title = clean(sig?.title) || 'Equipe';
@@ -58,7 +63,7 @@ export async function openSignatureModal(profile, { onSaved } = {}) {
       <form id="sig-form" class="space-y-4">
         <div>
           <label class="text-xs text-white/40 block mb-1">Seu nome completo</label>
-          <input name="display_name" class="field" maxlength="80" value="${esc(sig.display_name || clean(profile.full_name))}" placeholder="Ex.: Tami Pacheco" />
+          <input name="display_name" class="field" maxlength="80" value="${esc(sig.display_name || personName(profile.full_name))}" placeholder="Ex.: Tami Pacheco" />
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">Como você se apresenta (depois de “Aqui é a ${esc(v.first)},”)</label>
@@ -95,4 +100,50 @@ export async function openSignatureModal(profile, { onSaved } = {}) {
     cache = { ...row, _saved: true, _profile: profile };
     close(); toast('Assinatura salva.'); onSaved?.();
   });
+}
+
+// --- Link de cadastro: the message that goes with it ------------------------
+// Same voice as the invite (see voice()); used by "+ Novo Cliente" (crm.js)
+// and "Gerar link de cadastro" on the client page (client-onboarding.js).
+export function registrationMessage({ name, url, expiresAt, profile }) {
+  const v = voice(profile);
+  const first = String(name || '').trim().split(/\s+/)[0] || '';
+  const until = expiresAt ? new Date(expiresAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' }) : null;
+  return [
+    v.hello(first, { emoji: true }),
+    '',
+    'Que alegria ter você com a gente! Para prepararmos o seu contrato e o seu acesso ao app *PERSEA*, precisamos de alguns dados seus.',
+    '',
+    'Toque no link abaixo para preencher o seu cadastro (leva poucos minutos):',
+    url,
+    '',
+    `O link é pessoal e só pode ser usado uma vez${until ? ` — vale até ${until}` : ''}.`,
+    '',
+    v.sign,
+  ].join('\n');
+}
+
+// Modal: the link + the ready message, with WhatsApp (to her number when we
+// have it, otherwise WhatsApp opens to pick the contact) and copy buttons.
+export async function openRegistrationMessageModal({ title = 'Link de cadastro', name, url, expiresAt, phone, profile, note }) {
+  if (profile) await loadSignature(profile).catch(() => null);
+  const msg = registrationMessage({ name, url, expiresAt, profile });
+  const digits = String(phone || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+  const wa = `https://wa.me/${digits.length >= 10 ? `55${digits}` : ''}?text=${encodeURIComponent(msg)}`;
+  const { el } = openModal({
+    title,
+    bodyHtml: `
+      <p class="text-xs text-white/40 mb-3">${esc(note || 'Envie esta mensagem com o link de cadastro.')}</p>
+      <textarea id="reg-msg" class="field text-sm" rows="13" style="line-height:1.55;">${esc(msg)}</textarea>
+      <div class="flex gap-2 flex-wrap mt-3">
+        <a id="reg-wa" href="${wa}" target="_blank" rel="noopener" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Abrir WhatsApp</a>
+        <button type="button" id="copy-reg-msg" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">Copiar mensagem</button>
+        <button type="button" id="copy-reg-link" class="btn-text" style="font-size:12px;">Copiar só o link</button>
+      </div>`,
+  });
+  const ta = el.querySelector('#reg-msg');
+  ta.addEventListener('input', () => { el.querySelector('#reg-wa').href = wa.replace(/text=.*$/, `text=${encodeURIComponent(ta.value)}`); });
+  const copy = async (text, ok) => { try { await navigator.clipboard.writeText(text); toast(ok); } catch { window.prompt('Copie:', text); } };
+  el.querySelector('#copy-reg-msg').addEventListener('click', () => copy(ta.value, 'Mensagem copiada.'));
+  el.querySelector('#copy-reg-link').addEventListener('click', () => copy(url, 'Link copiado.'));
 }

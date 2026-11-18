@@ -17,6 +17,7 @@ import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.j
 import { computeTeamNextStep } from '../shared/team-action-model.js';
 import { mountEncounterBoard } from './encounter-board.js';
 import { dueStripHtml } from '../shared/team-tasks.js';
+import { openRegistrationMessageModal } from '../shared/signature.js';
 
 // Production Migration Batch 4: app.naymurta.com never shows MockDB
 // clients/leads. Real client creation + registration-link generation
@@ -183,19 +184,11 @@ function productionClientRow(c) {
   `;
 }
 
-function openRegistrationLinkModal(url) {
-  const { el } = openModal({
-    title: 'Cliente criada',
-    bodyHtml: `
-      <p class="text-sm text-white/50 mb-4">Envie este link para concluir o cadastro. Ele expira em 7 dias e só pode ser usado uma vez.</p>
-      <div class="flex items-center gap-2">
-        <input id="reg-link-field" class="field text-sm" readonly value="${url}" />
-        <button type="button" id="copy-reg-link" class="btn-ghost shrink-0">Copiar</button>
-      </div>
-    `,
-  });
-  el.querySelector('#copy-reg-link').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(url); toast('Link copiado.'); } catch { toast('Não foi possível copiar.', { tone: 'error' }); }
+function openRegistrationLinkModal(url, { name, phone } = {}) {
+  return openRegistrationMessageModal({
+    title: 'Cliente criada', name, url, phone, profile: crmProfile,
+    expiresAt: new Date(Date.now() + 7 * 86400e3).toISOString(),
+    note: 'Envie esta mensagem com o link de cadastro. O link expira em 7 dias e só pode ser usado uma vez.',
   });
 }
 
@@ -286,7 +279,7 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
       }
       converted = true;
       close();
-      openRegistrationLinkModal(data.registration_url);
+      openRegistrationLinkModal(data.registration_url, { name: fd.get('full_name'), phone: fromLead?.whatsapp || fromLead?.phone || null });
       renderProductionCRM();
     } finally {
       submitBtn.disabled = false;
