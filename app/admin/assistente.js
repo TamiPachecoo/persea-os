@@ -20,7 +20,7 @@ const content = document.getElementById('app-content');
 // Revisões still runs on MockDB (demo content only), so it is not offered
 // in production; there the assistant's deliverables live on each client's
 // page (Projeto de Imagem tab).
-const SECTIONS = isProductionEnvironment() ? ['acesso', 'templates', 'hubla', 'financeiro'] : ['acesso', 'revisoes', 'templates', 'hubla', 'financeiro'];
+const SECTIONS = isProductionEnvironment() ? ['acesso', 'hubla', 'financeiro'] : ['acesso', 'revisoes', 'hubla', 'financeiro'];
 let section = SECTIONS.includes(new URLSearchParams(location.search).get('section')) ? new URLSearchParams(location.search).get('section') : 'acesso';
 
 // --- Acesso: the assistant's login --------------------------------------
@@ -348,12 +348,10 @@ async function render() {
     <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
       <button data-section="acesso" class="tab-btn ${section === 'acesso' ? 'active' : ''}">Acesso</button>
       ${SECTIONS.includes('revisoes') ? `<button data-section="revisoes" class="tab-btn ${section === 'revisoes' ? 'active' : ''}">Revisões</button>` : ''}
-      <button data-section="templates" class="tab-btn ${section === 'templates' ? 'active' : ''}">Templates</button>
       <button data-section="hubla" class="tab-btn ${section === 'hubla' ? 'active' : ''}">Hubla</button>
       <button data-section="financeiro" class="tab-btn ${section === 'financeiro' ? 'active' : ''}">Financeiro</button>
     </div>
     ${section === 'acesso' ? renderAccessSection(staff)
-      : section === 'templates' ? renderTemplatesSection()
       : section === 'hubla' ? renderHublaSection(hublaPending)
       : section === 'financeiro' ? renderFinanceiroSection(wagePayments)
       : renderReviewsSection()}

@@ -252,7 +252,6 @@ const MOBILE_NAV_CONFIG = {
     ],
     mais: [
       ['leads.html', 'Cadastros'],
-      ['templates.html', 'Templates'],
       ['financial.html', 'Financeiro'],
       ['events.html', 'Eventos'],
     ],
@@ -362,7 +361,6 @@ const ASSISTANT_NAV = [
   ['tarefas.html', 'Tarefas'],
   ['leads.html', 'Cadastros'],
   ['clients.html', 'Clientes'],
-  ['templates.html', 'Templates'],
   ['financial.html', 'Financeiro'],
   ['events.html', 'Eventos'],
 ];

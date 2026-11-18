@@ -903,7 +903,6 @@ function welcomeCard() {
       ${row('Agenda', 'O que a Nay pediu para você e as suas tarefas. É aqui que o seu dia começa.')}
       ${row('Clientes', 'Cadastros ativos. Clique em um cadastro para ver a jornada, os encontros e os materiais.')}
       ${row('Cadastros', 'Novos cadastros entrando: contrato, liberação do acesso ao app e à Hubla.')}
-      ${row('Templates', 'Os modelos do Canva para cada entrega. Abra, duplique e adapte.')}
       ${row('Financeiro', 'Anexar a nota fiscal de um pagamento. Ela aparece no app de quem é cliente.')}
     </div>
     <p class="text-xs uppercase mb-3" style="color:var(--muted);letter-spacing:.12em;">Seus três primeiros passos</p>
