@@ -106,7 +106,7 @@ function buildEncounterExtras(track, items, recordingByAgendaId, driveArtifacts,
       if (num === 4) released += guideBlock([ENSAIO_SLUG]);
     }
     const more = meetings.map((it) => sharedNotesBlock(it, { bare: true })).join('');
-    if (more) flags.push('✦ materiais');
+    if (more) flags.push('✦ combinados');
     extras.set(num, { meeting: meetingHtml, released, more, flags });
   });
   return extras;
@@ -261,6 +261,23 @@ function materialBlock(it) {
     </div>`;
 }
 
+// The latest meeting's agreements, first thing on the page (they used to
+// sit at the very bottom of each meeting).
+function latestCombinadosCard(items) {
+  const now = new Date();
+  const withNotes = items.filter((it) => it.status !== 'cancelled' && new Date(it.item_date) <= now && sharedNotesBlock(it, { bare: true }))
+    .sort((a, b) => new Date(b.item_date) - new Date(a.item_date));
+  const it = withNotes[0];
+  if (!it) return '';
+  return card(`
+    <div class="flex items-baseline justify-between gap-2 flex-wrap mb-1">
+      <p class="text-xs uppercase" style="color:var(--gold);letter-spacing:.14em;">Combinados do último encontro</p>
+      <span class="text-xs" style="color:var(--muted);">${escText(it.title)} · ${formatDate(it.item_date)}</span>
+    </div>
+    ${sharedNotesBlock(it, { bare: true })}
+  `, 'mb-6');
+}
+
 function meetingCard(it, recordingByAgendaId, driveArtifacts) {
   const linkOk = it.status === 'upcoming' && isValidHttpUrl(it.online_link);
   const meetingShape = recordingShapeFor(it, recordingByAgendaId.get(it.id), driveArtifacts);
@@ -275,9 +292,9 @@ function meetingCard(it, recordingByAgendaId, driveArtifacts) {
     <p class="text-sm text-white/40 mb-1">${formatDateTime(it.item_date)}</p>
     ${it.topic ? `<p class="text-sm text-white/50 mb-4 max-w-xl break-words">${it.topic}</p>` : '<div class="mb-4"></div>'}
     ${linkOk ? `<a ${externalLinkAttrs(it.online_link)} class="btn-primary inline-block" style="padding:9px 18px;font-size:12.5px;">Entrar na Reunião ↗</a>` : ''}
+    ${sharedNotesBlock(it)}
     ${meetingShape.recording ? `<div class="mt-4 pt-4" style="border-top:1px solid var(--line);">${renderClientRecordingBlock(meetingShape)}</div>` : ''}
     ${materialBlock(it)}
-    ${sharedNotesBlock(it)}
   `, 'mb-5');
 }
 
@@ -515,6 +532,7 @@ async function render() {
       <p class="text-sm mb-2" style="color:var(--muted);">O Encontro E1 (Diagnóstico) é realizado depois que a equipe analisa o material que você preencheu.</p>
       <p class="text-sm" style="color:var(--muted);">O Encontro E3 é marcado com a equipe depois do envio das imagens solicitadas na Análise da Imagem Atual.</p>
     `, 'mb-6') : ''}
+    ${latestCombinadosCard(items)}
     ${studentTrackSection(track, extras)}
     ${encounterRequestsHtml}
     <div id="meeting-request-card" class="mb-8"></div>

@@ -172,6 +172,15 @@ async function render() {
     return renderPhaseSection(phase, cards.join(''));
   }));
 
+  // Progresso geral follows the encounters held (E1–E8 in her plan), not the
+  // app activities; programs without the encounter line keep the activities.
+  const overall = (() => {
+    if (!timeline?.nodes?.length) return { pct: progress.pct, note: '' };
+    const total = timeline.nodes.length;
+    const held = timeline.nodes.filter((n) => n.state === 'done').length;
+    return { pct: Math.round((held / total) * 100), note: `${held} de ${total} encontros realizados` };
+  })();
+
   content.innerHTML = `
     <div class="mb-4">
       <p class="text-white/40 text-sm mb-1">Seu Programa</p>
@@ -187,8 +196,9 @@ async function render() {
       <div class="grid sm:grid-cols-2 gap-6 mb-5">
         <div>
           <p class="text-xs text-white/30 mb-1">Progresso geral</p>
-          <p class="text-2xl font-serif mb-2">${progress.pct}%</p>
-          ${progressBar(progress.pct)}
+          <p class="text-2xl font-serif mb-2">${overall.pct}%</p>
+          ${progressBar(overall.pct)}
+          ${overall.note ? `<p class="text-xs text-white/30 mt-2">${overall.note}</p>` : ''}
         </div>
         <div>
           <p class="text-xs text-white/30 mb-1">Atividades</p>

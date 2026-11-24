@@ -318,9 +318,9 @@ function timelineItemHtml(n, refs, extra = null) {
       </summary>
       <div class="enc-tl-body">
         ${extra?.meeting ? sec('team', 'Seu encontro', 'Com a Nay', extra.meeting) : ''}
+        ${extra?.more ? sec('release', 'Combinados do encontro', 'Da Nay para você', extra.more) : ''}
         ${sec('student', n.homework.length ? `Atividades — ${n.homework.length - pending} de ${n.homework.length} concluída${n.homework.length === 1 ? '' : 's'}` : 'Atividades', 'Você faz', hwHtml)}
         ${releasedInner ? sec('release', 'Suas entregas deste encontro', 'Você recebe', releasedInner) : ''}
-        ${extra?.more ? sec('release', 'Materiais extras', 'Da Nay para você', extra.more) : ''}
       </div>
     </details>`;
 }
