@@ -300,6 +300,21 @@ function meetingCard(it, recordingByAgendaId, driveArtifacts) {
 
 // Recordings Nay linked to her without filing them on a specific meeting —
 // one card per Meet session (recording + transcript share a name prefix).
+// Her Drive folder with every recording/transcript (linked once by the team).
+function recordingsFolderCard() {
+  const url = __clientCtx.client?.recordings_folder_url;
+  if (!url || !isValidHttpUrl(url)) return '';
+  return card(`
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <p class="text-sm" style="color:var(--gold);">Suas gravações e transcrições</p>
+        <p class="text-xs mt-1" style="color:var(--muted);">Todas as gravações dos seus encontros ficam nesta pasta.</p>
+      </div>
+      <a ${externalLinkAttrs(url)} class="btn-primary" style="padding:9px 18px;font-size:12.5px;">Abrir pasta ↗</a>
+    </div>
+  `, 'mb-6');
+}
+
 function recordingsCard(files) {
   const sessions = new Map();
   files.forEach((a) => {
@@ -533,6 +548,7 @@ async function render() {
       <p class="text-sm" style="color:var(--muted);">O Encontro E3 é marcado com a equipe depois do envio das imagens solicitadas na Análise da Imagem Atual.</p>
     `, 'mb-6') : ''}
     ${latestCombinadosCard(items)}
+    ${recordingsFolderCard()}
     ${studentTrackSection(track, extras)}
     ${encounterRequestsHtml}
     <div id="meeting-request-card" class="mb-8"></div>

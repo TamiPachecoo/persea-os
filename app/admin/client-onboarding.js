@@ -2280,6 +2280,15 @@ function encontrosTabHtml(encontros, imageProject = null) {
     ${materialsCard}
     ${card(`
       <p class="text-sm text-white/50 mb-1">Gravações</p>
+      <form id="rec-folder-form" class="rounded mb-4" style="padding:12px 14px;border:1px solid var(--line);background:rgba(255,255,255,.03);">
+        <p class="text-xs uppercase mb-1" style="color:var(--gold);letter-spacing:.14em;">Pasta do Drive deste cliente</p>
+        <p class="text-xs text-white/40 mb-2">Cole o link da pasta onde ficam as gravações e transcrições. A cliente abre a pasta pelo app, e "Buscar gravações" traz cada arquivo de dentro para cá, sem vincular encontro por encontro. Compartilhe a pasta com o e-mail da cliente no Google Drive.</p>
+        <div class="flex gap-2 flex-wrap">
+          <input name="folder" class="field text-sm" style="flex:1 1 260px;" placeholder="https://drive.google.com/drive/folders/…" value="${escHtml(currentClient?.recordings_folder_url || '')}" />
+          <button type="submit" class="btn-primary" style="padding:8px 14px;font-size:12px;">${currentClient?.recordings_folder_url ? 'Salvar e buscar gravações' : 'Vincular pasta'}</button>
+          ${currentClient?.recordings_folder_url ? `<a ${externalLinkAttrs(currentClient.recordings_folder_url)} class="btn-ghost" style="padding:8px 14px;font-size:12px;">Abrir pasta ↗</a>` : ''}
+        </div>
+      </form>
       <p class="text-xs text-white/30 mb-3">Gravações vinculadas a este cadastro. Todas já aparecem na página Encontros do app. Arquivar em um encontro já realizado é opcional.</p>
       ${unassigned.length ? unassigned.map((a) => encontroFileRow(a, pastMeetings)).join('') : '<p class="text-xs text-white/20">Nenhuma gravação avulsa. Vincule novas em Agenda → Gravações.</p>'}
     `, 'mb-6')}
@@ -2888,6 +2897,24 @@ async function render() {
     const { error } = await markHublaAccessGranted(clientId);
     if (error) { toast('Não foi possível marcar agora.', { tone: 'error' }); e.target.disabled = false; return; }
     toast('Acesso Hubla marcado como concedido.');
+    render();
+  });
+  content.querySelector('#rec-folder-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = String(new FormData(e.target).get('folder') || '').trim();
+    if (url && !/^https:\/\/drive\.google\.com\//i.test(url)) { toast('Cole o link de uma pasta do Google Drive (https://drive.google.com/…).', { tone: 'error' }); return; }
+    const btn = e.target.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Salvando…';
+    const { error } = await supabase.from('clients').update({ recordings_folder_url: url || null }).eq('id', clientId);
+    if (error) { toast('Não foi possível salvar a pasta.', { tone: 'error' }); btn.disabled = false; btn.textContent = 'Vincular pasta'; return; }
+    if (!url) { toast('Pasta removida.'); render(); return; }
+    btn.textContent = 'Buscando gravações…';
+    const { data, error: fnErr } = await supabase.functions.invoke('google-drive-meet-files', { body: { action: 'folder', client_id: clientId, folder_url: url } });
+    if (fnErr || !data || data.error) {
+      toast(`Pasta salva — a cliente já consegue abrir. ${await functionErrorMessage(data, fnErr)}`, { tone: 'error' });
+    } else {
+      toast(data.found ? `Pasta vinculada: ${data.found} gravaç${data.found === 1 ? 'ão/transcrição' : 'ões/transcrições'} encontrada${data.found === 1 ? '' : 's'}${data.added ? ` (${data.added} nova${data.added === 1 ? '' : 's'})` : ''}.${data.skipped_other_client ? ` ${data.skipped_other_client} já estava${data.skipped_other_client === 1 ? '' : 'm'} em outro cliente e ficou${data.skipped_other_client === 1 ? '' : 'ram'} lá.` : ''}`
+        : 'Pasta vinculada. Nenhuma gravação do Meet encontrada dentro dela ainda — a cliente abre a pasta pelo app.');
+    }
     render();
   });
   content.querySelectorAll('[data-edit-deliverable]').forEach((btn) => {
