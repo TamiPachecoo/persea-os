@@ -133,8 +133,9 @@ function taskRow(t, { profile, clientsById, showClient = true }) {
       <span class="min-w-0 flex-1 text-left">
         <span class="block text-sm ${t.status === 'done' ? 'line-through text-white/40' : ''}">${t.kind === 'question' ? '<span class="task-kind">Pergunta</span> ' : ''}${esc(t.title)}</span>
         <span class="block text-xs text-white/40 mt-0.5">
-          ${client ? `${esc(client.full_name)} · ` : ''}${isMine(t, profile) ? `de ${esc(fromWho)}` : `para ${esc(toWho)}`}${t.status === 'in_progress' ? ' · em andamento' : ''}
+          ${client ? `${esc(client.full_name)} · ` : ''}${isMine(t, profile) ? (t.created_by === profile.id ? 'minha tarefa' : `de ${esc(fromWho)}`) : `para ${esc(toWho)}`}${t.status === 'in_progress' ? ' · em andamento' : ''}
         </span>
+        ${t.block_start && t.status !== 'done' ? `<span class="block text-xs mt-0.5" style="color:var(--gold);">${blockLabel(t)}</span>` : ''}
         <span class="block mt-1 sm:hidden">${due}</span>
       </span>
       <span class="flex-none text-right hidden sm:block">${due}</span>
@@ -152,11 +153,37 @@ function defaultDue() {
   return toLocalInput(d.toISOString());
 }
 
-export async function openNewTaskModal(profile, { clientId = null, kind = 'task', onSaved } = {}) {
+// Reserve time for a tarefa on the agenda of whoever does it: an agenda item
+// (admin_task, Nay's or the assistant's) and, when that person's Google
+// Calendar is connected, a busy block there too (no Meet link).
+async function reserveTaskTime(task, profile, startIso, minutes) {
+  const forNay = task.assigned_role === 'admin';
+  const { data: item, error } = await supabase.from('agenda_items').insert({
+    type: 'admin_task', title: task.title, item_date: startIso, duration_minutes: minutes, status: 'upcoming',
+    assigned_to: forNay ? 'nay' : 'assistant', related_student_id: task.client_id || null,
+    topic: task.notes || null, source_key: `team_task:${task.id}`,
+  }).select('id').single();
+  if (error) return { ok: false, message: error.message };
+  await supabase.from('team_tasks').update({ agenda_item_id: item.id, block_start: startIso, block_minutes: minutes }).eq('id', task.id);
+  let google = false;
+  try {
+    const endIso = new Date(new Date(startIso).getTime() + minutes * 60000).toISOString();
+    const { data } = await supabase.functions.invoke('google-calendar-create-event', { body: { summary: `🗂️ ${task.title}`, description: task.notes || undefined, start: startIso, end: endIso, no_meet: true } });
+    if (data?.event_id) { google = true; await supabase.from('agenda_items').update({ google_event_id: data.event_id }).eq('id', item.id); }
+  } catch { /* Google not connected: the block still lives on the PERSEA agenda */ }
+  return { ok: true, google };
+}
+const blockLabel = (t) => {
+  if (!t.block_start) return '';
+  const a = new Date(t.block_start); const b = new Date(a.getTime() + (t.block_minutes || 60) * 60000);
+  return `📅 ${a.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '')} · ${a.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}–${b.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+};
+
+export async function openNewTaskModal(profile, { clientId = null, kind = 'task', forSelf = false, onSaved } = {}) {
   const [clients, assistants] = await Promise.all([loadClientsMap(), loadAssistants(profile)]);
   const isAdmin = profile.role === 'admin';
   const { el, close } = openModal({
-    title: kind === 'question' ? 'Nova pergunta' : isAdmin ? 'Delegar uma tarefa' : 'Nova tarefa / pergunta',
+    title: kind === 'question' ? 'Nova pergunta' : forSelf ? 'Minha tarefa' : isAdmin ? 'Delegar uma tarefa' : 'Nova tarefa / pergunta',
     bodyHtml: `
       <form id="task-form" class="space-y-4">
         <div class="flex gap-2 flex-wrap">
@@ -178,16 +205,32 @@ export async function openNewTaskModal(profile, { clientId = null, kind = 'task'
               ${isAdmin
                 ? `<option value="role:assistant">Assistente${assistants.length > 1 ? ' (qualquer uma)' : ''}</option>
                    ${assistants.length > 1 ? assistants.map((a) => `<option value="id:${a.id}">${esc(a.full_name)}</option>`).join('') : ''}
-                   <option value="role:admin">Para mim (lembrete)</option>`
+                   <option value="role:admin" ${forSelf ? 'selected' : ''}>Para mim</option>`
                 : `<option value="role:admin">Nay</option>
                    ${assistants.filter((a) => a.id !== profile.id).map((a) => `<option value="id:${a.id}">${esc(a.full_name)} (assistente)</option>`).join('')}
-                   <option value="id:${profile.id}">Para mim (lembrete)</option>`}
+                   <option value="id:${profile.id}" ${forSelf ? 'selected' : ''}>Para mim</option>`}
             </select>
           </div>
           <div>
             <label class="text-xs text-white/40 block mb-1">Prazo</label>
             <input name="due_at" type="datetime-local" class="field" value="${defaultDue()}" />
           </div>
+        </div>
+        <div data-block-box class="${forSelf ? '' : 'hidden'} rounded" style="padding:12px 14px;border:1px solid rgba(201,169,110,.35);background:rgba(201,169,110,.06);">
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="block" ${forSelf ? 'checked' : ''}/> Reservar horário na minha agenda para fazer</label>
+          <div class="grid sm:grid-cols-2 gap-3 mt-3" data-block-fields>
+            <div>
+              <label class="text-xs text-white/40 block mb-1">Quando</label>
+              <input name="block_start" type="datetime-local" class="field" />
+            </div>
+            <div>
+              <label class="text-xs text-white/40 block mb-1">Duração</label>
+              <select name="block_minutes" class="field">
+                ${[[30, '30 min'], [60, '1 hora'], [90, '1h30'], [120, '2 horas'], [180, '3 horas'], [240, '4 horas']].map(([m, l]) => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${l}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <p class="text-xs text-white/30 mt-2">Aparece na sua agenda do PERSEA e bloqueia o horário no seu Google Calendar (se estiver conectado).</p>
         </div>
         <div>
           <label class="text-xs text-white/40 block mb-1">É sobre qual cliente?</label>
@@ -204,6 +247,18 @@ export async function openNewTaskModal(profile, { clientId = null, kind = 'task'
       </form>`,
   });
   el.querySelector('[data-cancel]').addEventListener('click', close);
+  // The time block only makes sense when the tarefa is for me.
+  const selfValue = isAdmin ? 'role:admin' : `id:${profile.id}`;
+  const assigneeSel = el.querySelector('[name=assignee]');
+  const blockBox = el.querySelector('[data-block-box]');
+  const syncBlock = () => {
+    const self = assigneeSel.value === selfValue && el.querySelector('[name=kind]:checked')?.value !== 'question';
+    blockBox.classList.toggle('hidden', !self);
+    el.querySelector('[data-block-fields]').classList.toggle('hidden', !el.querySelector('[name=block]').checked);
+  };
+  assigneeSel.addEventListener('change', syncBlock);
+  el.querySelectorAll('[name=kind], [name=block]').forEach((i) => i.addEventListener('change', syncBlock));
+  syncBlock();
   el.querySelector('#task-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -220,11 +275,26 @@ export async function openNewTaskModal(profile, { clientId = null, kind = 'task'
       created_by: profile.id,
     };
     if (!row.title) { toast('Escreva o que precisa ser feito.', { tone: 'error' }); return; }
+    const wantsBlock = !blockBox.classList.contains('hidden') && fd.get('block');
+    const blockStart = String(fd.get('block_start') || '');
+    const blockMinutes = Number(fd.get('block_minutes') || 60);
+    if (wantsBlock && !blockStart) { toast('Escolha quando você vai fazer (ou desmarque "Reservar horário").', { tone: 'error' }); return; }
+    if (wantsBlock) {
+      // The deadline is never before the reserved time.
+      const blockEnd = new Date(new Date(blockStart).getTime() + blockMinutes * 60000);
+      if (!row.due_at || new Date(row.due_at) < blockEnd) row.due_at = blockEnd.toISOString();
+    }
     const btn = e.target.querySelector('[type=submit]'); btn.disabled = true;
-    const { error } = await supabase.from('team_tasks').insert(row);
+    const { data: created, error } = await supabase.from('team_tasks').insert(row).select('*').single();
     if (error) { btn.disabled = false; toast(`Não foi possível salvar: ${error.message}`, { tone: 'error' }); return; }
     close();
-    toast(row.kind === 'question' ? 'Pergunta enviada.' : 'Tarefa enviada.');
+    if (wantsBlock) {
+      const r = await reserveTaskTime(created, profile, new Date(blockStart).toISOString(), blockMinutes);
+      toast(!r.ok ? `Tarefa salva, mas o horário não entrou na agenda: ${r.message}`
+        : r.google ? 'Tarefa salva e horário reservado na agenda e no Google Calendar.' : 'Tarefa salva e horário reservado na agenda.', { tone: r.ok ? undefined : 'error' });
+    } else {
+      toast(row.kind === 'question' ? 'Pergunta enviada.' : 'Tarefa salva.');
+    }
     onSaved?.();
   });
 }
@@ -245,6 +315,7 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
       <div class="flex items-center gap-2 flex-wrap mb-2">
         <span class="badge ${t.status === 'done' ? 'badge-completed' : t.status === 'in_progress' ? 'badge-progress' : 'badge-locked'}">${STATUS_LABEL[t.status]}</span>
         ${t.status !== 'done' ? dueChip(t) : ''}
+        ${t.block_start ? `<span class="text-xs" style="color:var(--gold);">${blockLabel(t)} na agenda</span>` : ''}
         ${t.source === 'auto' ? '<span class="text-xs text-white/30">criada automaticamente</span>' : ''}
       </div>
       <p class="font-serif text-xl mb-2">${esc(t.title)}</p>
@@ -259,7 +330,13 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
         ${t.status === 'open' ? '<button type="button" class="btn-ghost" data-set-status="in_progress" style="padding:8px 14px;font-size:12px;">Comecei</button>' : ''}
         ${t.status !== 'done' ? '<button type="button" class="btn-primary" data-set-status="done" style="padding:8px 14px;font-size:12px;">✓ Concluir</button>' : '<button type="button" class="btn-ghost" data-set-status="open" style="padding:8px 14px;font-size:12px;">Reabrir</button>'}
         ${t.status !== 'done' ? '<button type="button" class="btn-text" data-edit-due style="font-size:12px;">Mudar prazo</button>' : ''}
+        ${t.status !== 'done' && !t.block_start && isMine(t, profile) && t.kind !== 'question' ? '<button type="button" class="btn-text" data-reserve style="font-size:12px;">📅 Reservar horário</button>' : ''}
         ${canDelete ? '<button type="button" class="btn-text" data-delete-task style="font-size:12px;color:var(--terracotta);">Apagar</button>' : ''}
+      </div>
+      <div id="reserve-editor" style="display:none;" class="mb-5 flex gap-2 items-center flex-wrap">
+        <input type="datetime-local" class="field" data-reserve-start style="width:auto;" />
+        <select class="field" data-reserve-min style="width:auto;">${[[30, '30 min'], [60, '1 hora'], [90, '1h30'], [120, '2 horas'], [180, '3 horas'], [240, '4 horas']].map(([m, l]) => `<option value="${m}" ${m === 60 ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <button type="button" class="btn-ghost" data-save-reserve style="padding:8px 14px;font-size:12px;">Reservar</button>
       </div>
       <div id="relink-editor" style="display:none;" class="mb-5 flex gap-2 items-center flex-wrap">
         <select class="field" style="width:auto;max-width:100%;"><option value="">Nenhum — trabalho da equipe</option></select>
@@ -283,6 +360,16 @@ export async function openTaskModal(taskId, profile, { onChanged } = {}) {
       </form>`,
   });
   const done = () => { close(); onChanged?.(); };
+  el.querySelector('[data-reserve]')?.addEventListener('click', () => { el.querySelector('#reserve-editor').style.display = 'flex'; });
+  el.querySelector('[data-save-reserve]')?.addEventListener('click', async (e) => {
+    const start = el.querySelector('[data-reserve-start]').value;
+    if (!start) { toast('Escolha o dia e a hora.', { tone: 'error' }); return; }
+    e.target.disabled = true;
+    const r = await reserveTaskTime(t, profile, new Date(start).toISOString(), Number(el.querySelector('[data-reserve-min]').value));
+    if (!r.ok) { e.target.disabled = false; toast(`Não foi possível reservar: ${r.message}`, { tone: 'error' }); return; }
+    toast(r.google ? 'Horário reservado na agenda e no Google Calendar.' : 'Horário reservado na agenda.');
+    close(); onChanged?.();
+  });
   el.querySelectorAll('[data-set-status]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
     const { error } = await supabase.from('team_tasks').update({ status: b.dataset.setStatus }).eq('id', t.id);
@@ -429,6 +516,7 @@ export async function mountTasksPage(content, profile) {
         </div>
         <div class="flex gap-2 flex-wrap">
           ${isAdmin ? '' : '<button type="button" id="new-question" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">? Perguntar à Nay</button>'}
+          <button type="button" id="new-self-task" class="btn-ghost" style="padding:9px 18px;font-size:12.5px;">+ Minha tarefa</button>
           <button type="button" id="new-task" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">${isAdmin ? '+ Delegar tarefa' : '+ Nova tarefa'}</button>
         </div>
       </div>
@@ -452,6 +540,7 @@ export async function mountTasksPage(content, profile) {
     content.querySelector('#show-done').addEventListener('change', (e) => { showDone = e.target.checked; render(); });
     content.querySelector('#new-task').addEventListener('click', () => openNewTaskModal(profile, { onSaved: render }));
     content.querySelector('#new-question')?.addEventListener('click', () => openNewTaskModal(profile, { kind: 'question', onSaved: render }));
+    content.querySelector('#new-self-task')?.addEventListener('click', () => openNewTaskModal(profile, { forSelf: true, onSaved: render }));
     content.querySelectorAll('[data-task-open]').forEach((b) => b.addEventListener('click', () => openTaskModal(b.dataset.taskOpen, profile, { onChanged: render })));
     wirePushButton(content, profile, render);
   };
