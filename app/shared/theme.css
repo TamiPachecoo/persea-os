@@ -963,3 +963,16 @@ select option:checked{ background-color:#3a2c1c; color:var(--cream); }
 @media (max-width:900px){ .nay-wgrid{ grid-template-columns:1fr; } .nay-wcol{ flex-direction:column; } .nay-wcol-head{ justify-content:flex-start; } }
 .nay-pill{ font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid rgba(242,236,224,.2); color:var(--muted); white-space:nowrap; }
 @media (max-width:420px){ .nay-week{ gap:4px; } .nay-day{ padding:8px 0 6px; } .nay-day-n{ font-size:18px; } .nay-item-time{ width:38px; } }
+
+/* CRM — team history, one line per conversation (opens to the thread) */
+.hist-compact{ border-bottom:1px solid rgba(242,236,224,.06); }
+.hist-compact > summary{ display:flex; align-items:center; gap:10px; padding:9px 2px; cursor:pointer; list-style:none; }
+.hist-compact > summary::-webkit-details-marker{ display:none; }
+.hist-compact > summary::before{ content:'▸'; color:var(--muted); font-size:11px; flex:none; transition:transform .15s; }
+.hist-compact[open] > summary::before{ transform:rotate(90deg); }
+.hist-compact-title{ font-size:13.5px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hist-compact-meta{ font-size:11.5px; color:var(--muted); white-space:nowrap; flex:none; }
+.hist-compact .hist-thread{ margin:0 0 4px 20px; padding-top:0; border:0; }
+.hist-compact .hist-thread > div:first-child{ display:none; }
+.hist-compact-open{ margin:0 0 10px 20px; font-size:12px; }
+@media (max-width:600px){ .hist-compact > summary{ flex-wrap:wrap; } .hist-compact-title{ white-space:normal; flex-basis:calc(100% - 24px); } .hist-compact-meta{ margin-left:20px; } }

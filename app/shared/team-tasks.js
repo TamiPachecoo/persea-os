@@ -76,6 +76,23 @@ export async function loadHistory({ clientId = null } = {}) {
   }).sort((a, b) => b.lastActivity - a.lastActivity);
 }
 
+// Compact (client page / CRM): one line per conversation — title, status,
+// last message date and count — that opens to the full thread.
+function historyThreadCompact(t, ctx) {
+  const n = 1 + t.comments.length;
+  const last = [t.created_at, ...t.comments.map((c) => c.created_at), t.completed_at].filter(Boolean).sort().pop();
+  return `
+    <details class="hist-compact">
+      <summary>
+        <span class="hist-compact-title">${t.kind === 'question' ? '<span class="task-kind">Pergunta</span> ' : ''}${esc(t.title)}</span>
+        <span class="hist-compact-meta">${n} mensage${n === 1 ? 'm' : 'ns'} · ${formatDateTime(last)}</span>
+        <span class="badge ${t.status === 'done' ? 'badge-completed' : t.status === 'in_progress' ? 'badge-progress' : 'badge-locked'}" style="flex:none;">${STATUS_LABEL[t.status]}</span>
+      </summary>
+      ${historyThread(t, ctx)}
+      <button type="button" data-task-open="${t.id}" class="btn-text hist-compact-open">Responder / abrir →</button>
+    </details>`;
+}
+
 function historyThread(t, { profile, clientsById, showClient = true }) {
   const client = showClient && t.client_id ? clientsById.get(t.client_id) : null;
   const toWho = t.assigned_role === 'admin' ? 'Nay' : (t.assigned_to_name ? firstName(t.assigned_to_name) : 'Assistente');
@@ -535,9 +552,9 @@ export async function mountClientTasks(container, profile, clientId) {
       </div>
       ${tasks.length ? tasks.map((t) => taskRow(t, ctx)).join('') : '<p class="text-xs text-white/30">Nenhuma tarefa aberta.</p>'}
       ${history.length ? `
-        <details class="mt-4" ${tasks.length ? '' : 'open'}>
+        <details class="mt-4">
           <summary class="text-xs uppercase cursor-pointer" style="color:var(--gold);letter-spacing:.1em;">Histórico da equipe (${history.length})</summary>
-          <div class="mt-2">${history.map((t) => historyThread(t, ctx)).join('')}</div>
+          <div class="mt-2">${history.map((t) => historyThreadCompact(t, ctx)).join('')}</div>
         </details>` : ''}
     `, 'mb-6');
     container.querySelector('[data-client-task-new]').addEventListener('click', () => openNewTaskModal(profile, { clientId, onSaved: render }));
