@@ -542,6 +542,11 @@ async function render() {
            <button id="${isDemo ? 'check-autentique-demo' : 'check-autentique'}" class="btn-primary">${isDemo ? 'Simular Assinatura Concluída' : 'Verificar Assinatura'}</button>
            ${isDemo ? '' : '<button id="get-sign-link" class="btn-ghost">Não achou o e-mail? Pegar link de assinatura</button>'}
          </div>
+         ${!isDemo && contract.status !== 'completed' ? `
+         <div class="mt-4 pt-3" style="border-top:1px solid var(--line);">
+           <p class="text-xs text-white/40 mb-2">O texto ou o e-mail mudou depois do envio? Cancele o documento atual e envie o contrato como está agora para ${escapeHtml((client.email || '').trim() || '(sem e-mail)')}.</p>
+           ${canSend ? '<button id="resend-autentique" class="btn-ghost">Cancelar e reenviar</button>' : '<p class="text-xs" style="color:var(--terracotta);">Libera quando a Nay marcar o contrato como revisado.</p>'}
+         </div>` : ''}
          <div id="sign-link-box" class="mt-4"></div>`
       : !cadastroDone
         ? `<button class="btn-primary" disabled style="opacity:.45;cursor:not-allowed;">Enviar para Assinatura via Autentique</button>
@@ -586,6 +591,19 @@ async function render() {
   });
   document.getElementById('download').addEventListener('click', () => {
     openPrintableContract(document.getElementById('body').value, client.full_name);
+  });
+  document.getElementById('resend-autentique')?.addEventListener('click', async (e) => {
+    const to = (client.email || '').trim();
+    const fix = emailTypoSuggestion(to);
+    if (fix) { toast(`O e-mail cadastrado parece ter um erro (${to} → ${fix}?). Corrija o e-mail no cadastro antes de enviar.`, { tone: 'error' }); return; }
+    if (!window.confirm(`O documento atual na Autentique será cancelado e um novo será enviado para:\n\n${to || '(sem e-mail)'}\n\ncom o texto do contrato como está agora. Continuar?`)) return;
+    e.target.disabled = true; e.target.textContent = 'Reenviando...';
+    const { data, error } = await supabase.functions.invoke('autentique-send', { body: { contract_id: contract.id, replace: true } });
+    if (error || data?.error) { toast(await functionErrorMessage(data, error), { tone: 'error' }); e.target.disabled = false; e.target.textContent = 'Cancelar e reenviar'; return; }
+    toast(data.old_cancelled === false
+      ? 'Novo contrato enviado. Atenção: o documento antigo não foi cancelado na Autentique — exclua-o por lá.'
+      : 'Novo contrato enviado e o anterior cancelado na Autentique.', { tone: data.old_cancelled === false ? 'error' : undefined });
+    render();
   });
   document.getElementById('send-autentique')?.addEventListener('click', async (e) => {
     // Last look at the recipient before a real (quota-counted) Autentique

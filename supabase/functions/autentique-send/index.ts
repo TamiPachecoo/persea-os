@@ -18,6 +18,13 @@
 //     caught up front with a specific message.
 //  4. Autentique only lists the API token's own account (Nay) as a
 //     non-signing participant — Nay is added as a real second signer.
+//
+// Replace (Nov 2026): { contract_id, replace: true } resends a contract that
+// is already in Autentique (new text, corrected e-mail). Refused if the
+// student already signed the old one. The NEW document is created first;
+// only then is the old one deleted (deleteDocument), so a failure never
+// leaves her without a document to sign. If the delete fails, the reply
+// says so (old_cancelled: false) and the old one must be removed by hand.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
@@ -140,7 +147,7 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { contract_id } = await req.json();
+    const { contract_id, replace = false } = await req.json();
     if (!contract_id) return json({ error: "contract_id required" }, 400);
 
     const { data: contract, error: cErr } = await supabase
@@ -158,8 +165,11 @@ Deno.serve(async (req) => {
       return json({ error: "A Nay ainda não revisou este contrato. O envio para assinatura libera assim que ela marcar \"Contrato revisado\"." }, 403);
     }
 
-    if (contract.autentique_document_id) {
+    if (contract.autentique_document_id && !replace) {
       return json({ error: "este contrato já foi enviado para a Autentique — use 'Verificar Assinatura' em vez de enviar novamente" }, 409);
+    }
+    if (replace && (contract.status === "completed" || contract.signed_file_path)) {
+      return json({ error: "este contrato já está assinado — não pode ser reenviado" }, 409);
     }
 
     const client = (contract as any).clients;
@@ -172,6 +182,31 @@ Deno.serve(async (req) => {
 
     const AUTENTIQUE_TOKEN = Deno.env.get("AUTENTIQUE_API_TOKEN");
     if (!AUTENTIQUE_TOKEN) return json({ error: "AUTENTIQUE_API_TOKEN não configurado" }, 500);
+
+    const oldDocId: string | null = replace ? contract.autentique_document_id : null;
+    if (oldDocId) {
+      // Never replace a document the student already signed.
+      try {
+        const r = await fetch("https://api.autentique.com.br/v2/graphql", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${AUTENTIQUE_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ query: `query($id: UUID!) { document(id: $id) { signatures { email action { name } signed { created_at } } } }`, variables: { id: oldDocId } }),
+        });
+        const j = await r.json().catch(() => null);
+        if (!j || j.errors) {
+          console.log("replace: old document check failed:", JSON.stringify(j?.errors || j));
+          return json({ error: "não foi possível conferir o documento atual na Autentique — nada foi enviado; tente novamente" }, 502);
+        }
+        const sigs = j.data?.document?.signatures || [];
+        const nay = (Deno.env.get("AUTENTIQUE_ADMIN_SIGNER_EMAIL") || "naymurta@gmail.com").trim().toLowerCase();
+        if (sigs.some((x: any) => x.signed && String(x.email || "").toLowerCase() !== nay)) {
+          return json({ error: "a cliente já assinou o documento atual na Autentique — não reenviado. Use 'Verificar Assinatura'." }, 409);
+        }
+      } catch (e) {
+        console.log("replace: could not read old document:", String(e));
+        return json({ error: "não foi possível conferir o documento atual na Autentique — tente novamente" }, 502);
+      }
+    }
 
     const adminSignerEmail = (Deno.env.get("AUTENTIQUE_ADMIN_SIGNER_EMAIL") || "naymurta@gmail.com").trim();
     const signers = [{ email: signerEmail, action: "SIGN" }];
@@ -245,7 +280,24 @@ Deno.serve(async (req) => {
       }, 500);
     }
 
-    return json({ ok: true, autentique_document_id: docId });
+    let oldCancelled: boolean | null = null;
+    if (oldDocId) {
+      try {
+        const r = await fetch("https://api.autentique.com.br/v2/graphql", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${AUTENTIQUE_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ query: `mutation($id: UUID!) { deleteDocument(id: $id) }`, variables: { id: oldDocId } }),
+        });
+        const j = await r.json().catch(() => null);
+        oldCancelled = !!j?.data?.deleteDocument && !j?.errors;
+        if (!oldCancelled) console.log("replace: deleteDocument failed for", oldDocId, JSON.stringify(j));
+      } catch (e) {
+        oldCancelled = false;
+        console.log("replace: deleteDocument error for", oldDocId, String(e));
+      }
+    }
+
+    return json({ ok: true, autentique_document_id: docId, replaced_document_id: oldDocId, old_cancelled: oldCancelled });
   } catch (e) {
     console.log("autentique-send unexpected error:", String(e));
     return json({ error: String(e) }, 500);
