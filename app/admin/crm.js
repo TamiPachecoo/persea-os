@@ -15,7 +15,6 @@ import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { deriveClientStatus, NEXT_ACTION_LABEL } from '../shared/client-status.js';
 import { computeTeamNextStep } from '../shared/team-action-model.js';
-import { mountEncounterBoard } from './encounter-board.js';
 import { dueStripHtml } from '../shared/team-tasks.js';
 import { openRegistrationMessageModal } from '../shared/signature.js';
 
@@ -241,6 +240,31 @@ function openCreateClientModal(fromLead, { onCancel } = {}) {
       </form>
     `,
   });
+  // A lead who is already a client (same e-mail or same full name — e.g. she
+  // was registered straight in Clientes) is linked to that client instead of
+  // creating a duplicate; nothing is lost on either side.
+  if (fromLead) {
+    const norm = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    supabase.from('clients').select('id, full_name, email, program_slug, is_demo').then(({ data }) => {
+      const match = (data || []).find((c) => !c.is_demo && ((fromLead.email && norm(c.email) === norm(fromLead.email)) || norm(c.full_name) === norm(fromLead.full_name)));
+      if (!match || !el.isConnected) return;
+      el.querySelector('#create-client-form').insertAdjacentHTML('afterbegin', `
+        <div class="rounded" style="padding:14px 16px;border:1px solid rgba(232,195,139,.45);background:rgba(232,195,139,.1);">
+          <p class="text-sm mb-1"><b>${String(match.full_name).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[ch]))}</b> já está em Clientes.</p>
+          <p class="text-xs text-white/50 mb-3">Vincule este lead ao cadastro dela: o lead sai da lista de leads (com o histórico guardado) e nada é duplicado.</p>
+          <button type="button" class="btn-primary" data-link-existing style="padding:8px 16px;font-size:12.5px;">Vincular ao cadastro existente</button>
+        </div>`);
+      el.querySelector('[data-link-existing]').addEventListener('click', async (ev) => {
+        ev.target.disabled = true;
+        const { error } = await supabase.from('leads').update({ stage: 'convertido', converted_to_client_id: match.id, converted_at: new Date().toISOString() }).eq('id', fromLead.id);
+        if (error) { ev.target.disabled = false; toast('Não foi possível vincular agora.', { tone: 'error' }); return; }
+        converted = true;
+        close();
+        toast(`Lead vinculado a ${match.full_name}.`);
+        renderProductionCRM();
+      });
+    });
+  }
   el.querySelector('#create-client-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     // Bug fix: a double-click here (no visual feedback while the request
@@ -495,7 +519,7 @@ async function renderProductionCRM() {
           <button id="new-client" class="btn-primary" style="padding:9px 18px;font-size:12.5px;">+ Novo Cliente</button>
         </div>
       `, 'mb-6')}
-      ${clients.length ? '<div id="encounter-board"></div>' + engagementPanel(clients) + clientsByPhase(clients)
+      ${clients.length ? engagementPanel(clients) + clientsByPhase(clients)
         : card('<p class="text-sm" style="color:var(--muted);">Nenhum cliente ainda. Clique em "Novo Cliente" para começar o cadastro da primeira cliente real.</p>')}
     `;
   }
@@ -586,7 +610,6 @@ async function renderProductionCRM() {
     content.querySelector('#new-client').addEventListener('click', () => openCreateClientModal());
     // "+" on the sidebar's Clientes list lands here with ?novo=1.
     if (new URLSearchParams(location.search).get('novo') === '1') { history.replaceState(null, '', location.pathname); openCreateClientModal(); }
-    if (lastLoadedClients.length) mountEncounterBoard(content.querySelector('#encounter-board'), lastLoadedClients, crmProfile);
   }
 }
 let lastLoadedClients = [];

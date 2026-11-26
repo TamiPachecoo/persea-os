@@ -34,10 +34,15 @@ export function icon(name, size = 20, extra = '') {
   return `<svg class="ico ${extra}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 }
 
-// PERSEA emblem — a gold sail/wave mark, used in the staff top bar.
-export const PERSEA_EMBLEM = `<svg width="34" height="26" viewBox="0 0 34 26" fill="none" aria-hidden="true">
-  <path d="M3 17c5 4.5 15 6 28-1.5-4.5 6.5-17.5 10-28 1.5z" fill="url(#pg)"/>
-  <path d="M16 3c-2.2 4.4-2.4 8.6-.6 12.6C11.2 12.4 10.6 8 16 3z" fill="url(#pg)" opacity=".9"/>
-  <path d="M18.5 5.5c3 2.8 4.6 6.3 4.7 10.3-2.4-2-4-5.2-4.7-10.3z" fill="url(#pg)" opacity=".75"/>
-  <defs><linearGradient id="pg" x1="0" y1="0" x2="34" y2="26"><stop stop-color="#f3d6a2"/><stop offset="1" stop-color="#b8863a"/></linearGradient></defs>
+// PERSEA mark — Nay's gold arches with the drop (redrawn as a vector from
+// the app icon, shared/assets/icons/icon-512.png), used in the staff top bar.
+export const PERSEA_EMBLEM = `<svg class="os-mark" width="31" height="40" viewBox="80 30 352 450" aria-hidden="true">
+  <defs><linearGradient id="persea-mark-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d9b0"/><stop offset=".55" stop-color="#d2a979"/><stop offset="1" stop-color="#a77a4c"/></linearGradient></defs>
+  <g fill="url(#persea-mark-g)">
+    <path d="M256 42 C 214 108 132 178 132 250 C 132 284 150 306 172 324 C 162 302 158 280 162 256 C 172 196 232 128 256 74 Z"/>
+    <path d="M256 42 C 298 108 380 178 380 250 C 380 284 362 306 340 324 C 350 302 354 280 350 256 C 340 196 280 128 256 74 Z"/>
+    <path d="M256 190 C 230 256 174 334 102 384 C 158 374 214 334 238 286 C 250 262 255 236 256 214 Z"/>
+    <path d="M256 190 C 282 256 338 334 410 384 C 354 374 298 334 274 286 C 262 262 257 236 256 214 Z"/>
+    <path d="M232 392 C 232 377 282 377 282 392 C 282 408 266 428 257 474 C 248 428 232 408 232 392 Z"/>
+  </g>
 </svg>`;

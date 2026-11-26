@@ -1169,3 +1169,6 @@ body.os-staff .modal{ border-radius:18px; }
   .os-tabs{ flex-direction:column; align-items:stretch; gap:0; } .os-tabs-pills{ flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; } .os-tab-pill{ padding:9px 14px; font-size:13px; }
   .os-step{ flex-wrap:wrap; gap:6px 14px; } .os-step-body{ flex-basis:calc(100% - 46px); } .os-step-badge{ margin-left:40px; }
 }
+/* Lists separated with Tailwind's divide-y: quiet warm lines, straight edges. */
+body.os-staff .divide-y > * + *{ border-color:var(--os-line) !important; }
+body.os-staff .divide-y > *{ border-radius:0 !important; }

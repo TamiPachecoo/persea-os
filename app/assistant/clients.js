@@ -18,7 +18,6 @@ import { renderShell, card, formatDate, isProductionEnvironment } from '../share
 import { requireProfile } from '../shared/supabase-auth.js';
 import { supabase } from '../shared/supabase-client.js';
 import { computeTeamNextStep } from '../shared/team-action-model.js';
-import { mountEncounterBoard } from '../admin/encounter-board.js';
 
 const assistantProfile = await requireProfile('assistant');
 if (!assistantProfile) throw new Error('not authorized');
@@ -75,13 +74,11 @@ async function renderProductionClientes() {
       <h1 class="text-3xl font-serif">Clientes</h1>
       <p class="text-sm text-white/40 mt-2 max-w-2xl">Cadastros com acesso ativo ao Persea OS. Na linha dos encontros, toque em um encontro para ver quem está nele, mover alguém de encontro ou editar o encontro (os conduzidos pela assistente, como o E3). Clique em um nome para abrir o workspace.</p>
     </div>
-    <div id="encounter-board"></div>
     ${card(`<p class="text-sm text-white/50">${clients.length} cadastro${clients.length === 1 ? '' : 's'} com acesso ativo</p>`, 'mb-6')}
     ${clients.length
       ? card(`<div class="divide-y" style="border-color:var(--line);">${clients.map(productionClientRow).join('')}</div>`)
       : card('<p class="text-sm" style="color:var(--muted);">Nenhum cadastro ativo no momento — assim que um acesso for criado em Cadastros, ele aparece aqui.</p>')}
   `;
-  if (clients.length) mountEncounterBoard(content.querySelector('#encounter-board'), clients, assistantProfile);
 }
 
 function clientRow(c) {
