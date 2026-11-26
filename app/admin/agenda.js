@@ -143,7 +143,11 @@ async function getCalendarStatus() {
 // conflict-checking. Empty array (not an error) when not connected.
 async function loadGoogleEvents() {
   if (!calendarConnected) return [];
-  const { data, error } = await supabase.functions.invoke('google-calendar-list-events');
+  // From 4 weeks back (today's earlier meetings and the past days of the
+  // month) to 12 weeks ahead — the Dia/Semana card and the month grid.
+  const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - 28);
+  const to = new Date(from); to.setDate(to.getDate() + 28 + 84);
+  const { data, error } = await supabase.functions.invoke('google-calendar-list-events', { body: { time_min: from.toISOString(), time_max: to.toISOString() } });
   if (error || data?.error) return [];
   return data.events || [];
 }
@@ -1190,13 +1194,130 @@ async function openAgendaModalReal(itemId) {
   });
 }
 
+// --- Dia / Semana (Nov 2026): Nay's own agenda the way the assistant sees
+// it — 7 day tiles with the chosen day's list, or the whole week side by
+// side. Her items (not the assistant's) + her Google events; what the
+// assistant marked (confirmed, reschedule, personal) shows here too.
+let wkMode = (() => { try { return localStorage.getItem('persea.adminAgendaMode') === 'week' ? 'week' : 'day'; } catch { return 'day'; } })();
+let wkOffset = 0;
+let wkDay = null;
+let wkItems = [];
+const WK_CONF = { confirmed: ['✓ Confirmado', '#8fae8b'], message_sent: ['Mensagem enviada', 'var(--gold)'], reschedule: ['↻ Remarcar', '#d0705a'] };
+async function buildWeekItems(items, clients) {
+  const names = new Map(clients.map((c) => [c.id, c.full_name]));
+  const linked = new Set(items.map((it) => it.google_event_id).filter(Boolean));
+  const mine = items.filter((it) => it.assigned_to !== 'assistant' && it.status !== 'cancelled').map((it) => ({
+    key: `i:${it.id}`, id: it.id, title: it.title, date: it.item_date, student: names.get(it.related_student_id) || null,
+    conf: it.confirmation_status || null, done: it.status === 'completed', link: it.online_link,
+  }));
+  const gev = googleEvents.filter((e) => !e.all_day && e.start && !linked.has(e.id));
+  let confs = [];
+  if (gev.length) {
+    const ids = [...gev.map((e) => e.id), ...new Set(gev.map((e) => e.recurring_event_id).filter(Boolean).map((r) => `series:${r}`))];
+    ({ data: confs } = await supabase.from('calendar_event_confirmations').select('*').in('event_id', ids));
+  }
+  const confBy = new Map((confs || []).map((c) => [c.event_id, c]));
+  const g = gev.map((e) => {
+    const own = confBy.get(e.id); const series = e.recurring_event_id ? confBy.get(`series:${e.recurring_event_id}`) : null;
+    const c = own?.status || own?.client_id ? own : series || own;
+    return { key: `g:${e.id}`, google: true, title: e.summary || '(sem título)', date: e.start, html: e.html_link, personal: c?.status === 'personal',
+      student: c?.status === 'personal' ? null : names.get(c?.client_id) || null, conf: c?.status && c.status !== 'personal' ? c.status : null,
+      link: [e.hangout_link, e.meet_url].find((v) => /^https?:\/\//i.test(v || '')) || null };
+  });
+  return [...mine, ...g].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+function weekCardHtml() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today); start.setDate(start.getDate() + wkOffset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return d; });
+  const byDay = new Map(days.map((d) => [d.toDateString(), []]));
+  wkItems.forEach((it) => byDay.get(new Date(it.date).toDateString())?.push(it));
+  if (!wkDay || !byDay.has(wkDay)) wkDay = (days.find((d) => byDay.get(d.toDateString()).some((it) => !it.personal)) || days[0]).toDateString();
+  const fmt = (d) => d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '');
+  const wd = (d) => d.toDateString() === today.toDateString() ? 'Hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const openAttr = (it) => it.google ? `data-wk-google="${esc(it.html || '')}"` : `data-wk-item="${it.id}"`;
+  const header = `
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="flex items-center gap-2 flex-wrap">
+        <p class="text-sm text-white/50">Sua agenda</p>
+        <div class="nay-seg">
+          <button type="button" data-wk-mode="day" class="${wkMode === 'day' ? 'on' : ''}">Dia</button>
+          <button type="button" data-wk-mode="week" class="${wkMode === 'week' ? 'on' : ''}">Semana</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" data-wk-shift="-1" class="btn-text" style="font-size:14px;padding:0 6px;" aria-label="Semana anterior">‹</button>
+        <span class="text-xs" style="color:var(--muted);white-space:nowrap;">${fmt(days[0])} – ${fmt(days[6])}</span>
+        <button type="button" data-wk-shift="1" class="btn-text" style="font-size:14px;padding:0 6px;" aria-label="Próxima semana">›</button>
+        ${wkOffset ? '<button type="button" data-wk-today class="btn-text" style="font-size:12px;">Hoje</button>' : ''}
+      </div>
+    </div>`;
+  if (wkMode === 'week') {
+    const edge = (it) => it.personal ? 'var(--muted)' : WK_CONF[it.conf]?.[1] || (it.done ? '#8fae8b' : 'rgba(242,236,224,.35)');
+    return card(`${header}
+      <div class="nay-wgrid mt-3">${days.map((d) => {
+        const k = d.toDateString(); const list = byDay.get(k);
+        return `<div class="nay-wcol ${k === today.toDateString() ? 'nay-wcol-today' : ''}">
+          <button type="button" data-wk-open-day="${k}" class="nay-wcol-head"><span class="nay-day-wd">${wd(d)}</span><span class="nay-wcol-n">${d.getDate()}</span></button>
+          ${list.length ? list.map((it) => `<button type="button" ${openAttr(it)} class="nay-wev ${it.personal ? 'nay-wev-personal' : ''}" style="border-left-color:${edge(it)};" title="${esc(it.title)}">
+            <span class="nay-wev-t">${formatTime(it.date)}${it.personal ? ' 🌙' : ''}</span><span class="nay-wev-title">${esc(it.title)}</span>${it.student ? `<span class="nay-wev-st">${esc(it.student)}</span>` : ''}</button>`).join('') : '<p class="nay-wev-empty">—</p>'}
+        </div>`;
+      }).join('')}</div>
+      <p class="text-xs mt-3" style="color:var(--muted);">Toque em um dia para ver em detalhe, ou em um encontro para abrir. <span style="color:#8fae8b;">●</span> confirmado · <span style="color:var(--gold);">●</span> mensagem enviada · <span style="color:#d0705a;">●</span> remarcar · 🌙 pessoal</p>
+    `, 'mb-6');
+  }
+  const tiles = days.map((d) => {
+    const k = d.toDateString(); const work = byDay.get(k).filter((it) => !it.personal);
+    return `<button type="button" data-wk-day="${k}" class="nay-day ${k === wkDay ? 'nay-day-on' : ''} ${work.length ? '' : 'nay-day-empty'}">
+      <span class="nay-day-wd">${wd(d)}</span><span class="nay-day-n">${d.getDate()}</span>
+      <span class="nay-day-st">${work.length ? `<span class="nay-badge">${work.length}</span>` : '·'}</span></button>`;
+  }).join('');
+  const list = byDay.get(wkDay) || [];
+  const work = list.filter((it) => !it.personal); const personal = list.filter((it) => it.personal);
+  const row = (it) => {
+    const conf = WK_CONF[it.conf];
+    return `<div class="nay-item ${it.conf ? `nay-item-${it.conf}` : ''}" style="cursor:pointer;" ${openAttr(it)}>
+      <div class="nay-item-time">${formatTime(it.date)}</div>
+      <div class="min-w-0 flex-1"><div class="flex items-start justify-between gap-2 flex-wrap">
+        <div class="min-w-0"><p class="text-sm font-medium" style="${it.done ? 'opacity:.55;' : ''}">${esc(it.title)}</p>${it.student ? `<p class="text-xs mt-0.5" style="color:var(--gold);">${esc(it.student)}</p>` : ''}</div>
+        <div class="flex items-center gap-2">
+          ${conf ? `<span class="nay-pill" style="color:${conf[1]};border-color:${conf[1]};">${conf[0]}</span>` : it.done ? '<span class="nay-pill">Concluído</span>' : ''}
+          ${it.link && /^https?:/i.test(it.link) ? `<a href="${esc(it.link)}" target="_blank" rel="noopener" class="btn-ghost" style="padding:5px 12px;font-size:12px;" data-wk-stop>Entrar ↗</a>` : ''}
+        </div>
+      </div></div></div>`;
+  };
+  return card(`${header}
+    <div class="nay-week mt-3">${tiles}</div>
+    <div class="nay-dayview">
+      <p class="text-xs uppercase mb-2" style="color:var(--muted);letter-spacing:.1em;">${new Date(wkDay).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+      ${work.length ? work.map(row).join('') : `<p class="text-sm text-white/30 py-3">${personal.length ? 'Só tempo pessoal neste dia.' : 'Nada na sua agenda neste dia.'}</p>`}
+      ${personal.length ? `<details class="mt-3"><summary class="text-xs cursor-pointer" style="color:var(--muted);">🌙 Tempo pessoal (${personal.length})</summary>${personal.map((it) => `<p class="py-1.5 text-xs" style="color:var(--muted);">${formatTime(it.date)} · ${esc(it.title)}</p>`).join('')}</details>` : ''}
+    </div>
+  `, 'mb-6');
+}
+function wireWeekCard(root) {
+  const redraw = () => { const el = root.querySelector('[data-wk-card]'); if (el) { el.innerHTML = weekCardHtml(); wireWeekCard(root); } };
+  const setMode = (m) => { wkMode = m; try { localStorage.setItem('persea.adminAgendaMode', m); } catch { /* storage blocked */ } };
+  const box = root.querySelector('[data-wk-card]');
+  if (!box) return;
+  box.querySelectorAll('[data-wk-mode]').forEach((b) => b.addEventListener('click', () => { setMode(b.dataset.wkMode); redraw(); }));
+  box.querySelectorAll('[data-wk-shift]').forEach((b) => b.addEventListener('click', () => { wkOffset = Math.max(-4, Math.min(11, wkOffset + Number(b.dataset.wkShift))); wkDay = null; redraw(); }));
+  box.querySelector('[data-wk-today]')?.addEventListener('click', () => { wkOffset = 0; wkDay = null; redraw(); });
+  box.querySelectorAll('[data-wk-day]').forEach((b) => b.addEventListener('click', () => { wkDay = b.dataset.wkDay; redraw(); }));
+  box.querySelectorAll('[data-wk-open-day]').forEach((b) => b.addEventListener('click', () => { wkDay = b.dataset.wkOpenDay; setMode('day'); redraw(); }));
+  box.querySelectorAll('[data-wk-item]').forEach((b) => b.addEventListener('click', (e) => { if (e.target.closest('[data-wk-stop]')) return; openAgendaModalReal(b.dataset.wkItem); }));
+  box.querySelectorAll('[data-wk-google]').forEach((b) => b.addEventListener('click', (e) => { if (e.target.closest('[data-wk-stop]')) return; if (b.dataset.wkGoogle) window.open(b.dataset.wkGoogle, '_blank', 'noopener'); }));
+}
+
 async function renderProductionAgenda() {
   const calendarStatus = await getCalendarStatus();
   realCalendarStatus = calendarStatus;
   calendarConnected = calendarStatus.connected;
   googleEvents = await loadGoogleEvents();
-  const items = await loadRealAgendaItems();
+  const [items, weekClients] = await Promise.all([loadRealAgendaItems(), loadRealClients()]);
   const itemsByDay = buildItemsByDayReal(items);
+  wkItems = await buildWeekItems(items, weekClients);
 
   content.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
@@ -1210,9 +1331,12 @@ async function renderProductionAgenda() {
       </div>
     </div>
     ${renderGoogleCalendarCard(calendarStatus)}
+    <div data-wk-card>${weekCardHtml()}</div>
     ${renderPendenciasStripReal(items)}
+    <p class="text-xs uppercase mb-3 mt-2" style="color:var(--muted);letter-spacing:.12em;">Mês</p>
     ${renderCalendarReal(itemsByDay)}
   `;
+  wireWeekCard(content);
 
   content.querySelector('#connect-google-calendar')?.addEventListener('click', async (e) => {
     e.target.disabled = true; e.target.textContent = 'Conectando...';
