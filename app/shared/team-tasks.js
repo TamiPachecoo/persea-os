@@ -665,7 +665,7 @@ export async function decorateTaskNav(role) {
   if (!session) return;
   const n = await myAttentionCount({ id: session.user.id, role });
   if (!n) return;
-  document.querySelectorAll('a.nav-link[href$="tarefas.html"], a.mobile-tab-link[href$="tarefas.html"], a.mobile-nav-panel-link[href$="tarefas.html"]').forEach((a) => {
+  document.querySelectorAll('a.nav-link[href$="tarefas.html"], a.os-bell, a.mobile-tab-link[href$="tarefas.html"], a.mobile-nav-panel-link[href$="tarefas.html"]').forEach((a) => {
     if (a.querySelector('.nav-count')) return;
     const target = a.querySelector('span:last-child') || a;
     target.insertAdjacentHTML('beforeend', ` <span class="nav-count">${n > 9 ? '9+' : n}</span>`);

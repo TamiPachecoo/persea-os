@@ -584,6 +584,8 @@ async function renderProductionCRM() {
     // id=undefined on every single client created this way (harmless to
     // the client creation itself, but a real failed request every time).
     content.querySelector('#new-client').addEventListener('click', () => openCreateClientModal());
+    // "+" on the sidebar's Clientes list lands here with ?novo=1.
+    if (new URLSearchParams(location.search).get('novo') === '1') { history.replaceState(null, '', location.pathname); openCreateClientModal(); }
     if (lastLoadedClients.length) mountEncounterBoard(content.querySelector('#encounter-board'), lastLoadedClients, crmProfile);
   }
 }

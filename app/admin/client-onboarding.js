@@ -45,6 +45,7 @@ import {
   activityStatusFromProgramState, homeworkProgress, encounterDetailHtml, studentTrackHtml,
 } from '../shared/encounter-journey.js';
 import { mountClientTasks } from '../shared/team-tasks.js';
+import { icon } from '../shared/icons.js';
 import { loadSignature, voice, openSignatureModal, openRegistrationMessageModal } from '../shared/signature.js';
 
 
@@ -2726,12 +2727,171 @@ function wireMessagesTab(ctx) {
   }));
 }
 
+// Redesign (Nov 2026): the four everyday tabs as underlined icons, the
+// student's material (questionnaires, deliverables, brand work) as pills.
+const TAB_ICON = { jornada: 'map', mensagens: 'message', encontros: 'calendar', financeiro: 'card', questionarios: 'clipboard', 'projeto-imagem': 'layers', 'direcao-marca': 'compass', pesquisa: 'tag', arquetipos: 'sparkle' };
+const TAB_LABEL = { questionarios: 'Questionários & Atividades', 'projeto-imagem': 'Entregáveis' };
+const PRIMARY_TABS = ['jornada', 'mensagens', 'encontros', 'financeiro'];
 function tabBarHtml() {
+  const visible = TABS.filter(([key]) => !(key === 'projeto-imagem' && skippedPhaseSet(currentClient).has(IMAGE_PHASE)));
+  const btn = ([key, label], pill) => `<button type="button" data-tab="${key}" class="${pill ? 'os-tab-pill' : 'os-tab'} ${activeTab === key ? 'active' : ''}">${icon(TAB_ICON[key] || 'note', 19)}<span>${TAB_LABEL[key] || label}</span></button>`;
+  const primary = PRIMARY_TABS.map((k) => visible.find(([key]) => key === k)).filter(Boolean);
+  const secondary = ['questionarios', 'projeto-imagem', 'direcao-marca', 'arquetipos', 'pesquisa'].map((k) => visible.find(([key]) => key === k)).filter(Boolean);
   return `
-    <div class="flex gap-1 mb-8 border-b border-white/10 overflow-x-auto">
-      ${TABS.filter(([key]) => !(key === 'projeto-imagem' && skippedPhaseSet(currentClient).has(IMAGE_PHASE))).map(([key, label]) => `<button type="button" data-tab="${key}" class="tab-btn ${activeTab === key ? 'active' : ''}">${label}</button>`).join('')}
+    <div class="os-tabs">
+      <div class="os-tabs-main">${primary.map((t) => btn(t, false)).join('')}</div>
+      <span class="os-tabs-sep"></span>
+      <div class="os-tabs-pills">${secondary.map((t) => btn(t, true)).join('')}</div>
     </div>
   `;
+}
+
+// --- Redesigned header, stats strip and Jornada overview (Nov 2026) -------
+const CONTRACT_MONTHS = { mensal: 1, trimestral: 3, semestral: 6, anual: 12 };
+const fmtDay = (iso) => { const d = new Date(iso); return `${d.getDate()} ${d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')} ${d.getFullYear()}`; };
+function osPhoto(c) {
+  if (isValidHttpUrl(c.photo_url)) return `<div class="os-photo"><img src="${escHtml(c.photo_url)}" alt="${escHtml(c.full_name)}" onerror="this.parentNode.classList.add('os-photo-empty');this.remove();" /><span>${escHtml(c.full_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span></div>`;
+  return `<div class="os-photo os-photo-empty"><span>${escHtml(c.full_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span></div>`;
+}
+function osNextEncounter(journey) {
+  return (journey || []).find((e) => ['pending', 'waiting_on_client'].includes(e.status)) || null;
+}
+function osClientHeader(c, status, contract, journey) {
+  const months = CONTRACT_MONTHS[contract?.duration] || null;
+  const start = contract?.signed_file_uploaded_at || contract?.created_at || c.created_at;
+  const live = status.badgeClass === 'badge-completed' || c.access_status === 'active';
+  const next = osNextEncounter(journey);
+  return `
+    <section class="os-hero">
+      ${osPhoto(c)}
+      <div class="os-hero-body">
+        <h1 class="os-hero-name">${escHtml(c.full_name)}</h1>
+        <div class="os-hero-pills">
+          ${c.program_slug ? `<span class="os-pill os-pill-gold">${escHtml(PROGRAM_LABEL_BY_SLUG[c.program_slug] || c.program_slug)}</span>` : ''}
+          <span class="os-pill ${live ? 'os-pill-green' : 'os-pill-soft'}"><i class="os-dot ${live ? '' : 'os-dot-gold'}"></i>${escHtml(live ? 'Em andamento' : status.label)}</span>
+        </div>
+        <div class="os-hero-meta">
+          <span>${icon('calendar', 17)} Contrato: ${escHtml(contract ? (CONTRACT_STATUS_LABEL[contract.status] || contract.status) : 'não preparado')}</span>
+          ${start ? `<span>${icon('calendar', 17)} Início: ${fmtDay(start)}</span>` : ''}
+          <span>${icon('hourglass', 17)} Duração: ${months ? `${months} ${months === 1 ? 'mês' : 'meses'}` : 'a definir'}</span>
+        </div>
+        ${socialLinksRow(c)}
+      </div>
+      <div class="os-hero-actions">
+        ${!isAssistant ? (next ? `<button type="button" class="btn-primary os-cta" data-os-schedule="${next.number}">${icon('plus', 18)} Agendar encontro</button>` : `<a href="agenda.html?client=${clientId}" class="btn-primary os-cta">${icon('plus', 18)} Agendar encontro</a>`) : ''}
+        <div class="os-kebab">
+          <button type="button" class="os-icon-btn" data-os-kebab title="Mais opções">${icon('dots', 20)}</button>
+          <div class="os-menu" data-os-kebab-menu>
+            <a href="/client/program.html?ver_como=${c.id}" target="_blank" rel="noopener" class="os-menu-item">${icon('eye', 16)} Ver o app como ${escHtml(c.full_name.split(' ')[0])}</a>
+            <button type="button" class="os-menu-item" data-os-edit="profile">${icon('edit', 16)} Foto e redes sociais</button>
+            ${!isAssistant ? `<button type="button" class="os-menu-item" data-os-edit="notes">${icon('note', 16)} Notas internas</button>` : ''}
+            ${profile.role === 'admin' ? `<button type="button" class="os-menu-item" data-os-edit="danger" style="color:#e39a8a;">${icon('trash', 16)} Excluir cliente</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="os-edit-panel" data-os-panel="profile" hidden>${profileEditCard(c)}</div>`;
+}
+function profileEditCard(c) {
+  return card(`
+    <p class="text-sm text-white/50 mb-3">Foto e redes sociais</p>
+    <form id="photo-form" class="flex items-center gap-2 flex-wrap">
+      <input name="photo_url" class="field text-sm" style="max-width:380px;" placeholder="Link da foto de perfil" value="${c.photo_url || ''}" />
+      <button type="submit" class="btn-ghost">Salvar</button>
+    </form>
+    <p class="text-xs text-white/30 mt-1">Link direto para a imagem (não uma página). Aparece aqui, na lista de clientes e no topo do app dela.</p>
+    <form id="social-links-form" class="flex items-center gap-2 mt-3 flex-wrap">
+      <input name="instagram_url" class="field text-sm" style="max-width:260px;" placeholder="Link do Instagram" value="${c.instagram_url || ''}" />
+      <input name="linkedin_url" class="field text-sm" style="max-width:260px;" placeholder="Link do LinkedIn" value="${c.linkedin_url || ''}" />
+      <button type="submit" class="btn-ghost">Salvar</button>
+    </form>
+  `, 'mb-6');
+}
+function osStatsStrip({ journey, state, deliverables, nextMeeting }) {
+  const enc = (journey || []).filter((e) => e.status !== 'skipped');
+  const done = enc.filter((e) => e.status === 'completed').length;
+  const pct = enc.length ? Math.round((done / enc.length) * 100) : 0;
+  const act = state?.progress || { completedCount: 0, totalIncluded: 0 };
+  const actPct = act.totalIncluded ? Math.round((act.completedCount / act.totalIncluded) * 100) : 0;
+  const delPct = deliverables.total ? Math.round((deliverables.done / deliverables.total) * 100) : 0;
+  const bar = (p) => `<div class="os-bar"><i style="width:${p}%"></i></div>`;
+  const conf = nextMeeting?.confirmation_status === 'confirmed' ? 'Confirmada' : 'Agendada';
+  return `
+    <section class="os-stats">
+      <div class="os-stat">${icon('layers', 30)}<div><p class="os-stat-label">Sessões</p><p class="os-stat-value">${done} de ${enc.length || '—'}</p>${bar(pct)}<p class="os-stat-note">${pct}% do processo</p></div></div>
+      <div class="os-stat">${icon('checkCircle', 30)}<div><p class="os-stat-label">Atividades</p><p class="os-stat-value">${act.completedCount} de ${act.totalIncluded}</p>${bar(actPct)}</div></div>
+      <div class="os-stat">${icon('box', 30)}<div><p class="os-stat-label">Entregáveis</p><p class="os-stat-value">${deliverables.done} de ${deliverables.total}</p>${bar(delPct)}</div></div>
+      <div class="os-stat">${icon('calendar', 30)}<div><p class="os-stat-label">Próxima sessão</p>${nextMeeting
+        ? `<p class="os-stat-value">${fmtDay(nextMeeting.item_date)}, ${fmtHour(nextMeeting.item_date)}</p><span class="os-pill os-pill-green os-pill-sm">${conf}</span>`
+        : '<p class="os-stat-value os-stat-empty">Nenhuma agendada</p>'}</div></div>
+    </section>`;
+}
+// Delivered vs expected: Guia de Posicionamento (E2), the E3 items Nay chose,
+// Ensaio Fotográfico and Kit Digital (E4).
+function osDeliverables(imageProject, materials) {
+  const items = [materials?.guia?.row];
+  e3Slugs(imageProject?.plan, imageProject?.guideBySlug).forEach((slug) => items.push(imageProject?.guideBySlug?.[slug]));
+  items.push(imageProject?.guideBySlug?.[ENSAIO_SLUG], imageProject?.kit || materials?.kit?.row);
+  return { total: items.length, done: items.filter((r) => r?.delivered_at).length };
+}
+const OS_STEP = { completed: 'done', scheduled: 'current', pending: 'current', waiting_on_client: 'current' };
+function osJourneyOverview({ journey, nextMeeting, refs, activityStatus }) {
+  const steps = (journey || []).filter((e) => e.status !== 'skipped');
+  const currentNo = steps.find((e) => OS_STEP[e.status] === 'current')?.number;
+  const list = steps.map((e) => {
+    const st = e.status === 'completed' ? 'done' : e.number === currentNo ? 'current' : 'next';
+    const badge = st === 'current' ? `<span class="os-step-badge">${e.status === 'scheduled' ? 'Agendado' : e.status === 'waiting_on_client' ? 'Aguardando cliente' : 'Em andamento'}</span>` : st === 'done' ? '<span class="os-step-badge os-step-badge-done">Concluído</span>' : '';
+    return `
+      <li class="os-step os-step-${st}">
+        <span class="os-step-dot">${st === 'done' ? icon('check', 14) : ''}</span>
+        <div class="os-step-body">
+          <p class="os-step-title">E${e.number} — ${escHtml(e.name)}${e.premium_only ? ' <span class="os-step-prem">Premium</span>' : ''}</p>
+          <p class="os-step-sub">${escHtml(e.purpose || '')}</p>
+        </div>
+        ${badge}
+      </li>`;
+  }).join('');
+  // Pendências: the student's homework not done yet, up to her current encounter.
+  const upTo = steps.findIndex((e) => e.number === currentNo);
+  const pend = [];
+  steps.slice(0, upTo === -1 ? steps.length : upTo + 1).forEach((e) => {
+    homeworkFor(e.number, refs, activityStatus).filter((h) => !h.completed).forEach((h) => pend.push({ ...h, enc: e.number }));
+  });
+  const nm = nextMeeting;
+  return `
+    <div class="os-overview">
+      <section class="os-paper">
+        <h2 class="os-paper-title">Jornada do Cliente</h2>
+        <p class="os-paper-sub">Acompanhe o avanço pelos encontros do método PERSEA.</p>
+        ${steps.length ? `<ol class="os-steps">${list}</ol>` : '<p class="os-paper-sub mt-4">Este programa não usa a linha de encontros.</p>'}
+      </section>
+      <div class="os-overview-side">
+        <section class="os-paper">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3 min-w-0">
+              <span class="os-paper-ico">${icon('calendar', 22)}</span>
+              <div class="min-w-0">
+                <p class="os-paper-kicker">Próximo encontro</p>
+                <p class="os-paper-h">${nm ? escHtml(nm.title) : 'Nenhum encontro agendado'}</p>
+              </div>
+            </div>
+            <button type="button" class="os-paper-btn" data-tab="encontros">Ver encontros</button>
+          </div>
+          ${nm ? `<div class="os-paper-meta">
+            <span>${icon('calendar', 18)} ${fmtDay(nm.item_date)}</span>
+            <span>${icon('clock', 18)} ${fmtHour(nm.item_date)}</span>
+            <span>${icon('video', 18)} ${isValidHttpUrl(nm.online_link) ? `<a ${externalLinkAttrs(nm.online_link)}>Online ↗</a>` : 'Online'}</span>
+          </div>` : ''}
+        </section>
+        <section class="os-paper">
+          <div class="flex items-center gap-3 mb-3"><span class="os-paper-ico">${icon('checkCircle', 22)}</span><p class="os-paper-h" style="margin:0;">Pendências</p></div>
+          ${pend.length ? `<ul class="os-todo">${pend.slice(0, 6).map((h) => `
+            <li><span class="os-todo-box"></span><span class="os-todo-text">${escHtml(h.title)} <small>E${h.enc}</small></span><span class="os-todo-tag">Pendente</span></li>`).join('')}</ul>
+            ${pend.length > 6 ? `<p class="os-paper-sub mt-2">+ ${pend.length - 6} outras</p>` : ''}`
+            : '<p class="os-paper-sub">Nada pendente da cliente até o encontro atual. ✓</p>'}
+        </section>
+      </div>
+    </div>`;
 }
 
 let currentClient = null; // for helpers outside render (scheduling the next encounter)
@@ -2752,13 +2912,14 @@ async function render() {
     loadImageProject(),
   ]);
   currentImageProject = imageProject;
+  const [headerMaterials, nextMeeting] = await Promise.all([loadEncounterMaterials(supabase, clientId), loadNextMeeting(clientId)]);
   const programSummaryHtml = await programSummaryCard(client, state);
   // Linha dos encontros: her order + homework status (see encounterTrackCard).
   const [encRefs, encPlan] = await Promise.all([loadEncounterRefs(), loadPlan(clientId)]);
   currentClient._encounter_order = encPlan?.encounter_order || null;
   encounterCtx = { refs: encRefs, plan: encPlan, activityStatus: activityStatusFromProgramState(state), journey };
   const encontros = activeTab === 'encontros' ? await loadEncontros() : null;
-  jornadaMaterials = activeTab === 'jornada' ? await loadEncounterMaterials(supabase, clientId) : null;
+  jornadaMaterials = activeTab === 'jornada' ? headerMaterials : null;
   const extraction = activeTab === 'questionarios' ? await loadExtraction() : null;
   const messagesData = activeTab === 'mensagens' ? await loadMessagesData() : null;
 
@@ -2774,6 +2935,7 @@ async function render() {
   // client, not a long scroll of every pipeline/program card at once.
   const TAB_CONTENT = {
     jornada: `
+      ${osJourneyOverview({ journey, nextMeeting, refs: encRefs, activityStatus: encounterCtx.activityStatus })}
       ${nextActionCard(status.nextAction)}
       ${programSummaryHtml}
       <div id="client-team-tasks"></div>
@@ -2849,9 +3011,9 @@ async function render() {
   };
 
   content.innerHTML = `
-    <a href="${isAssistant ? 'clients.html' : 'crm.html'}" class="btn-text mb-4 inline-block">&larr; ${isAssistant ? 'Clientes' : 'Todos os clientes'}</a>
-    ${profileHeaderCard(client, status)}
-    ${!isAssistant ? internalNotesCard(internalProfile) : ''}
+    ${osClientHeader(client, status, contract, journey)}
+    ${!isAssistant ? `<div class="os-edit-panel" data-os-panel="notes" ${internalProfile.note ? '' : 'hidden'}>${internalNotesCard(internalProfile)}</div>` : ''}
+    ${osStatsStrip({ journey, state, deliverables: osDeliverables(imageProject, headerMaterials), nextMeeting })}
 
     ${tabBarHtml()}
     <div id="tab-content">${TAB_CONTENT[activeTab] || ''}</div>
@@ -2874,6 +3036,22 @@ async function render() {
   });
   content.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
+  });
+  // Header: ⋮ menu, edit panels, "Agendar encontro".
+  const kebabMenu = content.querySelector('[data-os-kebab-menu]');
+  content.querySelector('[data-os-kebab]')?.addEventListener('click', (e) => { e.stopPropagation(); kebabMenu.classList.toggle('open'); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.os-kebab')) kebabMenu?.classList.remove('open'); });
+  content.querySelectorAll('[data-os-edit]').forEach((b) => b.addEventListener('click', () => {
+    kebabMenu.classList.remove('open');
+    const which = b.dataset.osEdit;
+    const target = which === 'danger' ? content.querySelector('#delete-client')?.closest('.card') : content.querySelector(`[data-os-panel="${which}"]`);
+    if (!target) return;
+    if (target.hasAttribute('hidden')) target.removeAttribute('hidden');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }));
+  content.querySelector('[data-os-schedule]')?.addEventListener('click', (e) => {
+    const def = (journey || []).find((x) => x.number === Number(e.currentTarget.dataset.osSchedule));
+    if (def) openScheduleNextModal(def);
   });
   if (activeTab === 'jornada') {
     wireEncounterTrack(content);

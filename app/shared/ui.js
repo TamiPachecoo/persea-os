@@ -5,6 +5,7 @@
 import { MockDB, getActiveClientId, setActiveClientId, PREMIUM_ONLY_PHASE_INDEX, ENCOUNTER_DEFS, ENCOUNTER_LABEL } from './mock-db.js';
 import { isLocalDevelopment, isDemoEnvironment, isProductionEnvironment, isNonProduction } from './environment.js';
 import { signOut } from './supabase-auth.js';
+import { icon, PERSEA_EMBLEM } from './icons.js';
 
 export { isDemoEnvironment, isProductionEnvironment, isNonProduction };
 
@@ -458,6 +459,77 @@ document.addEventListener('click', (e) => {
   try { sessionStorage.removeItem('persea_view_as_client'); } catch { /* nothing stored */ }
 });
 
+// Staff OS shell (Nov 2026 redesign, admin + assistant): a top bar (emblem,
+// sections, search, notifications, avatar) and, on desktop, a left column
+// with every student grouped by program (shared/staff-sidebar.js). Pages
+// keep rendering into #app-content exactly as before.
+function staffShell({ role, active, nav, dir }) {
+  document.body.classList.add('os-staff');
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('persea.osSideCollapsed') === '1'; } catch { /* storage blocked */ }
+  const withSidebar = isProductionEnvironment();
+  if (withSidebar) {
+    setTimeout(() => {
+      import('./staff-sidebar.js').then((m) => m.mountStaffSidebar(document.getElementById('os-sidebar'), {
+        role, clientHref: (id) => `/admin/client-onboarding.html?id=${id}`,
+      })).catch(() => {});
+      import('./supabase-auth.js').then((m) => m.getCurrentProfile?.()).then((p) => {
+        const el = document.querySelector('[data-os-avatar-initial]');
+        const name = String(p?.full_name || '').replace(/\(.*?\)/g, '').trim() || String(p?.full_name || '').match(/\((.*?)\)/)?.[1] || '';
+        if (el && name) { el.textContent = name[0].toUpperCase(); el.closest('[data-os-avatar]').title = name; }
+        const nm = document.querySelector('[data-os-avatar-name]'); if (nm && name) nm.textContent = name;
+      }).catch(() => {});
+    }, 0);
+  }
+  const navHtml = nav.map(([href, label]) => `<a href="${dir}${href}" class="os-nav-link nav-link ${active === href ? 'active' : ''}">${label}</a>`).join('');
+  return `
+    <div class="os-bg"></div>
+    <div class="app-shell os-shell ${withSidebar ? 'os-has-side' : ''} ${collapsed ? 'os-side-collapsed' : ''}">
+      <header class="os-top">
+        <a href="${dir}${nav[0]?.[0] || ''}" class="os-brand">${PERSEA_EMBLEM}<span>PERSEA</span></a>
+        <nav class="os-nav">${navHtml}</nav>
+        <div class="os-top-actions">
+          ${withSidebar ? `<button type="button" class="os-icon-btn os-search-btn" data-os-search-focus title="Buscar cliente">${icon('search', 20)}</button>` : ''}
+          <a href="${dir}tarefas.html" class="os-icon-btn os-bell" title="Tarefas">${icon('bell', 20)}</a>
+          <div class="os-avatar-wrap">
+            <button type="button" class="os-me" data-os-avatar title="${ROLE_LABEL[role] || ''}"><span data-os-avatar-initial>${role === 'admin' ? 'N' : 'A'}</span></button>
+            <div class="os-menu" data-os-menu>
+              <p class="os-menu-name" data-os-avatar-name>${ROLE_LABEL[role] || ''}</p>
+              <p class="os-menu-role">Visão ${ROLE_LABEL[role] || role}</p>
+              <a href="../index.html" id="logout-link" class="os-menu-item">${icon('logout', 16)} Sair</a>
+            </div>
+          </div>
+        </div>
+      </header>
+      ${withSidebar ? `
+        <aside class="os-side" id="os-sidebar"><div class="os-side-loading"></div></aside>
+        <button type="button" class="os-side-toggle" data-os-side-toggle title="Mostrar/ocultar clientes">${icon(collapsed ? 'chevronRight' : 'chevronLeft', 16)}</button>` : ''}
+      <main class="os-main has-mobile-tab-bar">
+        <div id="app-content"></div>
+      </main>
+      ${mobileRoleNav(role, active, dir)}
+    </div>
+  `;
+}
+document.addEventListener('click', (e) => {
+  if (!document.body.classList.contains('os-staff')) return;
+  const shell = document.querySelector('.os-shell');
+  if (e.target.closest('[data-os-side-toggle]')) {
+    const c = shell.classList.toggle('os-side-collapsed');
+    try { localStorage.setItem('persea.osSideCollapsed', c ? '1' : '0'); } catch { /* storage blocked */ }
+    e.target.closest('[data-os-side-toggle]').innerHTML = icon(c ? 'chevronRight' : 'chevronLeft', 16);
+    return;
+  }
+  if (e.target.closest('[data-os-search-focus]')) {
+    shell.classList.remove('os-side-collapsed');
+    document.querySelector('[data-os-search]')?.focus();
+    return;
+  }
+  const menu = document.querySelector('[data-os-menu]');
+  if (e.target.closest('[data-os-avatar]')) { menu?.classList.toggle('open'); return; }
+  if (menu && !e.target.closest('[data-os-menu]')) menu.classList.remove('open');
+});
+
 export function renderShell({ role, active, tenantName = 'PERSEA', title, program }) {
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
   // Staff: a small count on "Tarefas" (new, due within 24h or late) once
@@ -466,6 +538,7 @@ export function renderShell({ role, active, tenantName = 'PERSEA', title, progra
     setTimeout(() => { import('./team-tasks.js').then((m) => m.decorateTaskNav(role)).catch(() => {}); }, 400);
   }
   const dir = ROLE_DIR[role] || '';
+  if (role === 'admin' || role === 'assistant') return staffShell({ role, active, nav, dir });
   const navHtml = nav.map(([href, label]) => `
     <a href="${dir}${href}" class="nav-link ${active === href ? 'active' : ''}">${label}</a>
   `).join('');
