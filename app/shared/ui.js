@@ -217,9 +217,11 @@ const MOBILE_NAV_CONFIG = {
     tabs: [
       ['program.html', 'Início', MOBILE_TAB_ICON.home],
       ['encontros.html', 'Encontros', MOBILE_TAB_ICON.calendar],
-      ['content.html', 'Conteúdos', MOBILE_TAB_ICON.content],
+      ['content.html', 'Materiais', MOBILE_TAB_ICON.content],
     ],
     mais: [
+      ['images.html', 'Entregáveis'],
+      ['program.html#pendencias', 'Pendências'],
       ['financial.html', 'Financeiro'],
       ['questionnaire.html', 'Diagnóstico Estratégico de Entrada'],
       ['arquetipos.html', 'Arquétipos'],
@@ -530,7 +532,72 @@ document.addEventListener('click', (e) => {
   if (menu && !e.target.closest('[data-os-menu]')) menu.classList.remove('open');
 });
 
+// Student OS shell (Nov 2026 redesign, production): a left column with the
+// PERSEA mark, her photo and name, and the app's sections with icons; bell
+// and her initial top right. Same tokens as the staff OS (body.os-staff),
+// with the serif kept italic for her side. Phones keep the bottom tab bar.
+const CLIENT_OS_NAV = [
+  ['program.html', 'Minha Jornada', 'home'],
+  ['encontros.html', 'Encontros', 'calendar'],
+  ['content.html', 'Materiais', 'layers'],
+  ['images.html', 'Entregáveis', 'box'],
+  ['program.html#pendencias', 'Pendências', 'checkSquare'],
+  ['financial.html', 'Financeiro', 'card'],
+];
+function clientOsShell({ active, program }) {
+  document.body.classList.add('os-staff', 'os-client');
+  const c = shellClient;
+  const first = String(c?.full_name || '').trim().split(/\s+/)[0] || '';
+  const ini = String(c?.full_name || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const photo = c && isValidHttpUrl(c.photo_url)
+    ? `<span class="os-avatar" style="width:64px;height:64px;"><img src="${c.photo_url}" alt="" onerror="this.parentNode.textContent='${ini}'"></span>`
+    : `<span class="os-avatar" style="width:64px;height:64px;font-size:22px;">${ini}</span>`;
+  const isActive = (href) => (href.includes('#') ? false : active === href);
+  setTimeout(() => {
+    // Pendências badge: her homework still open up to her current encounter.
+    if (!c) return;
+    import('./encounter-journey.js').then((m) => m.loadStudentTimeline(c.id, c)).then((t) => {
+      if (!t) return;
+      const idx = t.nodes.findIndex((n) => n.state === 'current');
+      const upto = idx === -1 ? t.nodes : t.nodes.slice(0, idx + 1);
+      const n = upto.reduce((acc, node) => acc + node.homework.filter((h) => !h.completed).length, 0);
+      if (!n) return;
+      document.querySelectorAll('[data-os-pend-badge]').forEach((el) => { el.textContent = n; el.hidden = false; });
+    }).catch(() => {});
+  }, 300);
+  return `
+    <div class="os-bg"></div>
+    <div class="app-shell os-shell os-has-side os-client-shell">
+      ${shellViewAs && c ? `<div class="os-viewas">${viewAsBanner(c)}</div>` : ''}
+      <aside class="os-side os-cside">
+        <a href="program.html" class="os-cbrand">${PERSEA_EMBLEM}<span>PERSEA</span></a>
+        ${c ? `<div class="os-cprofile">${photo}<div class="min-w-0"><p class="os-cprofile-name">${String(c.full_name || '').replace(/</g, '&lt;')}</p><p class="os-cprofile-sub">Meu Espaço PERSEA</p></div></div>` : ''}
+        <nav class="os-cnav">
+          ${CLIENT_OS_NAV.map(([href, label, ic]) => `
+            <a href="${href}" class="os-cnav-link ${isActive(href) ? 'active' : ''}">${icon(ic, 21)}<span>${label}</span>${ic === 'checkSquare' ? '<b class="os-cnav-badge" data-os-pend-badge hidden></b>' : ''}</a>`).join('')}
+        </nav>
+        ${shellViewAs ? '' : `<a href="../index.html" id="logout-link" class="os-cnav-link os-cnav-out">${icon('logout', 20)}<span>Sair</span></a>`}
+      </aside>
+      <div class="os-cmain">
+        <div class="os-ctop">
+          <a href="program.html" class="os-cbrand os-cbrand-mobile">${PERSEA_EMBLEM.replaceAll('persea-mark-g', 'persea-mark-g2')}<span>PERSEA</span></a>
+          <div class="os-top-actions">
+            <a href="program.html#pendencias" class="os-icon-btn os-bell" title="Suas pendências">${icon('bell', 21)}<i class="os-bell-dot" data-os-pend-badge hidden></i></a>
+            <span class="os-me" title="${String(c?.full_name || '').replace(/"/g, '&quot;')}">${first ? first[0].toUpperCase() : ''}</span>
+          </div>
+        </div>
+        <main class="os-main os-cmain-in has-mobile-tab-bar">
+          ${onboardingGateBanner(active)}
+          <div id="app-content"></div>
+        </main>
+      </div>
+      ${mobileRoleNav('client', active, '/client/', program)}
+    </div>
+  `;
+}
+
 export function renderShell({ role, active, tenantName = 'PERSEA', title, program }) {
+  if (role === 'client' && isProductionEnvironment()) return clientOsShell({ active, program });
   const nav = role === 'admin' ? ADMIN_NAV : role === 'assistant' ? ASSISTANT_NAV : clientNav();
   // Staff: a small count on "Tarefas" (new, due within 24h or late) once
   // the page has rendered. Loaded lazily so it never slows the page.
